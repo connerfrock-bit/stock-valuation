@@ -27,21 +27,45 @@ CONCEPTS = {
                     "SalesRevenueNet", "RevenueFromContractWithCustomerIncludingAssessedTax",
                     "RegulatedAndUnregulatedOperatingRevenue"],   # utilities (XEL, etc.)
     "net_income":  ["NetIncomeLoss"],
-    "ebit":        ["OperatingIncomeLoss"],
+    "ebit":        ["OperatingIncomeLoss",
+                    # last resort: pretax income (ADP-style filers report no operating subtotal)
+                    "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest"],
     "cfo":         ["NetCashProvidedByUsedInOperatingActivities",
                     "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"],
-    "capex":       ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"],
+    "capex":       ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets",
+                    "PaymentsToAcquireOtherPropertyPlantAndEquipment",        # ADP, EA
+                    "PaymentsToExploreAndDevelopOilAndGasProperties"],        # FANG (development capex)
     "dep_amort":   ["DepreciationDepletionAndAmortization", "DepreciationAndAmortization",
-                    "DepreciationAmortizationAndAccretionNet"],
+                    "DepreciationAmortizationAndAccretionNet", "Depreciation"],
     "sbc":         ["ShareBasedCompensation", "AllocatedShareBasedCompensationExpense"],
     "dividends":   ["PaymentsOfDividendsCommonStock", "PaymentsOfDividends"],
     "equity":      ["StockholdersEquity",
                     "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
-    "long_debt":   ["LongTermDebtNoncurrent", "LongTermDebt"],
+    "long_debt":   ["LongTermDebtNoncurrent", "LongTermDebt",
+                    "LongTermDebtAndCapitalLeaseObligations"],                # CMCSA ($93B!)
     "cash":        ["CashAndCashEquivalentsAtCarryingValue",
                     "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"],
     "shares":      ["CommonStockSharesOutstanding", "CommonStockSharesIssued"],
 }
+
+# IFRS fallback map for true ifrs-full filers (TRI 40-F, CCEP/FER 20-F).
+IFRS_CONCEPTS = {
+    "revenue":     ["Revenue"],
+    "net_income":  ["ProfitLoss", "ProfitLossAttributableToOwnersOfParent"],
+    "ebit":        ["ProfitLossFromOperatingActivities"],
+    "cfo":         ["CashFlowsFromUsedInOperatingActivities"],
+    "capex":       ["PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities",
+                    "PurchaseOfPropertyPlantAndEquipment"],
+    "dep_amort":   ["DepreciationAndAmortisationExpense"],
+    "sbc":         ["ExpenseFromSharebasedPaymentTransactionsWithEmployees"],
+    "dividends":   ["DividendsPaidClassifiedAsFinancingActivities", "DividendsPaid"],
+    "equity":      ["Equity", "EquityAttributableToOwnersOfParent"],
+    "long_debt":   ["NoncurrentBorrowingsAndCurrentPortionOfNoncurrentBorrowings", "Borrowings"],
+    "cash":        ["CashAndCashEquivalents"],
+    "shares":      [],                                    # handled by current_shares()
+}
+
+ANNUAL_FORMS = ("10-K", "20-F", "40-F")                   # amendments match via startswith
 
 
 def http_json(url, headers, timeout=25):
@@ -60,16 +84,24 @@ def load_ticker_map():
     return {v["ticker"]: str(v["cik_str"]).zfill(10) for v in raw.values()}
 
 
-def pick_annual(gaap, tags):
-    """Return {fiscal_year:int -> value} from 10-K / FY datapoints, newest filing wins (handles restatements)."""
+def pick_annual(ns, tags, ccy=None):
+    """Return {fiscal_year:int -> value} from annual (10-K/20-F/40-F, fp=FY) datapoints.
+       Merges across ALL candidate tags (companies switch tags over time — NVDA revenue);
+       per fiscal year the most recently filed value wins (handles restatements).
+       ccy: restrict monetary units to one currency (PDD files CNY *and* USD — mixing
+       units by newest-filed would interleave magnitudes)."""
     chosen = {}  # fy -> (val, filed)
     for tag in tags:
-        node = gaap.get(tag)
+        node = ns.get(tag)
         if not node:
             continue
-        for arr in node.get("units", {}).values():        # USD or shares
+        units = node.get("units", {})
+        arrs = [units[ccy]] if (ccy and ccy in units) else \
+               ([units["shares"]] if "shares" in units else
+                ([] if ccy else list(units.values())))
+        for arr in arrs:
             for u in arr:
-                if not u.get("form", "").startswith("10-K") or u.get("fp") != "FY":
+                if not u.get("form", "").startswith(ANNUAL_FORMS) or u.get("fp") != "FY":
                     continue
                 end = u.get("end")
                 if not end:
@@ -77,10 +109,43 @@ def pick_annual(gaap, tags):
                 fy, filed = int(end[:4]), u.get("filed", "")
                 if fy not in chosen or filed > chosen[fy][1]:
                     chosen[fy] = (u.get("val"), filed)
-    # NOTE: merge across ALL candidate tags (no early break) — companies switch
-    # XBRL tags over time (e.g. NVDA revenue), so the union is needed; per fiscal
-    # year the most recently filed value wins (also handles restatements).
     return {fy: v[0] for fy, v in sorted(chosen.items())}
+
+
+def choose_currency(ns, rev_tags):
+    """Pick the reporting currency from the revenue node: USD when it has real annual
+       depth (dual filers like PDD/NBIS), else the unit with the most annual points."""
+    counts = {}
+    for tag in rev_tags:
+        node = ns.get(tag)
+        if not node:
+            continue
+        for unit, arr in node.get("units", {}).items():
+            if unit in ("shares", "pure") or "/" in unit:
+                continue
+            n = sum(1 for u in arr if u.get("form", "").startswith(ANNUAL_FORMS)
+                    and u.get("fp") == "FY")
+            counts[unit] = counts.get(unit, 0) + n
+    if not counts:
+        return None
+    if counts.get("USD", 0) >= 5:
+        return "USD"
+    return max(counts, key=counts.get)
+
+
+_fx_cache = {}
+def fx_spot(ccy):
+    """Spot rate ccy->USD via Yahoo (e.g. EURUSD=X). Cached per run."""
+    if ccy in _fx_cache:
+        return _fx_cache[ccy]
+    try:
+        meta = http_json(f"https://query1.finance.yahoo.com/v8/finance/chart/{ccy}USD%3DX"
+                         f"?range=1d&interval=1d", YAHOO_UA)["chart"]["result"][0]["meta"]
+        rate = meta.get("regularMarketPrice")
+    except Exception:
+        rate = None
+    _fx_cache[ccy] = rate
+    return rate
 
 
 def newest_point(node):
@@ -120,15 +185,37 @@ def current_shares(facts):
 
 
 def fetch_financials(cik):
-    """-> (annual concept series, shares_now)."""
+    """-> (annual concept series in USD, shares_now, reporting currency).
+       us-gaap namespace first (covers ARM/ASML/PDD 20-F filers too); true IFRS filers
+       (TRI/CCEP/FER) fall through to the ifrs-full map. Non-USD reporters are converted
+       to USD at today's spot — an approximation, disclosed via the currency field."""
     data = http_json(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json", SEC_UA)
     facts = data.get("facts", {})
-    gaap = facts.get("us-gaap", {})
-    out = {name: pick_annual(gaap, tags) for name, tags in CONCEPTS.items()}
+    out, ccy = {}, None
+    for ns_name, cmap in [("us-gaap", CONCEPTS), ("ifrs-full", IFRS_CONCEPTS)]:
+        ns = facts.get(ns_name, {})
+        if not ns:
+            continue
+        ns_ccy = choose_currency(ns, cmap["revenue"])
+        got = {name: pick_annual(ns, tags, ns_ccy) for name, tags in cmap.items()}
+        if not out.get("revenue") and got.get("revenue"):
+            out, ccy = got, ns_ccy                        # namespace with revenue wins
+    if not out:
+        out = {name: {} for name in CONCEPTS}
+
+    if ccy and ccy != "USD":                              # convert monetary series to USD
+        rate = fx_spot(ccy)
+        if rate:
+            for name, series in out.items():
+                if name != "shares":
+                    out[name] = {fy: v * rate for fy, v in series.items()}
+        else:
+            out = {name: ({} if name != "shares" else s) for name, s in out.items()}
+
     shares_now = current_shares(facts)
-    if not out["shares"] and shares_now:                 # keep a stub history for downstream
+    if not out.get("shares") and shares_now:              # keep a stub history for downstream
         out["shares"] = {int(time.strftime("%Y")): shares_now}
-    return out, shares_now
+    return out, shares_now, ccy or "USD"
 
 
 def fetch_price(ticker):
@@ -140,10 +227,11 @@ def fetch_price(ticker):
 def init_db(con):
     con.executescript("""
     DROP TABLE IF EXISTS companies;               -- rebuilt fully each run (schema evolves)
+    DROP TABLE IF EXISTS financials;              -- values are USD-converted; no stale mixes
     CREATE TABLE companies(
         ticker TEXT PRIMARY KEY, name TEXT, cik TEXT, sector TEXT,
-        price REAL, currency TEXT, shares_out REAL, updated TEXT);
-    CREATE TABLE IF NOT EXISTS financials(
+        price REAL, currency TEXT, shares_out REAL, fin_currency TEXT, updated TEXT);
+    CREATE TABLE financials(
         ticker TEXT, fiscal_year INTEGER, concept TEXT, value REAL,
         PRIMARY KEY (ticker, fiscal_year, concept));
     """)
@@ -169,7 +257,7 @@ def main():
             print(f"[{i:3}/{n}] {ticker:6} duplicate share class — skipped"); continue
         seen_ciks.add(cik)
         try:
-            fins, shares_now = fetch_financials(cik); time.sleep(0.25)   # polite to EDGAR
+            fins, shares_now, fin_ccy = fetch_financials(cik); time.sleep(0.25)  # polite to EDGAR
         except Exception as e:
             print(f"[{i:3}/{n}] {ticker:6} EDGAR FAILED {type(e).__name__}"); continue
         try:
@@ -177,8 +265,8 @@ def main():
         except Exception:
             price, ccy = None, None
 
-        con.execute("INSERT OR REPLACE INTO companies VALUES (?,?,?,?,?,?,?,?)",
-                    (ticker, name, cik, sector, price, ccy, shares_now, now))
+        con.execute("INSERT OR REPLACE INTO companies VALUES (?,?,?,?,?,?,?,?,?)",
+                    (ticker, name, cik, sector, price, ccy, shares_now, fin_ccy, now))
         rows = [(ticker, fy, c, float(v))
                 for c, s in fins.items() for fy, v in s.items() if v is not None]
         con.executemany("INSERT OR REPLACE INTO financials VALUES (?,?,?,?)", rows)
@@ -190,8 +278,9 @@ def main():
         mc = f"${price*shares_now/1e9:,.0f}B" if (price and shares_now) else "n/a"
         ok += 1; full += (len(have) >= 11)
         pr = f"${price:,.0f}" if price else "n/a"
+        cflag = "" if fin_ccy == "USD" else f" [{fin_ccy}→USD]"
         print(f"[{i:3}/{n}] {ticker:6} {pr:>8} mcap {mc:>8} FY{last_fy or '----'} "
-              f"rev {rv:>8} cov {len(have):2}/{len(CONCEPTS)}")
+              f"rev {rv:>8} cov {len(have):2}/{len(CONCEPTS)}{cflag}")
 
     total = con.execute("SELECT COUNT(*) FROM financials").fetchone()[0]
     print(f"\nIngested {ok}/{n} companies ({full} with ≥11/12 coverage); {total} datapoints → {DB_PATH}")

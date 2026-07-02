@@ -33,8 +33,9 @@ def collect(con, rf, erp, rd, tax, betas):
     rows, excluded = [], []
     for (t,) in con.execute("SELECT ticker FROM companies ORDER BY ticker"):
         name, price, f = load_company(con, t)
-        sector, shares_out = con.execute(
-            "SELECT sector, shares_out FROM companies WHERE ticker=?", (t,)).fetchone()
+        sector, shares_out, fin_ccy = con.execute(
+            "SELECT sector, shares_out, fin_currency FROM companies WHERE ticker=?",
+            (t,)).fetchone()
         rev = f.get("revenue", {})
         shares = shares_out or latest(f.get("shares", {}))
         cfo_s, cap_s, sbc_s = f.get("cfo", {}), f.get("capex", {}), f.get("sbc", {})
@@ -43,7 +44,7 @@ def collect(con, rf, erp, rd, tax, betas):
         if not shares:
             excluded.append((t, "no share count")); continue
         if not rev or not cfo_s or not cap_s:
-            excluded.append((t, "no US-GAAP financials (foreign filer?)")); continue
+            excluded.append((t, "missing core financials (revenue/CFO/capex)")); continue
 
         # per-year FCF (SBC expensed) and FCF margins over the overlap window
         yrs = sorted(set(rev) & set(cfo_s) & set(cap_s))[-5:]
@@ -70,7 +71,8 @@ def collect(con, rf, erp, rd, tax, betas):
         wacc = wacc_of(mcap, max(debt, 0.0), re_, rd, tax)
 
         rows.append(dict(
-            t=t, name=name, sector=sector, price=price, shares=shares, mcap=mcap,
+            t=t, name=name, sector=sector, fin_ccy=fin_ccy or "USD",
+            price=price, shares=shares, mcap=mcap,
             beta=beta, re_=re_, wacc=wacc, rev=rev, rev_now=rev_now,
             fcf_norm=fcf_norm, fcf_last=fcf_last, fcf_margin=fcf_margin,
             ebit_now=ebit_now, om=om, ni_s=ni_s, eq_s=eq_s, debt=debt, cash=cash,
@@ -184,7 +186,7 @@ def main():
                           epv_ps, r["price"])
         flags = trap_flags(r)
         if not tri:
-            excluded.append((r["t"], "no applicable engine")); continue
+            excluded.append((r["t"], "no positive FCF/earnings base (GAAP loss-maker)")); continue
 
         q = r["quality"] or 50
         upside = tri["upside"]
@@ -196,6 +198,7 @@ def main():
         rec = {
             "ticker": r["t"], "name": r["name"], "sector": r["sector"],
             "sectorShort": SHORT.get(r["sector"], r["sector"][:4]),
+            "finCurrency": r["fin_ccy"],
             "price": round(r["price"], 2), "mcapB": round(r["mcap"] / 1e9, 1),
             "quality": q, "growth5y": None if r["g_trail"] is None else round(r["g_trail"], 4),
             "divYield": round(r["div"] / r["mcap"], 4) if r["mcap"] else None,

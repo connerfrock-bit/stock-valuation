@@ -55,7 +55,16 @@ Honesty rules: never a single fair value without its range · agreement always b
 - [x] Macro — regression betas live (Blume-adj, 5y monthly vs S&P 500); FRED `DGS10` flaky (falls back 4.3%)
 - [~] SQLite store — basic schema live; upgrade to full **point-in-time** (as-reported + filing dates)
 - [x] **Milestone A:** real financials + prices in SQLite ✅ (now 100 companies, ~15.7k datapoints)
-- [ ] Hardening: capex/CFO tag gaps (ADP, EA, FANG…) · IFRS map for foreign filers (ARM, ASML, PDD…) · per-name mcap sanity vs external source (CMCSA-style undercounts)
+- [x] **Data-trust pass** ✅
+      · tag gaps closed: ADP/EA capex (`…OtherPropertyPlantAndEquipment`), ADP ebit (pretax
+        fallback), FANG capex (oil&gas development), CMCSA long_debt (`…AndCapitalLeaseObligations`
+        — was missing **$93B of debt**), LITE dep (`Depreciation`)
+      · 20-F/40-F form support → unlocks ARM/ASML/PDD/NBIS (they file us-gaap tags in 20-Fs)
+      · currency-aware unit selection (PDD files CNY+USD in parallel) + IFRS map (TRI/CCEP/FER)
+        + spot-FX conversion to USD (disclosed via `finCurrency`)
+      · `sanity.py`: external mcap cross-check vs Yahoo (crumb-auth quote API) — >15% divergence
+        auto-patches shares_out from Yahoo marketCap (the only reliably total-across-classes field)
+- [x] Version control: git repo initialized, initial commit `28280b2`
 
 ## Phase 3 — Metrics & classify (L4–L5)
 - [x] Quality score — cross-sectional percentile composite (margin·ROE·growth·FCF-margin·leverage) ✅
