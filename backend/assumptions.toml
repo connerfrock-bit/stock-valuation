@@ -1,0 +1,21 @@
+# Fair Value — global assumption layer  (from VALUATION_DEFAULTS_SPEC §1)
+# Version-controlled config, NOT constants buried in code. Read via stdlib tomllib.
+# Resolution order (later overrides earlier): global -> archetype -> per-company (with source+date).
+
+[global]
+equity_risk_premium  = 0.050    # Damodaran implied ERP (single most consequential input)
+beta_default         = 1.00     # PLACEHOLDER until Blume-adjusted regression / Damodaran industry betas (Phase 3)
+beta_floor           = 0.50
+beta_cap             = 2.00
+tax_rate             = 0.21     # US federal statutory, forward-looking
+cost_of_debt_spread  = 0.010    # Rd ≈ risk_free + spread, until interest-expense-based Rd is added
+terminal_growth      = 0.025    # hard ceiling = risk_free (enforced in code)
+forecast_horizon     = 10       # years, 2-stage
+stage1_years         = 5        # explicit; years 6-10 fade linearly to terminal_growth
+initial_growth_cap   = 0.20
+initial_growth_floor = 0.00
+sbc_treatment        = "expense"  # Nasdaq-100 default: subtract SBC from FCF
+min_wacc_minus_g     = 0.015    # clamp/skip when WACC - g is below this (TV explodes)
+
+# risk_free is pulled LIVE from FRED DGS10 — never hardcoded. Fallback only if the fetch fails.
+risk_free_fallback   = 0.043

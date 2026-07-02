@@ -1,0 +1,4 @@
+# generated data — fully reproducible from the pipeline (ingest_v1 → betas → value → report)
+backend/data/
+__pycache__/
+*.pyc

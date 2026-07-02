@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%;background:#0a0c10;color:#e6e9ef;font-family:Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-track{background:#0a0c10}
+  ::-webkit-scrollbar-thumb{background:#222835;border-radius:6px;border:2px solid #0a0c10}
+  ::-webkit-scrollbar-thumb:hover{background:#2e3645}
+  input{font-family:inherit}
+  input::placeholder{color:#525c6b}
+  input[type=range]{-webkit-appearance:none;appearance:none;height:3px;background:#222835;border-radius:3px;outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:#cfd6e2;cursor:pointer;border:2px solid #0a0c10}
+  @keyframes fvpulse{0%,100%{opacity:.4}50%{opacity:.9}}
+</style>
+</helmet>
+
+<div style="height:100vh;display:flex;flex-direction:column;overflow:hidden;background:#0a0c10;color:#e6e9ef;font-family:Inter,system-ui,sans-serif">
+
+  <!-- ============ TOP BAR ============ -->
+  <div style="height:52px;flex:0 0 52px;display:flex;align-items:center;gap:18px;padding:0 18px;border-bottom:1px solid #1d222d;background:#0c0f15;z-index:30">
+    <div style="display:flex;align-items:center;gap:9px;flex:0 0 auto">
+      <div style="width:22px;height:22px;border-radius:5px;background:linear-gradient(135deg,#3fb950,#2a8d3c);display:flex;align-items:center;justify-content:center">
+        <div style="width:9px;height:9px;border-radius:2px;background:#0a0c10"></div>
+      </div>
+      <div style="font-weight:700;letter-spacing:.16em;font-size:13px">FAIR&nbsp;VALUE</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.1em;color:#9aa3b2;border:1px solid #2a3140;border-radius:4px;padding:2px 6px">NASDAQ&middot;100</div>
+    </div>
+
+    <!-- search -->
+    <div style="position:relative;flex:1 1 auto;max-width:440px">
+      <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 11px;background:#11151d;border:1px solid {{ searchBorder }};border-radius:7px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#626b7a" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+        <input value="{{ search }}" onInput="{{ onSearch }}" onFocus="{{ onSearchFocus }}" onBlur="{{ onSearchBlur }}" placeholder="Search ticker or company…" style="flex:1;background:transparent;border:none;outline:none;color:#e6e9ef;font-size:12.5px"/>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#525c6b;border:1px solid #2a3140;border-radius:3px;padding:1px 4px">/</span>
+      </div>
+      <sc-if value="{{ showSearchDrop }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;top:38px;left:0;right:0;background:#11151d;border:1px solid #2a3140;border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,.55);overflow:hidden;z-index:50">
+          <sc-for list="{{ searchMatches }}" as="m" hint-placeholder-count="0">
+            <div onMouseDown="{{ m.pick }}" style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid #161b24">
+              <span style="font-family:'JetBrains Mono',monospace;font-weight:600;font-size:12px;width:54px">{{ m.ticker }}</span>
+              <span style="flex:1;font-size:12px;color:#9aa3b2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ m.name }}</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:{{ m.upColor }}">{{ m.upStr }}</span>
+            </div>
+          </sc-for>
+          <sc-if value="{{ noSearchMatch }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:11px 12px;font-size:12px;color:#626b7a">No match in coverage.</div>
+          </sc-if>
+        </div>
+      </sc-if>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <div style="display:flex;align-items:center;gap:7px;height:30px;padding:0 11px;border:1px solid #2a3140;border-radius:7px;font-size:11.5px;color:#cfd6e2;cursor:default">
+      <span style="font-weight:600">NASDAQ&nbsp;100</span>
+      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#626b7a" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;line-height:1.25">
+      <span style="font-size:9px;letter-spacing:.08em;color:#525c6b;text-transform:uppercase">Data as of</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#9aa3b2">{{ dataAsOf }}</span>
+    </div>
+    <div style="width:30px;height:30px;border:1px solid #2a3140;border-radius:7px;display:flex;align-items:center;justify-content:center;cursor:pointer">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9aa3b2" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </div>
+  </div>
+
+  <!-- ============ BODY ============ -->
+  <div style="flex:1;display:flex;overflow:hidden">
+
+    <!-- LEFT NAV -->
+    <div style="width:188px;flex:0 0 188px;border-right:1px solid #1d222d;background:#0c0f15;display:flex;flex-direction:column;padding:12px 10px">
+      <div style="font-size:9px;letter-spacing:.14em;color:#525c6b;text-transform:uppercase;padding:6px 10px 8px">Navigate</div>
+      <div onClick="{{ goOverview }}" style="{{ navOverview }}">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6.5" cy="15" r="2"/><circle cx="13" cy="8" r="2"/><circle cx="18.5" cy="13" r="2"/></svg>
+        <span>Overview</span>
+      </div>
+      <div onClick="{{ goScreener }}" style="{{ navScreener }}">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+        <span>Screener</span>
+      </div>
+      <div onClick="{{ goDeep }}" style="{{ navDeep }}">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
+        <span style="flex:1">Deep-Dive</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#626b7a">{{ selTicker }}</span>
+      </div>
+      <div onClick="{{ goMethod }}" style="{{ navMethod }}">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5"/><path d="M4 19h16"/><polyline points="7 14 11 9 14 12 19 6"/></svg>
+        <span>Methodology</span>
+      </div>
+
+      <div style="flex:1"></div>
+      <div style="border-top:1px solid #1d222d;padding:11px 10px 4px;margin-top:8px">
+        <div style="display:flex;align-items:center;gap:7px;margin-bottom:6px">
+          <div style="width:6px;height:6px;border-radius:50%;background:#3fb950"></div>
+          <span style="font-size:10.5px;color:#9aa3b2">Data fresh</span>
+        </div>
+        <div style="font-size:10px;color:#525c6b;line-height:1.5">EDGAR &middot; 6h ago<br>yfinance &middot; 14h ago</div>
+      </div>
+    </div>
+
+    <!-- MAIN -->
+    <div style="flex:1;overflow-y:auto;overflow-x:hidden;position:relative">
+
+      <!-- ====== SCREEN A: OVERVIEW ====== -->
+      <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+      <div data-screen-label="Overview" style="min-height:100%">
+        <sc-if value="{{ stale }}" hint-placeholder-val="{{ false }}"><div style="background:#33291a;border-bottom:1px solid #d29922;color:#e8c98a;font-size:12px;padding:8px 22px">⚠ Last refresh &gt; 24h ago — figures may be stale.</div></sc-if>
+
+        <!-- KPI strip -->
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:#1d222d;border-bottom:1px solid #1d222d">
+          <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="5">
+            <div style="background:#0c0f15;padding:14px 18px">
+              <div style="font-size:10px;letter-spacing:.06em;color:#626b7a;text-transform:uppercase;margin-bottom:7px">{{ k.label }}</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:23px;font-weight:600;color:{{ k.color }};line-height:1">{{ k.value }}</div>
+              <div style="font-size:10.5px;color:#626b7a;margin-top:5px">{{ k.sub }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex;align-items:stretch">
+          <!-- filter rail -->
+          <div style="{{ filterRailStyle }}">{{ filterRail }}</div>
+
+          <!-- scatter -->
+          <div style="flex:1;padding:18px 22px;min-width:0">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
+              <div>
+                <div style="font-size:15px;font-weight:600">Universe map</div>
+                <div style="font-size:11.5px;color:#9aa3b2;margin-top:2px">Upside to fair value &times; quality. Dot size = market cap, color = sector. <span style="color:#3fb950;font-weight:600">Top-right = cheap &amp; good.</span></div>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#626b7a">{{ shownCount }} / {{ totalCount }} shown</div>
+            </div>
+            <div style="position:relative">{{ scatter }}</div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ====== SCREEN B: SCREENER ====== -->
+      <sc-if value="{{ isScreener }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Screener" style="min-height:100%;display:flex">
+        <div style="{{ filterRailStyle }}">{{ filterRail }}</div>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <!-- toolbar -->
+          <div style="display:flex;align-items:center;gap:10px;padding:11px 18px;border-bottom:1px solid #1d222d;flex-wrap:wrap">
+            <div style="font-size:14px;font-weight:600;margin-right:4px">Screener</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#626b7a;margin-right:6px">{{ shownCount }} matches</div>
+            <div style="display:flex;gap:6px">
+              <sc-for list="{{ presets }}" as="p" hint-placeholder-count="3">
+                <div onClick="{{ p.apply }}" style="{{ p.style }}">{{ p.label }}</div>
+              </sc-for>
+            </div>
+            <div style="flex:1"></div>
+            <div onClick="{{ toggleMultiples }}" style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#9aa3b2;cursor:pointer;border:1px solid #2a3140;border-radius:6px;padding:5px 10px">
+              <span>{{ multiplesLabel }}</span>
+            </div>
+            <div onClick="{{ exportCsv }}" style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#cfd6e2;cursor:pointer;border:1px solid #2a3140;border-radius:6px;padding:5px 10px">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export CSV
+            </div>
+          </div>
+          <!-- table -->
+          <div style="flex:1;overflow:auto">
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead style="position:sticky;top:0;z-index:5">
+                <tr style="background:#0e1117">
+                  <sc-for list="{{ columns }}" as="col" hint-placeholder-count="8">
+                    <th onClick="{{ col.sort }}" style="{{ col.style }}">
+                      <span style="display:inline-flex;align-items:center;gap:4px">{{ col.label }}<span style="color:#3fb950;font-size:9px">{{ col.arrow }}</span></span>
+                    </th>
+                  </sc-for>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{ rows }}" as="r" hint-placeholder-count="12">
+                  <tr onClick="{{ r.open }}" style="border-bottom:1px solid #14181f;cursor:pointer;background:{{ r.rowBg }}">
+                    <td style="padding:7px 10px 7px 16px;border-right:1px solid #14181f">
+                      <div style="display:flex;align-items:center;gap:9px">
+                        <span onClick="{{ r.toggleStar }}" style="color:{{ r.starColor }};font-size:13px;line-height:1">{{ r.star }}</span>
+                        <div style="min-width:0">
+                          <div style="display:flex;align-items:center;gap:7px">
+                            <span style="font-family:'JetBrains Mono',monospace;font-weight:600;font-size:12.5px">{{ r.ticker }}</span>
+                            <span style="font-size:8.5px;font-weight:600;letter-spacing:.03em;color:{{ r.sectorColor }};background:{{ r.sectorBg }};border:1px solid {{ r.sectorBorder }};border-radius:3px;padding:1px 5px;white-space:nowrap">{{ r.sectorShort }}</span>
+                          </div>
+                          <div style="font-size:10.5px;color:#8a93a3;margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px">{{ r.name }}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style="padding:7px 12px;text-align:right;font-family:'JetBrains Mono',monospace">{{ r.price }}</td>
+                    <td style="padding:7px 12px;width:180px">{{ r.rangeBar }}</td>
+                    <td style="padding:7px 12px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:600;color:{{ r.upColor }}">{{ r.upside }}</td>
+                    <td style="padding:7px 12px">{{ r.conf }}</td>
+                    <td style="padding:7px 12px;width:96px">{{ r.gauge }}</td>
+                    <td style="padding:7px 12px">{{ r.flags }}</td>
+                    <sc-if value="{{ showMultiples }}" hint-placeholder-val="{{ false }}">
+                      <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:#9aa3b2;background:#0b0e13">{{ r.pe }}</td>
+                      <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:#9aa3b2;background:#0b0e13">{{ r.evebitda }}</td>
+                      <td style="padding:7px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:#9aa3b2;background:#0b0e13">{{ r.fcfy }}</td>
+                    </sc-if>
+                    <td style="padding:7px 16px 7px 12px;text-align:right;font-family:'JetBrains Mono',monospace;color:#9aa3b2">{{ r.mcap }}</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+            <sc-if value="{{ noRows }}" hint-placeholder-val="{{ false }}">
+              <div style="padding:60px;text-align:center;color:#626b7a;font-size:13px">No stocks match — loosen filters.</div>
+            </sc-if>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ====== SCREEN C: DEEP-DIVE ====== -->
+      <sc-if value="{{ isDeep }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Deep-Dive" style="padding:0 0 40px">
+        <!-- header -->
+        <div style="display:flex;align-items:center;gap:16px;padding:16px 24px;border-bottom:1px solid #1d222d;background:#0c0f15;position:sticky;top:0;z-index:10">
+          <div style="display:flex;align-items:baseline;gap:11px">
+            <span style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:24px;letter-spacing:.01em">{{ sel.ticker }}</span>
+            <span style="font-size:14px;color:#cfd6e2">{{ sel.name }}</span>
+          </div>
+          <span style="font-size:10px;font-weight:600;color:{{ sel.sectorColor }};background:{{ sel.sectorBg }};border:1px solid {{ sel.sectorBorder }};border-radius:4px;padding:3px 8px">{{ sel.sectorName }}</span>
+          <div style="flex:1"></div>
+          <div style="text-align:right;line-height:1.15"><div style="font-size:9px;color:#525c6b;text-transform:uppercase;letter-spacing:.06em">Price</div><div style="font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:600">{{ sel.price }}</div></div>
+          <div style="text-align:right;line-height:1.15"><div style="font-size:9px;color:#525c6b;text-transform:uppercase;letter-spacing:.06em">Mkt Cap</div><div style="font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:600;color:#cfd6e2">{{ sel.mcap }}</div></div>
+          <div onClick="{{ sel.toggleStar }}" style="width:34px;height:34px;border:1px solid #2a3140;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:{{ sel.starColor }};font-size:16px">{{ sel.star }}</div>
+        </div>
+
+        <div style="padding:20px 24px;display:grid;grid-template-columns:1fr 360px;gap:18px;align-items:start">
+          <!-- LEFT column -->
+          <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+            <!-- hero range -->
+            <div style="background:#0e1117;border:1px solid #1d222d;border-radius:11px;padding:20px 22px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+                <div style="font-size:13px;font-weight:600;color:#cfd6e2">Fair-value range</div>
+                <div style="font-size:13px;font-weight:600;color:{{ sel.verdictColor }}">{{ sel.verdict }}</div>
+              </div>
+              {{ sel.rangeBar }}
+            </div>
+
+            <!-- reverse DCF callout -->
+            <div style="background:linear-gradient(180deg,#0f1117,#0c0f15);border:1px solid {{ sel.revBorder }};border-radius:11px;padding:18px 22px">
+              <div style="font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#626b7a;margin-bottom:10px">Reverse DCF &middot; market-implied expectations</div>
+              <div style="font-size:18px;line-height:1.5;font-weight:500">{{ sel.revStatement }}</div>
+              <div style="margin-top:12px;display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:{{ sel.revColor }};background:{{ sel.revChipBg }};border-radius:6px;padding:5px 11px">{{ sel.revVerdict }}</div>
+            </div>
+
+            <!-- method breakdown -->
+            <div style="background:#0e1117;border:1px solid #1d222d;border-radius:11px;overflow:hidden">
+              <div style="padding:14px 20px;border-bottom:1px solid #1d222d;font-size:13px;font-weight:600;color:#cfd6e2">Method breakdown</div>
+              <table style="width:100%;border-collapse:collapse;font-size:12px">
+                <thead><tr style="color:#626b7a;font-size:10px;text-transform:uppercase;letter-spacing:.05em">
+                  <th style="text-align:left;padding:9px 20px;font-weight:500">Method</th>
+                  <th style="text-align:right;padding:9px 12px;font-weight:500">Estimate</th>
+                  <th style="text-align:right;padding:9px 12px;font-weight:500">Weight</th>
+                  <th style="text-align:left;padding:9px 20px;font-weight:500">Key assumption</th>
+                </tr></thead>
+                <tbody>
+                  <sc-for list="{{ sel.methods }}" as="mt" hint-placeholder-count="5">
+                    <tr style="border-top:1px solid #14181f;opacity:{{ mt.opacity }}">
+                      <td style="padding:10px 20px;font-weight:600;color:{{ mt.nameColor }}">{{ mt.name }}</td>
+                      <td style="padding:10px 12px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:600;color:{{ mt.estColor }}">{{ mt.est }}</td>
+                      <td style="padding:10px 12px;text-align:right;font-family:'JetBrains Mono',monospace;color:#8a93a3">{{ mt.weight }}</td>
+                      <td style="padding:10px 20px;color:#8a93a3;font-size:11.5px">{{ mt.note }}</td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- why cheap -->
+            <div style="background:#0e1117;border:1px solid #1d222d;border-radius:11px;padding:18px 22px">
+              <div style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#cfd6e2;margin-bottom:14px">Why does the market disagree?</div>
+              <div style="display:flex;flex-direction:column;gap:11px">
+                <sc-for list="{{ sel.whyPoints }}" as="w" hint-placeholder-count="3">
+                  <div style="display:flex;gap:11px;align-items:flex-start">
+                    <div style="width:6px;height:6px;border-radius:50%;background:{{ w.color }};margin-top:6px;flex:0 0 6px"></div>
+                    <div style="font-size:12.5px;line-height:1.55;color:#c2c9d6"><span style="font-weight:600;color:{{ w.color }}">{{ w.tag }}</span> {{ w.text }}</div>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="margin-top:16px;padding-top:14px;border-top:1px solid #1d222d;display:flex;gap:20px;flex-wrap:wrap">
+                <sc-for list="{{ sel.leverage }}" as="lv" hint-placeholder-count="4">
+                  <div><div style="font-size:9.5px;color:#626b7a;text-transform:uppercase;letter-spacing:.05em">{{ lv.label }}</div><div style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;color:{{ lv.color }};margin-top:3px">{{ lv.value }}</div></div>
+                </sc-for>
+              </div>
+              <div style="margin-top:14px;padding-top:13px;border-top:1px solid #1d222d">
+                <div style="font-size:9.5px;color:#626b7a;text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px">Recent EDGAR filings</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <sc-for list="{{ sel.filings }}" as="f" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:#9aa3b2;border:1px solid #2a3140;border-radius:5px;padding:4px 9px;cursor:pointer">
+                      <span style="font-family:'JetBrains Mono',monospace;font-weight:600;color:#cfd6e2">{{ f.type }}</span>
+                      <span>{{ f.date }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT column -->
+          <div style="display:flex;flex-direction:column;gap:18px">
+            <!-- quality & safety -->
+            <div style="background:#0e1117;border:1px solid #1d222d;border-radius:11px;padding:18px 20px">
+              <div style="font-size:13px;font-weight:600;color:#cfd6e2;margin-bottom:14px">Quality &amp; safety</div>
+              <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+                <div>{{ sel.bigGauge }}</div>
+                <div>
+                  <div style="font-size:10px;color:#626b7a;text-transform:uppercase;letter-spacing:.05em">Quality score</div>
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:700;color:{{ sel.qColor }};line-height:1.1">{{ sel.quality }}</div>
+                  <div style="font-size:11px;color:#8a93a3">{{ sel.qTier }}</div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <sc-for list="{{ sel.ratios }}" as="rt" hint-placeholder-count="6">
+                  <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px">
+                    <span style="color:#8a93a3">{{ rt.label }}</span>
+                    <span style="display:flex;align-items:center;gap:8px">
+                      <span style="font-family:'JetBrains Mono',monospace;font-weight:600;color:{{ rt.color }}">{{ rt.value }}</span>
+                      <span style="width:42px;height:4px;border-radius:3px;background:#1a1f2a;position:relative;overflow:hidden"><span style="position:absolute;left:0;top:0;bottom:0;width:{{ rt.pctw }};background:{{ rt.color }};border-radius:3px"></span></span>
+                    </span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <!-- confidence -->
+            <div style="background:#0e1117;border:1px solid #1d222d;border-radius:11px;padding:18px 20px">
+              <div style="font-size:13px;font-weight:600;color:#cfd6e2;margin-bottom:6px">Method agreement</div>
+              <div style="font-size:11.5px;color:#8a93a3;margin-bottom:13px">{{ sel.confText }}</div>
+              <div style="display:flex;align-items:center;gap:12px">{{ sel.bigConf }}<span style="font-size:13px;font-weight:600;color:{{ sel.confColor }}">{{ sel.confLabel }}</span></div>
+            </div>
+
+            <!-- trends -->
+            <div style="background:#0e1117;border:1px solid #1d222d;border-radius:11px;padding:18px 20px">
+              <div style="font-size:13px;font-weight:600;color:#cfd6e2;margin-bottom:14px">Financial trends <span style="font-size:10px;color:#626b7a;font-weight:400">8-yr</span></div>
+              <div style="display:flex;flex-direction:column;gap:13px">
+                <sc-for list="{{ sel.trends }}" as="tr" hint-placeholder-count="5">
+                  <div>
+                    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
+                      <span style="font-size:11.5px;color:#9aa3b2">{{ tr.label }}</span>
+                      <span style="font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:600;color:{{ tr.deltaColor }}">{{ tr.delta }}</span>
+                    </div>
+                    {{ tr.spark }}
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <!-- peers -->
+            <div style="background:#0e1117;border:1px solid #1d222d;border-radius:11px;padding:18px 20px">
+              <div style="font-size:13px;font-weight:600;color:#cfd6e2;margin-bottom:12px">Sector peers</div>
+              <div style="display:flex;flex-direction:column;gap:2px">
+                <sc-for list="{{ sel.peers }}" as="pr" hint-placeholder-count="4">
+                  <div onClick="{{ pr.open }}" style="display:flex;align-items:center;gap:10px;padding:6px 4px;border-radius:6px;cursor:pointer;font-size:12px">
+                    <span style="font-family:'JetBrains Mono',monospace;font-weight:600;width:54px">{{ pr.ticker }}</span>
+                    <span style="flex:1;font-family:'JetBrains Mono',monospace;font-weight:600;text-align:right;color:{{ pr.upColor }}">{{ pr.upside }}</span>
+                    <span style="width:42px;text-align:right;font-family:'JetBrains Mono',monospace;color:#8a93a3">Q{{ pr.quality }}</span>
+                    <span>{{ pr.conf }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ====== SCREEN D: METHODOLOGY ====== -->
+      <sc-if value="{{ isMethod }}" hint-placeholder-val="{{ false }}">
+      <div data-screen-label="Methodology" style="padding:22px 24px 50px;max-width:1180px">
+        <div style="margin-bottom:18px">
+          <div style="font-size:17px;font-weight:600">Methodology &amp; Backtest</div>
+          <div style="font-size:12px;color:#9aa3b2;margin-top:3px">Point-in-time, survivorship-free. This is historical and assumption-dependent — a research aid, not a recommendation.</div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 300px;gap:18px;margin-bottom:18px">
+          <div style="background:#0e1117;border:1px solid #1d222d;border-radius:11px;padding:18px 20px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <div style="font-size:13px;font-weight:600;color:#cfd6e2">Backtest equity curve</div>
+              <div style="display:flex;gap:14px;font-size:11px">
+                <span style="display:flex;align-items:center;gap:6px"><span style="width:16px;height:3px;background:#3fb950;border-radius:2px"></span>Top-decile basket</span>
+                <span style="display:flex;align-items:center;gap:6px"><span style="width:16px;height:3px;background:#626b7a;border-radius:2px"></span>Nasdaq-100 EW</span>
+              </div>
+            </div>
+            {{ equityCurve }}
+          </div>
+          <div style="background:#0e1117;border:1px solid #1d222d;border-radius:11px;padding:18px 20px">
+            <div style="font-size:13px;font-weight:600;color:#cfd6e2;margin-bottom:14px">Performance</div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <sc-for list="{{ stats }}" as="s" hint-placeholder-count="5">
+                <div style="display:flex;align-items:baseline;justify-content:space-between">
+                  <span style="font-size:11.5px;color:#8a93a3">{{ s.label }}</span>
+                  <span style="display:flex;gap:14px;align-items:baseline">
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:600;color:{{ s.color }}">{{ s.strat }}</span>
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#626b7a;width:48px;text-align:right">{{ s.bench }}</span>
+                  </span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px">
+          <div style="background:#0e1117;border:1px solid #1d222d;border-radius:11px;overflow:hidden">
+            <div style="padding:14px 20px;border-bottom:1px solid #1d222d;font-size:13px;font-weight:600;color:#cfd6e2">Per-method reliability</div>
+            <table style="width:100%;border-collapse:collapse;font-size:12px">
+              <thead><tr style="color:#626b7a;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em">
+                <th style="text-align:left;padding:8px 20px;font-weight:500">Method</th>
+                <th style="text-align:right;padding:8px 10px;font-weight:500">Hit rate</th>
+                <th style="text-align:right;padding:8px 10px;font-weight:500">Fwd 1y α</th>
+                <th style="text-align:right;padding:8px 20px;font-weight:500">Weight</th>
+              </tr></thead>
+              <tbody>
+                <sc-for list="{{ reliability }}" as="rl" hint-placeholder-count="5">
+                  <tr style="border-top:1px solid #14181f">
+                    <td style="padding:10px 20px;font-weight:600">{{ rl.method }}</td>
+                    <td style="padding:10px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:#cfd6e2">{{ rl.hit }}</td>
+                    <td style="padding:10px 10px;text-align:right;font-family:'JetBrains Mono',monospace;color:{{ rl.aColor }}">{{ rl.alpha }}</td>
+                    <td style="padding:10px 20px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:600">{{ rl.weight }}</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+          <div style="background:#0e1117;border:1px solid #1d222d;border-radius:11px;padding:18px 20px">
+            <div style="font-size:13px;font-weight:600;color:#cfd6e2;margin-bottom:14px">Data quality</div>
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <sc-for list="{{ dataQuality }}" as="dq" hint-placeholder-count="4">
+                <div style="display:flex;align-items:center;justify-content:space-between;font-size:12px">
+                  <span style="color:#8a93a3">{{ dq.label }}</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-weight:600;color:{{ dq.color }}">{{ dq.value }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <!-- engine formulas -->
+        <div style="margin-bottom:18px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px">
+            <div style="font-size:14px;font-weight:600;color:#e6e9ef">How each engine values a company</div>
+            <div style="font-size:11px;color:#626b7a">L6 · run only where applicable</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <sc-for list="{{ formulas }}" as="fm" hint-placeholder-count="6">
+              <div style="background:#0e1117;border:1px solid #1d222d;border-radius:11px;padding:16px 18px;display:flex;flex-direction:column;gap:10px">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                  <span style="font-size:13px;font-weight:700;color:#e6e9ef">{{ fm.name }}</span>
+                  <span style="display:flex;gap:6px;flex:0 0 auto">
+                    <sc-if value="{{ fm.bestFor }}" hint-placeholder-val="{{ false }}">
+                      <span style="font-size:9px;font-weight:600;color:#8d80e6;background:rgba(141,128,230,0.13);border:1px solid rgba(141,128,230,0.32);border-radius:4px;padding:2px 7px;white-space:nowrap">{{ fm.bestFor }}</span>
+                    </sc-if>
+                    <span style="font-family:'JetBrains Mono',monospace;font-size:9px;color:#9aa3b2;border:1px solid #2a3140;border-radius:4px;padding:2px 7px;white-space:nowrap">@ {{ fm.discount }}</span>
+                  </span>
+                </div>
+                <div style="font-size:11.5px;color:#9aa3b2;line-height:1.5">{{ fm.answers }}</div>
+                <div style="background:#0a0c10;border:1px solid #1a1f29;border-radius:8px;padding:11px 13px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#cfd6e2;line-height:1.85;overflow-x:auto">
+                  <sc-for list="{{ fm.formula }}" as="ln" hint-placeholder-count="2"><div style="white-space:nowrap">{{ ln }}</div></sc-for>
+                </div>
+                <div style="display:flex;align-items:flex-start;gap:7px;margin-top:auto">
+                  <span style="color:#d29922;font-size:11px;line-height:1.5;flex:0 0 auto">⚠</span>
+                  <span style="font-size:11px;color:#8a93a3;line-height:1.5">{{ fm.gotcha }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="margin-top:14px;background:linear-gradient(180deg,#0f1117,#0c0f15);border:1px solid #1d222d;border-radius:11px;padding:16px 20px;display:flex;gap:20px;align-items:center;flex-wrap:wrap">
+            <div style="font-size:12px;font-weight:700;color:#cfd6e2;flex:0 0 auto">L8 · Triangulate → range</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#cfd6e2;background:#0a0c10;border:1px solid #1a1f29;border-radius:7px;padding:9px 13px;line-height:1.85">
+              <div style="white-space:nowrap">low = min(methods) · high = max(methods) · mid = median</div>
+              <div style="white-space:nowrap">agreement = methods within ±10% of mid → confidence</div>
+            </div>
+            <div style="font-size:11.5px;color:#8a93a3;flex:1;min-width:220px;line-height:1.55">The spread of applicable estimates <span style="color:#cfd6e2">is</span> the range; method agreement <span style="color:#cfd6e2">is</span> the confidence score. Engines the router deems inapplicable (greyed N/A) are never averaged in.</div>
+          </div>
+        </div>
+
+        <div style="background:#0e1117;border:1px solid #1d222d;border-radius:11px;padding:18px 20px">
+          <div style="font-size:13px;font-weight:600;color:#cfd6e2;margin-bottom:14px">Global assumptions <span style="font-size:10px;color:#626b7a;font-weight:400">version-controlled config</span></div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#1d222d;border:1px solid #1d222d;border-radius:8px;overflow:hidden">
+            <sc-for list="{{ assumptions }}" as="a" hint-placeholder-count="8">
+              <div style="background:#0c0f15;padding:13px 15px">
+                <div style="font-size:10px;color:#626b7a;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">{{ a.label }}</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:600;color:#cfd6e2">{{ a.value }}</div>
+                <div style="font-size:10px;color:#626b7a;margin-top:4px">{{ a.src }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+    </div>
+  </div>
+
+  <!-- floating tooltip -->
+  <sc-if value="{{ tipShown }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ tipStyle }}">
+      <div style="font-family:'JetBrains Mono',monospace;font-weight:700;font-size:12px;margin-bottom:6px;color:#fff">{{ tip.title }}</div>
+      <sc-for list="{{ tip.lines }}" as="ln" hint-placeholder-count="0">
+        <div style="display:flex;justify-content:space-between;gap:18px;font-size:11px;line-height:1.7">
+          <span style="color:#9aa3b2">{{ ln.label }}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-weight:600;color:{{ ln.color }}">{{ ln.val }}</span>
+        </div>
+      </sc-for>
+      <sc-if value="{{ tip.foot }}" hint-placeholder-val="{{ false }}"><div style="font-size:10px;color:#8a93a3;margin-top:6px;max-width:220px;line-height:1.45">{{ tip.foot }}</div></sc-if>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:&quot;100%&quot;,&quot;height&quot;:&quot;100%&quot;},&quot;rangeBarVariant&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;band&quot;,&quot;gradient&quot;,&quot;ticks&quot;],&quot;default&quot;:&quot;band&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Valuation Range Bar&quot;,&quot;label&quot;:&quot;Range bar style&quot;},&quot;showMethodDots&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Valuation Range Bar&quot;,&quot;label&quot;:&quot;Show method dots&quot;},&quot;highlightMoneyZone&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Overview scatter&quot;,&quot;label&quot;:&quot;Highlight \u2018cheap &amp; good\u2019 zone&quot;}}">
+class Component extends DCLogic {
+  state = {
+    screen: 'overview',
+    selected: 'GOOGL',
+    search: '',
+    searchFocus: false,
+    sortKey: 'score',
+    sortDir: 'desc',
+    showMultiples: false,
+    hoverDot: null,
+    tip: null,
+    watch: { NVDA: true, GOOGL: true },
+    filters: { sectors: null, mcap: 'all', minQ: 0, minConf: 1, upside: -60, hideTraps: false },
+  };
+
+  // ---------- palette ----------
+  get C() { return {
+    bg:'#0a0c10', panel:'#0e1117', border:'#1d222d', borderHi:'#2a3140',
+    hi:'#e6e9ef', mid:'#9aa3b2', dim:'#626b7a',
+    green:'#3fb950', red:'#f85149', amber:'#d29922', blue:'#4493f8',
+    greenZone:'rgba(63,185,80,0.09)', redZone:'rgba(248,81,73,0.08)',
+  }; }
+
+  SECTORS = {
+    'Information Technology': '#6ea8fe', 'Communication Services': '#b58cf0',
+    'Consumer Discretionary': '#f0879b', 'Consumer Staples': '#4fc3c9',
+    'Health Care': '#8d80e6', 'Industrials': '#c0a062', 'Financials': '#d98a5b',
+    'Real Estate': '#c98fc0', 'Materials':'#9aa86b', 'Energy':'#cf8f6a', 'Utilities':'#6fb1a0',
+  };
+  SECTOR_SHORT = {
+    'Information Technology':'TECH','Communication Services':'COMM','Consumer Discretionary':'DISC',
+    'Consumer Staples':'STPL','Health Care':'HLTH','Industrials':'INDU','Financials':'FINL',
+    'Real Estate':'REIT','Materials':'MATL','Energy':'ENGY','Utilities':'UTIL',
+  };
+
+  // [ticker,name,sector,price,mcapB,quality,growth%,divYld%,negBook,edge,flags]
+  RAW = [
+    ['AAPL','Apple','Information Technology',232,3550,88,8,0.5,true,-0.08,[]],
+    ['MSFT','Microsoft','Information Technology',465,3450,92,14,0.7,false,-0.05,[]],
+    ['NVDA','NVIDIA','Information Technology',142,3480,90,60,0.03,false,-0.18,['Cyclical earnings']],
+    ['AMZN','Amazon','Consumer Discretionary',205,2150,80,12,0,false,0.06,[]],
+    ['GOOGL','Alphabet','Communication Services',178,2180,89,13,0.4,false,0.22,[]],
+    ['META','Meta Platforms','Communication Services',615,1560,85,16,0.3,false,0.10,[]],
+    ['AVGO','Broadcom','Information Technology',168,790,78,20,1.2,false,-0.06,[]],
+    ['TSLA','Tesla','Consumer Discretionary',340,1080,60,22,0,false,-0.30,['High valuation multiple']],
+    ['COST','Costco','Consumer Staples',985,437,84,9,0.5,false,-0.12,[]],
+    ['NFLX','Netflix','Communication Services',705,300,76,14,0,false,-0.10,[]],
+    ['PEP','PepsiCo','Consumer Staples',148,203,79,5,3.4,false,0.06,[]],
+    ['ADBE','Adobe','Information Technology',480,212,83,11,0,false,0.05,[]],
+    ['CSCO','Cisco','Information Technology',58,232,72,3,2.8,false,0.08,[]],
+    ['AMD','AMD','Information Technology',132,214,66,25,0,false,-0.10,[]],
+    ['TMUS','T-Mobile US','Communication Services',225,262,70,4,1.6,false,0.02,[]],
+    ['INTC','Intel','Information Technology',22,95,40,-5,0,false,0.45,['Altman-Z: distress','Piotroski 3/9','Dividend cut risk','Declining revenue 3y']],
+    ['QCOM','Qualcomm','Information Technology',168,187,73,6,2.0,false,0.12,[]],
+    ['TXN','Texas Instruments','Information Technology',198,181,80,2,2.7,false,0.07,[]],
+    ['AMAT','Applied Materials','Information Technology',168,138,77,11,0.9,false,0.16,[]],
+    ['INTU','Intuit','Information Technology',640,179,82,14,0.6,false,-0.07,[]],
+    ['ISRG','Intuitive Surgical','Health Care',540,192,83,15,0,false,-0.06,[]],
+    ['BKNG','Booking Holdings','Consumer Discretionary',4800,160,81,13,0.8,true,0.06,[]],
+    ['HON','Honeywell','Industrials',215,140,75,4,2.1,false,0.04,[]],
+    ['AMGN','Amgen','Health Care',285,153,71,5,3.3,false,0.14,[]],
+    ['VRTX','Vertex Pharma','Health Care',460,118,79,12,0,false,0.13,[]],
+    ['GILD','Gilead Sciences','Health Care',92,115,68,3,3.8,false,0.18,[]],
+    ['REGN','Regeneron','Health Care',745,80,77,10,0,false,0.16,[]],
+    ['PANW','Palo Alto Networks','Information Technology',370,120,74,25,0,false,-0.10,['High valuation multiple']],
+    ['LRCX','Lam Research','Information Technology',78,100,78,9,1.1,false,0.14,[]],
+    ['MU','Micron','Information Technology',98,110,58,8,0.5,false,0.10,['Cyclical earnings']],
+    ['ADI','Analog Devices','Information Technology',235,117,76,7,1.7,false,0.10,[]],
+    ['KLAC','KLA Corp','Information Technology',720,96,80,12,0.8,false,0.12,[]],
+    ['SBUX','Starbucks','Consumer Discretionary',95,108,67,6,2.6,true,0.05,['Declining revenue 3y']],
+    ['MDLZ','Mondelez','Consumer Staples',66,88,72,6,2.9,false,0.07,[]],
+    ['ADP','Automatic Data','Industrials',295,120,81,7,2.0,false,0.04,[]],
+    ['GEHC','GE HealthCare','Health Care',88,40,64,4,0.1,false,0.10,[]],
+    ['MELI','MercadoLibre','Consumer Discretionary',1950,98,75,35,0,false,-0.05,[]],
+    ['CRWD','CrowdStrike','Information Technology',350,86,70,35,0,false,-0.22,['High valuation multiple']],
+    ['CDNS','Cadence','Information Technology',305,83,82,15,0,false,-0.04,[]],
+    ['SNPS','Synopsys','Information Technology',480,74,81,14,0,false,-0.04,[]],
+    ['MAR','Marriott','Consumer Discretionary',280,78,70,8,1.0,true,0.03,[]],
+    ['ORLY','O\u2019Reilly Auto','Consumer Discretionary',1300,76,83,9,0,true,0.08,[]],
+    ['CTAS','Cintas','Industrials',205,83,82,8,0.8,false,-0.05,[]],
+    ['PYPL','PayPal','Financials',78,78,63,8,0,false,0.30,['Declining margins','High accruals']],
+    ['PDD','PDD Holdings','Consumer Discretionary',120,167,66,50,0,false,0.15,['Accounting opacity','High accruals']],
+    ['ABNB','Airbnb','Consumer Discretionary',135,85,73,16,0,false,0.12,[]],
+    ['WDAY','Workday','Information Technology',245,65,71,16,0,false,0.06,[]],
+    ['FTNT','Fortinet','Information Technology',95,73,76,18,0,false,-0.08,[]],
+    ['DDOG','Datadog','Information Technology',125,43,69,27,0,false,-0.20,['High valuation multiple']],
+  ];
+
+  hash(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+  rng(seed){let t=seed>>>0;return()=>{t+=0x6D2B79F5;let r=Math.imul(t^(t>>>15),1|t);r^=r+Math.imul(r^(r>>>7),61|r);return((r^(r>>>14))>>>0)/4294967296;};}
+  clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+
+  fmtPrice(v){return '$'+(v>=1000?Math.round(v).toLocaleString('en-US'):v.toFixed(2));}
+  fmtMcap(b){return b>=1000?'$'+(b/1000).toFixed(2)+'T':'$'+Math.round(b)+'B';}
+  fmtPct(x){return (x>=0?'+':'')+(x*100).toFixed(1)+'%';}
+
+  build(){
+    if(this._cache) return this._cache;
+    const out = this.RAW.map(row=>{
+      const [ticker,name,sector,price,mcapB,quality,g,div,negBook,edge,flags]=row;
+      const rand=this.rng(this.hash(ticker));
+      const fairMid = price*(1+edge);
+      const dis = this.clamp(0.05 + (100-quality)/100*0.13 + flags.length*0.03, 0.05, 0.42);
+      const defs=[
+        ['DCF',0.05,'WACC 8.4% \u00b7 term g 2.5% \u00b7 TV 64% of value','dcf',true],
+        ['RIM',0.00,'Book + PV of excess ROE \u00b7 \u03c9 0.62','rim',!negBook],
+        ['EPV',-0.11,'No-growth NOPAT / WACC \u00b7 7-yr norm.','epv',true],
+        ['Warranted mult.',0.03,'Peer regression on quality \u00d7 growth \u00d7 risk','mult',true],
+        ['DDM',-0.04,'Multi-stage Gordon \u00b7 div faded to g','ddm',div>=1.5],
+      ];
+      const vals=[]; const methods=[];
+      defs.forEach(([mn,bias,note,key,ok])=>{
+        if(ok){
+          const off = bias + (rand()*2-1)*dis;
+          const v = Math.max(price*0.2, fairMid*(1+off));
+          vals.push(v);
+          methods.push({key,name:mn,note,value:v,applicable:true});
+        } else {
+          methods.push({key,name:mn,note: key==='rim'?'Negative book value \u2014 buybacks exceed equity':'No / negligible dividend',value:null,applicable:false});
+        }
+      });
+      vals.sort((a,b)=>a-b);
+      const low=vals[0], high=vals[vals.length-1];
+      const mid=vals.length%2?vals[(vals.length-1)/2]:(vals[vals.length/2-1]+vals[vals.length/2])/2;
+      const upside=mid/price-1;
+      const spread=(high-low)/mid;
+      const conf = spread<0.11?5:spread<0.18?4:spread<0.27?3:spread<0.40?2:1;
+      const within = vals.filter(v=>Math.abs(v/mid-1)<=0.10).length;
+      // reverse DCF
+      const jg=Math.round(g);
+      const implied=Math.round(this.clamp(jg + (-edge)*42 + 2, 0, 48));
+      const revVerdict = implied>jg+4?'optimistic':implied<Math.max(0,jg-4)?'pessimistic':'roughly in line';
+      // multiples
+      const pe=Math.round(this.clamp(16 + g*0.7 + (quality-70)*0.18 - edge*32, 7, 85));
+      const evebitda=Math.round(pe*0.62);
+      const fcfy=(100/pe*0.82).toFixed(1);
+      // score
+      const trapped=flags.length>0;
+      const score=(this.clamp(upside,-0.5,0.6)+0.5)*(conf/5)*(quality/100)*(trapped?0.55:1);
+      const trueFlags = negBook ? flags.concat(['Negative book value']) : flags;
+      return {ticker,name,sector,price,mcapB,quality,g,div,negBook,edge,flags:trueFlags,
+        fairMid,low,high,mid,upside,conf,within,methods,implied,jg,revVerdict,pe,evebitda,fcfy,score,
+        altmanZ:(quality/22+0.5).toFixed(1), piotroski:this.clamp(Math.round(quality/12),1,9),
+        roic:Math.round(quality/100*30+2), gm:Math.round(this.clamp(quality/100*60+15,15,80)),
+        nde:(this.clamp((100-quality)/100*1.6 + (trapped?0.5:0),0,2.4)).toFixed(1),
+        rand};
+    });
+    this._cache=out;
+    return out;
+  }
+  bySector(){const m={};this.build().forEach(c=>{(m[c.sector]=m[c.sector]||[]).push(c);});return m;}
+  get(t){return this.build().find(c=>c.ticker===t);}
+  allSectors(){return Object.keys(this.SECTORS).filter(s=>this.build().some(c=>c.sector===s));}
+
+  // ---------- filtering ----------
+  activeSectors(){const f=this.state.filters.sectors;return f===null?new Set(this.allSectors()):new Set(f);}
+  passFilters(c){
+    const f=this.state.filters;
+    if(!this.activeSectors().has(c.sector))return false;
+    if(f.mcap==='mega'&&c.mcapB<200)return false;
+    if(f.mcap==='large'&&(c.mcapB<10||c.mcapB>=200))return false;
+    if(f.mcap==='mid'&&c.mcapB>=10)return false;
+    if(c.quality<f.minQ)return false;
+    if(c.conf<f.minConf)return false;
+    if(c.upside*100<f.upside)return false;
+    if(f.hideTraps&&c.flags.length>0)return false;
+    return true;
+  }
+  filtered(){
+    let list=this.build().filter(c=>this.passFilters(c));
+    const {sortKey,sortDir}=this.state; const dir=sortDir==='desc'?-1:1;
+    const keyf={score:c=>c.score,ticker:c=>c.ticker,price:c=>c.price,upside:c=>c.upside,
+      conf:c=>c.conf,quality:c=>c.quality,mcap:c=>c.mcapB,pe:c=>c.pe};
+    const kf=keyf[sortKey]||keyf.score;
+    list.sort((a,b)=>{const x=kf(a),y=kf(b);if(typeof x==='string')return x<y?-1*dir:x>y?dir:0;return (x-y)*dir;});
+    return list;
+  }
+
+  upColor(u){const C=this.C;return u>0.04?C.green:u<-0.04?C.red:C.amber;}
+  qTierColor(q){const C=this.C;return q>=70?C.green:q>=48?C.amber:C.red;}
+  sectorBg(s){return this.hexA(this.SECTORS[s],0.13);}
+  sectorBorder(s){return this.hexA(this.SECTORS[s],0.33);}
+  hexA(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;}
+
+  // ---------- handlers ----------
+  setFilter(patch){this.setState(s=>({filters:{...s.filters,...patch}}));}
+  toggleSector(sec){
+    this.setState(s=>{
+      const cur = s.filters.sectors===null? new Set(this.allSectors()) : new Set(s.filters.sectors);
+      cur.has(sec)?cur.delete(sec):cur.add(sec);
+      return {filters:{...s.filters,sectors:[...cur]}};
+    });
+  }
+  resetFilters(){this.setState({filters:{sectors:null,mcap:'all',minQ:0,minConf:1,upside:-60,hideTraps:false}});}
+  go(screen,ticker){this.setState(st=>({screen,selected:ticker||st.selected,search:'',searchFocus:false}));}
+  setSort(k){this.setState(s=>({sortKey:k,sortDir:s.sortKey===k&&s.sortDir==='desc'?'asc':'desc'}));}
+  setTip(e,title,lines,foot){this.setState({tip:{x:e.clientX,y:e.clientY,title,lines,foot}});}
+  clearTip(){if(this.state.tip)this.setState({tip:null});}
+
+  // ---------- viz ----------
+  h(){return React.createElement(...arguments);}
+  rangeBar(c,full){
+    const C=this.C,h=React.createElement;
+    const variant=this.props.rangeBarVariant||'band';
+    const showDots=this.props.showMethodDots!==false;
+    const tMin=Math.min(c.low,c.price)*0.90, tMax=Math.max(c.high,c.price)*1.10;
+    const pos=v=>this.clamp((v-tMin)/(tMax-tMin)*100,0,100);
+    const lP=pos(c.low),hP=pos(c.high),mP=pos(c.mid),pP=pos(c.price);
+    const vColor=this.upColor(c.upside);
+    const barH=full?12:7;
+    const trackBg = variant==='gradient'
+      ? 'linear-gradient(90deg,rgba(63,185,80,0.22),rgba(63,185,80,0.04) 45%,rgba(248,81,73,0.05) 55%,rgba(248,81,73,0.22))'
+      : '#161b24';
+    const els=[];
+    // track
+    els.push(h('div',{key:'tk',style:{position:'absolute',left:0,right:0,top:'50%',transform:'translateY(-50%)',height:barH,borderRadius:barH/2,background:trackBg,overflow:'hidden'}}));
+    if(variant!=='gradient'){
+      els.push(h('div',{key:'gz',style:{position:'absolute',left:0,width:lP+'%',top:'50%',transform:'translateY(-50%)',height:barH,background:C.greenZone,borderRadius:barH/2}}));
+      els.push(h('div',{key:'rz',style:{position:'absolute',left:hP+'%',right:0,top:'50%',transform:'translateY(-50%)',height:barH,background:C.redZone,borderRadius:barH/2}}));
+    }
+    // band
+    els.push(h('div',{key:'bd',style:{position:'absolute',left:lP+'%',width:(hP-lP)+'%',top:'50%',transform:'translateY(-50%)',height:barH+ (variant==='ticks'?0:2),borderRadius:3,background: variant==='ticks'?'rgba(154,163,178,0.18)':'rgba(154,163,178,0.30)',border:'1px solid rgba(154,163,178,0.4)'}}));
+    // mid
+    els.push(h('div',{key:'md',style:{position:'absolute',left:mP+'%',top:'50%',transform:'translate(-50%,-50%)',width:2,height:barH+8,background:'#cfd6e2',borderRadius:2}}));
+    // method dots
+    if(showDots&&full){
+      c.methods.filter(m=>m.applicable).forEach((m,i)=>{
+        els.push(h('div',{key:'dot'+i,
+          onMouseEnter:(e)=>this.setTip(e,m.name,[{label:'Estimate',val:this.fmtPrice(m.value),color:'#fff'},{label:'vs price',val:this.fmtPct(m.value/c.price-1),color:this.upColor(m.value/c.price-1)}],m.note),
+          onMouseLeave:()=>this.clearTip(),
+          style:{position:'absolute',left:pos(m.value)+'%',top:'50%',transform:'translate(-50%,-50%)',width:9,height:9,borderRadius:'50%',background:'#0a0c10',border:'2px solid #cfd6e2',cursor:'pointer',zIndex:3}}));
+      });
+    }
+    // price line
+    els.push(h('div',{key:'pl',style:{position:'absolute',left:pP+'%',top:full?-4:-2,bottom:full?-4:-2,transform:'translateX(-50%)',width:2,background:vColor,borderRadius:2,zIndex:4,boxShadow:'0 0 0 2px rgba(10,12,16,0.9)'}}));
+    if(full){
+      els.push(h('div',{key:'pll',style:{position:'absolute',left:pP+'%',top:-22,transform:'translateX(-50%)',fontFamily:'JetBrains Mono,monospace',fontSize:10,fontWeight:600,color:vColor,whiteSpace:'nowrap'}},'price '+this.fmtPrice(c.price)));
+    }
+    const bar=h('div',{style:{position:'relative',height:full?barH+8:barH+4,margin: full?'26px 0 8px':'0'}},els);
+    if(!full) return bar;
+    const labels=h('div',{style:{display:'flex',justifyContent:'space-between',marginTop:14,fontFamily:'JetBrains Mono,monospace',fontSize:12}},[
+      h('div',{key:'l',style:{color:C.mid}},[h('div',{style:{fontSize:9,color:C.dim,letterSpacing:'.05em'}},'LOW'),this.fmtPrice(c.low)]),
+      h('div',{key:'m',style:{textAlign:'center',color:'#fff',fontWeight:600}},[h('div',{style:{fontSize:9,color:C.dim,letterSpacing:'.05em'}},'FAIR (MID)'),this.fmtPrice(c.mid)]),
+      h('div',{key:'h',style:{textAlign:'right',color:C.mid}},[h('div',{style:{fontSize:9,color:C.dim,letterSpacing:'.05em'}},'HIGH'),this.fmtPrice(c.high)]),
+    ]);
+    return h('div',{},[bar,labels]);
+  }
+
+  gauge(q){
+    const C=this.C,h=React.createElement,col=this.qTierColor(q),pct=q/100;
+    return h('div',{style:{display:'flex',alignItems:'center',gap:7}},[
+      h('div',{key:'b',style:{flex:1,height:5,borderRadius:3,background:'#161b24',position:'relative',overflow:'hidden'}},
+        h('div',{style:{position:'absolute',left:0,top:0,bottom:0,width:(pct*100)+'%',background:col,borderRadius:3}})),
+      h('span',{key:'v',style:{fontFamily:'JetBrains Mono,monospace',fontSize:11.5,fontWeight:600,color:col,width:20,textAlign:'right'}},q),
+    ]);
+  }
+  bigGauge(q){
+    const C=this.C,h=React.createElement,col=this.qTierColor(q);
+    const r=26,circ=2*Math.PI*r,off=circ*(1-q/100*0.75),rot=135;
+    return h('svg',{width:72,height:72,viewBox:'0 0 72 72'},[
+      h('circle',{key:'bg',cx:36,cy:36,r,fill:'none',stroke:'#161b24',strokeWidth:7,strokeDasharray:`${circ*0.75} ${circ}`,transform:`rotate(${rot} 36 36)`,strokeLinecap:'round'}),
+      h('circle',{key:'fg',cx:36,cy:36,r,fill:'none',stroke:col,strokeWidth:7,strokeDasharray:`${circ*0.75*(q/100)} ${circ}`,transform:`rotate(${rot} 36 36)`,strokeLinecap:'round'}),
+    ]);
+  }
+  confMeter(score,size){
+    const C=this.C,h=React.createElement;
+    const col=score>=4?C.green:score>=2?C.amber:C.red;
+    const w=size||5,gap=size?3:2;
+    return h('div',{style:{display:'flex',gap:gap}},
+      [1,2,3,4,5].map(i=>h('div',{key:i,style:{width:w*2.6,height:w*1.4,borderRadius:2,background:i<=score?col:'#1c2230'}})));
+  }
+  sparkline(series,color,w,hgt){
+    const h=React.createElement;
+    const min=Math.min(...series),max=Math.max(...series),rng=(max-min)||1;
+    const pts=series.map((v,i)=>[i/(series.length-1)*w,hgt-((v-min)/rng)*hgt]);
+    const d='M'+pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' L');
+    const area=d+` L${w},${hgt} L0,${hgt} Z`;
+    const id='g'+Math.random().toString(36).slice(2,7);
+    return h('svg',{width:'100%',height:hgt,viewBox:`0 0 ${w} ${hgt}`,preserveAspectRatio:'none',style:{display:'block'}},[
+      h('defs',{key:'d'},h('linearGradient',{id,x1:0,y1:0,x2:0,y2:1},[h('stop',{key:0,offset:'0%',stopColor:color,stopOpacity:0.22}),h('stop',{key:1,offset:'100%',stopColor:color,stopOpacity:0})])),
+      h('path',{key:'a',d:area,fill:`url(#${id})`}),
+      h('path',{key:'l',d,fill:'none',stroke:color,strokeWidth:1.5,vectorEffect:'non-scaling-stroke'}),
+    ]);
+  }
+
+  scatter(){
+    const C=this.C,h=React.createElement;
+    const W=1000,H=540,pl=58,pr=24,pt=26,pb=46;
+    const list=this.build().filter(c=>this.passFilters(c));
+    const xMin=-0.45,xMax=0.55,yMin=0,yMax=100;
+    const X=u=>pl+(this.clamp(u,xMin,xMax)-xMin)/(xMax-xMin)*(W-pl-pr);
+    const Y=q=>pt+(1-(this.clamp(q,yMin,yMax)-yMin)/(yMax-yMin))*(H-pt-pb);
+    const R=m=>this.clamp(Math.sqrt(m)/Math.sqrt(3500)*30+4,4,30);
+    const els=[];
+    // money zone
+    if(this.props.highlightMoneyZone!==false){
+      els.push(h('rect',{key:'mz',x:X(0.15),y:pt,width:X(xMax)-X(0.15),height:Y(70)-pt,fill:'rgba(63,185,80,0.06)',stroke:'rgba(63,185,80,0.25)',strokeDasharray:'4 4',rx:6}));
+      els.push(h('text',{key:'mzt',x:X(xMax)-10,y:pt+18,textAnchor:'end',fill:'rgba(63,185,80,0.7)',fontSize:12,fontWeight:600,fontFamily:'Inter'},'\u25b2 cheap & good'));
+    }
+    // grid + axes
+    [0,25,50,75,100].forEach(q=>{els.push(h('line',{key:'gy'+q,x1:pl,y1:Y(q),x2:W-pr,y2:Y(q),stroke:'#14181f',strokeWidth:1}));
+      els.push(h('text',{key:'gyl'+q,x:pl-10,y:Y(q)+4,textAnchor:'end',fill:C.dim,fontSize:11,fontFamily:'JetBrains Mono'},q));});
+    [-0.4,-0.2,0,0.2,0.4].forEach(u=>{els.push(h('text',{key:'gxl'+u,x:X(u),y:H-pb+22,textAnchor:'middle',fill:C.dim,fontSize:11,fontFamily:'JetBrains Mono'},this.fmtPct(u)));});
+    // zero line
+    els.push(h('line',{key:'zl',x1:X(0),y1:pt,x2:X(0),y2:H-pb,stroke:'#2a3140',strokeWidth:1.5}));
+    els.push(h('text',{key:'zlt',x:X(0),y:H-pb+38,textAnchor:'middle',fill:C.mid,fontSize:11,fontFamily:'Inter'},'fairly valued'));
+    // axis titles
+    els.push(h('text',{key:'xt',x:(pl+W-pr)/2,y:H-2,textAnchor:'middle',fill:C.mid,fontSize:11.5,fontWeight:600,fontFamily:'Inter'},'\u2190 overvalued    \u00b7    upside to fair value    \u00b7    undervalued \u2192'));
+    els.push(h('text',{key:'yt',x:16,y:(pt+H-pb)/2,textAnchor:'middle',fill:C.mid,fontSize:11.5,fontWeight:600,fontFamily:'Inter',transform:`rotate(-90 16 ${(pt+H-pb)/2})`},'quality score \u2192'));
+    // dots (large first)
+    [...list].sort((a,b)=>b.mcapB-a.mcapB).forEach(c=>{
+      const hov=this.state.hoverDot===c.ticker;
+      els.push(h('circle',{key:c.ticker,cx:X(c.upside),cy:Y(c.quality),r:R(c.mcapB),
+        fill:this.hexA(this.SECTORS[c.sector],hov?0.95:0.62),stroke:this.SECTORS[c.sector],strokeWidth:hov?2:1,
+        style:{cursor:'pointer',transition:'fill .1s'},
+        onMouseEnter:(e)=>{this.setState({hoverDot:c.ticker});this.setTip(e,c.ticker+'  \u00b7  '+c.name,[
+          {label:'Price',val:this.fmtPrice(c.price),color:'#fff'},
+          {label:'Fair (mid)',val:this.fmtPrice(c.mid),color:'#fff'},
+          {label:'Upside',val:this.fmtPct(c.upside),color:this.upColor(c.upside)},
+          {label:'Quality',val:c.quality,color:this.qTierColor(c.quality)},
+          {label:'Agreement',val:c.conf+'/5',color:C.mid},
+        ],c.flags.length?('\u26a0 '+c.flags.join(' \u00b7 ')):'No trap flags \u2014 clean.');},
+        onMouseMove:(e)=>{if(this.state.tip)this.setState(s=>({tip:{...s.tip,x:e.clientX,y:e.clientY}}));},
+        onMouseLeave:()=>{this.setState({hoverDot:null});this.clearTip();},
+        onClick:()=>this.go('deep',c.ticker)}));
+    });
+    return h('svg',{width:'100%',viewBox:`0 0 ${W} ${H}`,style:{display:'block',maxHeight:'62vh'}},els);
+  }
+
+  equityCurve(){
+    const C=this.C,h=React.createElement,W=560,H=220,pl=40,pb=24,pt=14,pr=12;
+    const yrs=13; const strat=[],bench=[]; let sv=100,bv=100; const r=this.rng(42);
+    for(let i=0;i<yrs;i++){strat.push(sv);bench.push(bv);sv*=1+(0.162+(r()-0.5)*0.28);bv*=1+(0.118+(r()-0.5)*0.22);}
+    const all=[...strat,...bench];const max=Math.max(...all),min=Math.min(...all);
+    const X=i=>pl+i/(yrs-1)*(W-pl-pr);
+    const Y=v=>pt+(1-(v-min)/(max-min))*(H-pt-pb);
+    const path=s=>'M'+s.map((v,i)=>X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' L');
+    const els=[];
+    [min,(min+max)/2,max].forEach((v,i)=>{els.push(h('line',{key:'g'+i,x1:pl,y1:Y(v),x2:W-pr,y2:Y(v),stroke:'#14181f'}));
+      els.push(h('text',{key:'gl'+i,x:pl-6,y:Y(v)+3,textAnchor:'end',fill:C.dim,fontSize:9,fontFamily:'JetBrains Mono'},Math.round(v/100)+'x'));});
+    [2014,2018,2022,2026].forEach((yr,i)=>els.push(h('text',{key:'x'+yr,x:X(i*4>=yrs?yrs-1:i*4),y:H-6,textAnchor:'middle',fill:C.dim,fontSize:9,fontFamily:'JetBrains Mono'},yr)));
+    els.push(h('path',{key:'b',d:path(bench),fill:'none',stroke:'#626b7a',strokeWidth:1.6}));
+    els.push(h('path',{key:'s',d:path(strat),fill:'none',stroke:C.green,strokeWidth:2}));
+    return h('svg',{width:'100%',viewBox:`0 0 ${W} ${H}`,style:{display:'block'}},els);
+  }
+  trendSpark(c,key,color){
+    const r=this.rng(this.hash(c.ticker+key));const n=8;const out=[];let base=100;
+    const drift = key==='shares'?(c.negBook?-0.03:0.005):key==='margin'?(c.flags.length?-0.01:0.01):(c.g/100);
+    for(let i=0;i<n;i++){out.push(base);base*=1+drift+(r()-0.5)*0.06;}
+    return out;
+  }
+
+  // ---------- render ----------
+  renderVals(){
+    const C=this.C, S=this.state, h=React.createElement;
+    const list=this.filtered();
+    const all=this.build();
+    const navStyle=(active)=>({display:'flex',alignItems:'center',gap:10,padding:'9px 11px',borderRadius:8,cursor:'pointer',fontSize:13,fontWeight:active?600:500,marginBottom:2,
+      color:active?'#fff':C.mid,background:active?'rgba(68,147,248,0.13)':'transparent',
+      borderLeft:active?'2px solid '+C.blue:'2px solid transparent'});
+
+    // KPIs
+    const passed=all.filter(c=>this.passFilters(c));
+    const undervalued=all.filter(c=>c.upside>0.15).length;
+    const qpass=all.filter(c=>c.quality>=70).length;
+    const medUp=all.map(c=>c.upside).sort((a,b)=>a-b)[Math.floor(all.length/2)];
+    const flagged=all.filter(c=>c.flags.length>0).length;
+    const kpis=[
+      {label:'Covered',value:all.length,sub:'Nasdaq-100 names',color:C.hi},
+      {label:'Undervalued',value:undervalued,sub:'> 15% upside to mid',color:C.green},
+      {label:'Pass quality',value:qpass,sub:'quality \u2265 70',color:C.hi},
+      {label:'Median upside',value:this.fmtPct(medUp),sub:'market-wide, to mid',color:this.upColor(medUp)},
+      {label:'Trap-flagged',value:flagged,sub:'L9 value-trap gate',color:C.amber},
+    ];
+
+    // search
+    const q=S.search.trim().toLowerCase();
+    const matches = q? all.filter(c=>c.ticker.toLowerCase().includes(q)||c.name.toLowerCase().includes(q)).slice(0,7):[];
+    const searchMatches=matches.map(c=>({ticker:c.ticker,name:c.name,upStr:this.fmtPct(c.upside),upColor:this.upColor(c.upside),
+      pick:()=>this.go('deep',c.ticker)}));
+
+    // filter rail (rendered as React element to keep it shared between screens)
+    const filterRail=this.renderFilterRail();
+
+    // table columns
+    const colDef=[['Company','ticker','left'],['Price','price','right'],['Fair-value range',null,'left'],
+      ['Upside','upside','right'],['Agreement','conf','left'],['Quality','quality','left'],['Flags',null,'left']];
+    const columns=colDef.map(([label,key,align])=>({label,
+      arrow: key&&S.sortKey===key?(S.sortDir==='desc'?'\u25bc':'\u25b2'):'',
+      sort: key?()=>this.setSort(key):()=>{},
+      style:{textAlign:align,padding:'10px 12px',fontSize:10,letterSpacing:'.05em',textTransform:'uppercase',color:C.dim,fontWeight:600,
+        cursor:key?'pointer':'default',borderBottom:'1px solid '+C.border,userSelect:'none',whiteSpace:'nowrap',
+        paddingLeft: label==='Company'?16:12}}));
+    if(S.showMultiples){
+      ['P/E','EV/EBITDA','FCF yield'].forEach(l=>columns.push({label:l,arrow:'',sort:()=>{},style:{textAlign:'right',padding:'10px 10px',fontSize:10,letterSpacing:'.05em',textTransform:'uppercase',color:C.dim,fontWeight:600,borderBottom:'1px solid '+C.border,background:'#0b0e13',whiteSpace:'nowrap'}}));
+    }
+    columns.push({label:'Mkt cap',arrow:S.sortKey==='mcap'?(S.sortDir==='desc'?'\u25bc':'\u25b2'):'',sort:()=>this.setSort('mcap'),style:{textAlign:'right',padding:'10px 16px 10px 12px',fontSize:10,letterSpacing:'.05em',textTransform:'uppercase',color:C.dim,fontWeight:600,borderBottom:'1px solid '+C.border,cursor:'pointer',whiteSpace:'nowrap'}});
+
+    const rows=list.map(c=>{
+      const starred=!!S.watch[c.ticker];
+      const flagsEl = c.flags.length? h('div',{style:{display:'flex',gap:4,flexWrap:'wrap'}},
+        c.flags.slice(0,2).map((f,i)=>{const distress=/distress|cut|Declining|opacity/.test(f);
+          return h('span',{key:i,style:{fontSize:9,fontWeight:600,color:distress?C.red:C.amber,background:distress?this.hexA(C.red,0.12):this.hexA(C.amber,0.13),border:'1px solid '+(distress?this.hexA(C.red,0.3):this.hexA(C.amber,0.3)),borderRadius:3,padding:'1px 5px',whiteSpace:'nowrap'}},f.length>16?f.slice(0,15)+'\u2026':f);})
+          .concat(c.flags.length>2?[h('span',{key:'more',style:{fontSize:9,color:C.dim}},'+'+(c.flags.length-2))]:[]))
+        : h('span',{style:{color:C.dim,fontFamily:'JetBrains Mono,monospace'}},'\u2014');
+      return {ticker:c.ticker,name:c.name,
+        sectorShort:this.SECTOR_SHORT[c.sector],sectorColor:this.SECTORS[c.sector],sectorBg:this.sectorBg(c.sector),sectorBorder:this.sectorBorder(c.sector),
+        price:this.fmtPrice(c.price),upside:this.fmtPct(c.upside),upColor:this.upColor(c.upside),
+        mcap:this.fmtMcap(c.mcapB),pe:c.pe,evebitda:c.evebitda,fcfy:c.fcfy+'%',
+        star:starred?'\u2605':'\u2606',starColor:starred?C.amber:C.dim,
+        rowBg: S.selected===c.ticker?'rgba(68,147,248,0.06)':'transparent',
+        rangeBar:this.rangeBar(c,false),conf:this.confMeter(c.conf),gauge:this.gauge(c.quality),flags:flagsEl,
+        open:()=>this.go('deep',c.ticker),
+        toggleStar:(e)=>{e.stopPropagation();this.setState(s=>({watch:{...s.watch,[c.ticker]:!s.watch[c.ticker]}}));}};
+    });
+
+    // presets
+    const presetDefs=[['Deep value',{upside:25,minConf:3,hideTraps:false}],['Quality compounders',{minQ:78,upside:0,hideTraps:true}],['Clean & cheap',{upside:10,minQ:65,hideTraps:true}]];
+    const presets=presetDefs.map(([label,patch])=>({label,
+      style:{fontSize:11,color:C.mid,cursor:'pointer',border:'1px solid '+C.borderHi,borderRadius:6,padding:'5px 10px'},
+      apply:()=>this.setFilter(patch)}));
+
+    // ---------- selected deep dive ----------
+    const c=this.get(S.selected)||all[0];
+    const totalApplicW = c.methods.filter(m=>m.applicable).length;
+    const wmap={dcf:25,rim:20,epv:20,mult:25,ddm:10};
+    let wsum=0;c.methods.forEach(m=>{if(m.applicable)wsum+=wmap[m.key];});
+    const methods=c.methods.map(m=>({name:m.name,
+      est:m.applicable?this.fmtPrice(m.value):'N/A',
+      estColor:m.applicable?(m.value>c.price?C.green:C.red):C.dim,
+      nameColor:m.applicable?C.hi:C.dim,
+      weight:m.applicable?Math.round(wmap[m.key]/wsum*100)+'%':'\u2014',
+      note:m.note,opacity:m.applicable?1:0.45}));
+
+    const verdict=(c.upside>0.04?'Undervalued ~'+Math.abs(Math.round(c.upside*100))+'% to mid':c.upside<-0.04?'Overvalued ~'+Math.abs(Math.round(c.upside*100))+'% to mid':'Fairly valued')+' \u00b7 '+(c.conf>=4?'high':c.conf>=2?'moderate':'low')+' agreement';
+
+    const revStatement=`At ${this.fmtPrice(c.price)}, the market is pricing in ~${c.implied}%/yr revenue growth for 5 years, fading to 2.5% terminal. ${c.ticker}\u2019s trailing 5-yr CAGR is ${c.jg}%.`;
+    const revColor=c.revVerdict==='optimistic'?C.red:c.revVerdict==='pessimistic'?C.green:C.amber;
+
+    const whyPoints=[];
+    c.flags.forEach(f=>{
+      const map={
+        'Altman-Z: distress':'Balance-sheet stress signal \u2014 bankruptcy-risk model in the distress zone.',
+        'Declining revenue 3y':'Top line has shrunk three years running; the market is extrapolating the decline.',
+        'Dividend cut risk':'Payout looks unsustainable against current free cash flow.',
+        'High accruals':'Earnings are running ahead of cash \u2014 lower-quality, often mean-reverting.',
+        'Declining margins':'Operating margins compressing; competitive or cost pressure.',
+        'Accounting opacity':'Disclosure quality is weak; harder to trust the reported numbers.',
+        'High valuation multiple':'Trades at a rich multiple \u2014 priced for sustained hyper-growth.',
+        'Cyclical earnings':'Earnings swing with the cycle; trailing figures mislead at the peak/trough.',
+        'Negative book value':'Buybacks have driven book equity negative \u2014 RIM is undefined here.',
+      };
+      const distress=/distress|cut|Declining|opacity|Negative/.test(f);
+      whyPoints.push({tag:f+' \u2014',text:map[f]||'',color:distress?C.red:C.amber});
+    });
+    if(!whyPoints.length) whyPoints.push({tag:'No trap flags.',text:'Clean across the value-trap gate \u2014 the discount looks like mispricing, not distress.',color:C.green});
+    whyPoints.push({tag:'Bear case:',text: c.upside>0.05?'skeptics argue growth decelerates faster than the model assumes and the discount is deserved.':'bulls argue current multiples already bake in the premium; little margin of safety left.',color:C.mid});
+
+    const leverage=[
+      {label:'Net debt / EBITDA',value:c.nde+'x',color:parseFloat(c.nde)>2?C.amber:C.hi},
+      {label:'Altman-Z',value:c.altmanZ,color:parseFloat(c.altmanZ)<1.8?C.red:parseFloat(c.altmanZ)<3?C.amber:C.green},
+      {label:'Piotroski-F',value:c.piotroski+'/9',color:c.piotroski>=7?C.green:c.piotroski>=4?C.amber:C.red},
+      {label:'FCF yield',value:c.fcfy+'%',color:C.hi},
+    ];
+    const filings=[{type:'10-Q',date:'May 02, 2026'},{type:'8-K',date:'Apr 18, 2026'},{type:'10-K',date:'Feb 07, 2026'}];
+
+    const ratios=[
+      {label:'ROIC',value:c.roic+'%',pct:c.roic/30},
+      {label:'Gross margin',value:c.gm+'%',pct:c.gm/80},
+      {label:'Rev growth (5y)',value:this.fmtPct(c.g/100).replace('.0',''),pct:this.clamp(c.g/50,0,1),forceColor:c.g>0?C.green:C.red},
+      {label:'Quality rank',value:c.quality+'/100',pct:c.quality/100},
+    ].map(r=>({...r,color:r.forceColor||this.qTierColor(r.pct*100),pctw:this.clamp(r.pct*100,4,100)+'%'}));
+
+    const trendDefs=[['Revenue','rev',C.blue],['Operating margin','margin',C.green],['Free cash flow','fcf','#b58cf0'],['Shares outstanding','shares',C.amber],['Book value / sh','book','#4fc3c9']];
+    const trends=trendDefs.map(([label,key,color])=>{const ser=this.trendSpark(c,key,color);const d=ser[ser.length-1]/ser[0]-1;
+      const good = key==='shares'? d<0 : d>0;
+      return {label,delta:this.fmtPct(d),deltaColor: key==='shares'?(d<0?C.green:C.amber):(d>0?C.green:C.red),
+        spark:this.sparkline(ser,color,120,30)};});
+
+    const peers=this.bySector()[c.sector].filter(p=>p.ticker!==c.ticker).sort((a,b)=>b.mcapB-a.mcapB).slice(0,5)
+      .map(p=>({ticker:p.ticker,upside:this.fmtPct(p.upside),upColor:this.upColor(p.upside),quality:p.quality,conf:this.confMeter(p.conf,3),open:()=>this.go('deep',p.ticker)}));
+
+    // methodology
+    const stats=[{label:'CAGR',strat:'16.2%',bench:'11.8%',color:C.green},{label:'Hit rate',strat:'58%',bench:'\u2014',color:C.hi},
+      {label:'Max drawdown',strat:'\u201234%',bench:'\u201228%',color:C.red},{label:'Sharpe',strat:'0.92',bench:'0.71',color:C.hi},{label:'Turnover',strat:'47%/yr',bench:'\u2014',color:C.mid}];
+    const reliability=[['Reverse DCF','61%','+4.1%',28,C.green],['Warranted mult.','58%','+2.6%',25,C.green],['DCF','53%','+1.2%',20,C.amber],['RIM','57%','+2.2%',17,C.green],['EPV','55%','+1.7%',10,C.amber]]
+      .map(([method,hit,alpha,weight,ac])=>({method,hit,alpha,weight:weight+'%',aColor:ac}));
+    const dataQuality=[{label:'Universe coverage',value:'100 / 100',color:C.green},{label:'Missing financials',value:'0',color:C.green},
+      {label:'Last EDGAR refresh',value:'6h ago',color:C.hi},{label:'yfinance fallback used',value:'3 names',color:C.amber},{label:'Avg history depth',value:'9.4 yrs',color:C.hi}];
+    const assumptions=[{label:'Risk-free (10Y)',value:'4.3%',src:'FRED DGS10 \u00b7 live'},{label:'Equity risk prem.',value:'5.0%',src:'Damodaran implied'},
+      {label:'Terminal growth',value:'2.5%',src:'\u2264 risk-free ceiling'},{label:'Tax rate',value:'21%',src:'US statutory fwd'},
+      {label:'Forecast horizon',value:'10 yr',src:'2-stage fade'},{label:'SBC treatment',value:'Expensed',src:'subtract from FCF'},
+      {label:'Maint. capex',value:'min(capex, D&A)',src:'filings'},{label:'Beta','value':'Blume-adj','src':'shrunk to 1.0'}];
+    const formulas=[
+      {name:'DCF',discount:'WACC',answers:'Intrinsic value from projected free cash flow \u2014 run as a 10k-draw Monte Carlo (P10 / P50 / P90), not a point estimate.',
+        formula:['FCFF = CFO \u2212 Capex   (SBC expensed)','TV = FCF\u2081\u2080\u00b7(1+g) / (WACC \u2212 g)','Value = \u03a3 FCF\u209c /(1+WACC)\u1d57 + PV(TV) \u2212 NetDebt'],
+        gotcha:'Terminal value is 60\u201380% of the answer \u2014 surfaced explicitly; clamps when WACC \u2212 g < 1.5%.'},
+      {name:'Reverse DCF',discount:'WACC held',bestFor:'the anchor',answers:'Inverts the DCF \u2014 what stage-1 growth does today\u2019s price already imply?',
+        formula:['Solve  g\u2081  such that','     DCF(g\u2081) = Current Price','(WACC, horizon, terminal g held at defaults)'],
+        gotcha:'The only assumption-light engine \u2014 and the curve-fit guard for every manual override.'},
+      {name:'RIM \u2014 Residual Income',discount:'Re',bestFor:'banks \u00b7 financials',answers:'Book equity plus the present value of returns earned above the cost of equity.',
+        formula:['Value = B\u2080 + \u03a3 PV[ (ROE\u209c \u2212 Re)\u00b7B\u209c\u208b\u2081 ]','ROE fades toward Re \u00b7 persistence \u03c9 = 0.62'],
+        gotcha:'Marked N/A when book value \u2264 0 (buybacks exceed equity) \u2014 never forced to emit a number.'},
+      {name:'EPV \u2014 Earnings Power',discount:'WACC',answers:'Value of current earnings power assuming zero growth \u2014 a conservative floor.',
+        formula:['Normalized EBIT = avg margin(7y) \u00d7 revenue','EPV(ops) = NOPAT / WACC','EPV(equity) = EPV(ops) + Cash \u2212 Debt'],
+        gotcha:'EPV < EV means the market is paying for growth \u2014 the gap is itself the signal.'},
+      {name:'Warranted multiple',discount:'relative',answers:'A justified multiple fitted from peer fundamentals, then applied to this company.',
+        formula:['P/E* = \u03b2\u2080 + \u03b2\u2081\u00b7Quality + \u03b2\u2082\u00b7Growth + \u03b2\u2083\u00b7Risk','Value = P/E* \u00d7 EPS   (inputs winsorized)'],
+        gotcha:'Smarter than naive peer averages, but regressions are outlier-sensitive \u2014 winsorize.'},
+      {name:'DDM \u2014 Dividend Discount',discount:'Re',answers:'Value of the dividend stream, as a multi-stage Gordon model.',
+        formula:['V = \u03a3 PV(D\u209c) + PV(terminal)','dividend growth faded to terminal g'],
+        gotcha:'N/A for the majority of Nasdaq-100 names \u2014 too few pay meaningful dividends.'},
+    ];
+
+    // tooltip placement
+    const tip=S.tip;
+    const tipStyle=tip?{position:'fixed',left:Math.min(tip.x+16,(window.innerWidth||1200)-260)+'px',top:(tip.y+16)+'px',
+      background:'#0c0f15',border:'1px solid '+C.borderHi,borderRadius:9,padding:'10px 13px',pointerEvents:'none',zIndex:9999,
+      boxShadow:'0 14px 40px rgba(0,0,0,0.6)',minWidth:160}:{};
+
+    return {
+      // chrome
+      dataAsOf:'Jun 27 2026 \u00b7 16:00 ET', selTicker:S.selected, stale:false,
+      searchBorder:S.searchFocus?C.blue:C.border, search:S.search,
+      onSearch:(e)=>this.setState({search:e.target.value}),
+      onSearchFocus:()=>this.setState({searchFocus:true}),
+      onSearchBlur:()=>setTimeout(()=>this.setState({searchFocus:false}),150),
+      showSearchDrop:S.searchFocus&&q.length>0, noSearchMatch:q.length>0&&matches.length===0, searchMatches,
+      navOverview:navStyle(S.screen==='overview'),navScreener:navStyle(S.screen==='screener'),
+      navDeep:navStyle(S.screen==='deep'),navMethod:navStyle(S.screen==='methodology'),
+      goOverview:()=>this.go('overview'),goScreener:()=>this.go('screener'),goDeep:()=>this.go('deep'),goMethod:()=>this.go('methodology'),
+      isOverview:S.screen==='overview',isScreener:S.screen==='screener',isDeep:S.screen==='deep',isMethod:S.screen==='methodology',
+      // overview
+      kpis, scatter:this.scatter(), shownCount:passed.length, totalCount:all.length,
+      filterRail, filterRailStyle:{width:228,flex:'0 0 228px',borderRight:'1px solid '+C.border,background:'#0b0e13',padding:'16px 16px',overflowY:'auto'},
+      // screener
+      columns, rows, noRows:rows.length===0, presets, showMultiples:S.showMultiples,
+      multiplesLabel:(S.showMultiples?'Hide':'Show')+' multiples',
+      toggleMultiples:()=>this.setState(s=>({showMultiples:!s.showMultiples})),
+      exportCsv:()=>{},
+      // deep dive
+      sel:{ticker:c.ticker,name:c.name,sectorName:c.sector,sectorColor:this.SECTORS[c.sector],sectorBg:this.sectorBg(c.sector),sectorBorder:this.sectorBorder(c.sector),
+        price:this.fmtPrice(c.price),mcap:this.fmtMcap(c.mcapB),
+        star:S.watch[c.ticker]?'\u2605':'\u2606',starColor:S.watch[c.ticker]?C.amber:C.mid,
+        toggleStar:()=>this.setState(s=>({watch:{...s.watch,[c.ticker]:!s.watch[c.ticker]}})),
+        rangeBar:this.rangeBar(c,true),verdict,verdictColor:this.upColor(c.upside),
+        methods,
+        revStatement,revVerdict:'Market is '+c.revVerdict+' vs. history',revColor,revChipBg:this.hexA(revColor,0.13),revBorder:this.hexA(revColor,0.3),
+        whyPoints,leverage,filings,
+        quality:c.quality,qColor:this.qTierColor(c.quality),qTier:c.quality>=70?'High quality':c.quality>=48?'Average':'Low quality',
+        bigGauge:this.bigGauge(c.quality),ratios,
+        confText:c.within+' of '+c.methods.filter(m=>m.applicable).length+' methods within \u00b110% of mid \u2014 '+(c.conf>=4?'high':c.conf>=2?'moderate':'low')+' agreement.',
+        bigConf:this.confMeter(c.conf,7),confColor:c.conf>=4?C.green:c.conf>=2?C.amber:C.red,confLabel:(c.conf>=4?'High':c.conf>=2?'Moderate':'Low')+' \u00b7 '+c.conf+'/5',
+        trends,peers},
+      // methodology
+      equityCurve:this.equityCurve(),stats,reliability,dataQuality,assumptions,formulas,
+      // tooltip
+      tipShown:!!tip, tip:tip||{lines:[]}, tipStyle,
+    };
+  }
+
+  renderFilterRail(){
+    const C=this.C,h=React.createElement,S=this.state,f=S.filters;
+    const active=this.activeSectors();
+    const Section=(title,body)=>h('div',{style:{marginBottom:18}},[
+      h('div',{key:'t',style:{fontSize:10,letterSpacing:'.1em',textTransform:'uppercase',color:C.dim,marginBottom:9,fontWeight:600}},title),body]);
+    const sectorRows=this.allSectors().map(sec=>{const on=active.has(sec);
+      return h('div',{key:sec,onClick:()=>this.toggleSector(sec),style:{display:'flex',alignItems:'center',gap:8,padding:'4px 2px',cursor:'pointer',opacity:on?1:0.4}},[
+        h('div',{key:'b',style:{width:11,height:11,borderRadius:3,background:on?this.SECTORS[sec]:'transparent',border:'1.5px solid '+this.SECTORS[sec]}}),
+        h('span',{key:'l',style:{fontSize:11.5,color:on?C.hi:C.mid,flex:1}},sec),
+      ]);});
+    const mcapBtns=[['all','All'],['mega','Mega'],['large','Large'],['mid','Mid']].map(([v,l])=>
+      h('div',{key:v,onClick:()=>this.setFilter({mcap:v}),style:{flex:1,textAlign:'center',fontSize:11,padding:'5px 0',borderRadius:5,cursor:'pointer',
+        background:f.mcap===v?'rgba(68,147,248,0.15)':'#0e1117',color:f.mcap===v?'#fff':C.mid,border:'1px solid '+(f.mcap===v?this.hexA(C.blue,0.4):C.border)}},l));
+    const confBtns=[1,2,3,4,5].map(n=>h('div',{key:n,onClick:()=>this.setFilter({minConf:n}),style:{flex:1,textAlign:'center',fontFamily:'JetBrains Mono',fontSize:11,padding:'5px 0',borderRadius:5,cursor:'pointer',
+      background:f.minConf===n?'rgba(68,147,248,0.15)':'#0e1117',color:f.minConf===n?'#fff':C.mid,border:'1px solid '+(f.minConf===n?this.hexA(C.blue,0.4):C.border)}},n));
+    return h('div',{},[
+      h('div',{key:'hd',style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}},[
+        h('span',{key:'t',style:{fontSize:12,fontWeight:600,color:C.hi}},'Filters'),
+        h('span',{key:'r',onClick:()=>this.resetFilters(),style:{fontSize:10.5,color:C.blue,cursor:'pointer'}},'Reset'),
+      ]),
+      Section('Sector',h('div',{},sectorRows)),
+      Section('Market cap',h('div',{style:{display:'flex',gap:4}},mcapBtns)),
+      Section('Min quality \u00b7 '+f.minQ,h('input',{type:'range',min:0,max:100,step:5,value:f.minQ,onChange:(e)=>this.setFilter({minQ:+e.target.value}),style:{width:'100%'}})),
+      Section('Min agreement',h('div',{style:{display:'flex',gap:4}},confBtns)),
+      Section('Min upside \u00b7 '+f.upside+'%',h('input',{type:'range',min:-60,max:50,step:5,value:f.upside,onChange:(e)=>this.setFilter({upside:+e.target.value}),style:{width:'100%'}})),
+      h('div',{key:'ht',onClick:()=>this.setFilter({hideTraps:!f.hideTraps}),style:{display:'flex',alignItems:'center',gap:9,cursor:'pointer',padding:'4px 2px'}},[
+        h('div',{key:'s',style:{width:32,height:18,borderRadius:10,background:f.hideTraps?C.green:'#222835',position:'relative',transition:'background .15s'}},
+          h('div',{style:{position:'absolute',top:2,left:f.hideTraps?16:2,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left .15s'}})),
+        h('span',{key:'l',style:{fontSize:11.5,color:C.hi}},'Hide trap-flagged'),
+      ]),
+    ]);
+  }
+}
+</script>
+</body>
+</html>
