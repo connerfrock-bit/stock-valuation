@@ -1,9 +1,49 @@
+import { useEffect, useState } from 'react';
 import { C, MONO, hexA } from '../theme';
 import type { Meta } from '../types';
 
 const card: React.CSSProperties = {
   background: C.panel, border: `1px solid ${C.border}`, borderRadius: 11,
 };
+
+interface Backtest {
+  meta: { ranAt: string; start: string; end: string; rebalance: string;
+    portfolio: string; benchmark: string; avgCoverage: number; caveats: string[] };
+  curve: { d: string; strat: number; bench: number }[];
+  stats: { quarters: number; years: number; stratCAGR: number; benchCAGR: number;
+    hitRate: number; stratSharpe: number; benchSharpe: number;
+    stratMaxDD: number; benchMaxDD: number; avgTurnover: number | null; avgNames: number };
+  perMethod: { method: string; hitRate: number; avgExcessQ: number; quarters: number }[];
+}
+
+function EquityCurve({ bt }: { bt: Backtest }) {
+  const W = 560, H = 220, pl = 40, pr = 12, pt = 14, pb = 24;
+  const pts = bt.curve;
+  const maxV = Math.max(...pts.map(p => Math.max(p.strat, p.bench)));
+  const X = (i: number) => pl + (i / (pts.length - 1)) * (W - pl - pr);
+  const Y = (v: number) => pt + (1 - v / maxV) * (H - pt - pb);
+  const path = (key: 'strat' | 'bench') =>
+    'M' + pts.map((p, i) => `${X(i).toFixed(1)},${Y(p[key]).toFixed(1)}`).join(' L');
+  const yearTicks = pts.filter((p, i) => i > 0 && p.d.slice(5, 7) === '12' && +p.d.slice(0, 4) % 2 === 1);
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+      {[1, maxV / 2, maxV].map((v, i) => (
+        <g key={i}>
+          <line x1={pl} y1={Y(v)} x2={W - pr} y2={Y(v)} stroke={C.rowBorder} />
+          <text x={pl - 6} y={Y(v) + 3} textAnchor="end" fill={C.dim} fontSize={9} fontFamily={MONO}>
+            {v.toFixed(1)}x
+          </text>
+        </g>
+      ))}
+      {yearTicks.map(p => (
+        <text key={p.d} x={X(pts.indexOf(p))} y={H - 6} textAnchor="middle" fill={C.dim}
+          fontSize={9} fontFamily={MONO}>{p.d.slice(0, 4)}</text>
+      ))}
+      <path d={path('bench')} fill="none" stroke={C.dim} strokeWidth={1.6} />
+      <path d={path('strat')} fill="none" stroke={C.green} strokeWidth={2} />
+    </svg>
+  );
+}
 
 interface Engine {
   name: string; discount: string; bestFor?: string;
@@ -52,6 +92,14 @@ const ENGINES: Engine[] = [
 ];
 
 export function Methodology({ meta }: { meta: Meta }) {
+  const [bt, setBt] = useState<Backtest | null>(null);
+  useEffect(() => {
+    fetch(`${import.meta.env.BASE_URL}backtest.json`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(setBt)
+      .catch(() => setBt(null));
+  }, []);
+
   const assumptions = [
     { label: 'Risk-free (10Y)', value: (meta.riskFree * 100).toFixed(2) + '%', src: meta.riskFreeSource },
     { label: 'Equity risk prem.', value: (meta.erp * 100).toFixed(1) + '%', src: 'Damodaran implied' },
@@ -73,35 +121,122 @@ export function Methodology({ meta }: { meta: Meta }) {
         </div>
       </div>
 
-      {/* backtest — honest empty state */}
+      {/* backtest — real results (honest even when negative) or empty state */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 18, marginBottom: 18 }}>
         <div style={{ ...card, padding: '18px 20px' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.sec, marginBottom: 10 }}>Backtest equity curve</div>
-          <div style={{
-            border: `1px dashed ${C.borderHi}`, borderRadius: 9, padding: '38px 20px',
-            textAlign: 'center', color: C.dim, fontSize: 12.5, lineHeight: 1.7,
-          }}>
-            <div style={{ fontSize: 13, color: C.mid, fontWeight: 600, marginBottom: 4 }}>Backtest not yet run</div>
-            An honest backtest needs a point-in-time, survivorship-free store (Phase 7).<br />
-            Until it exists, no performance claims are shown — anything else would be fiction.
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.sec }}>Backtest equity curve</div>
+            {bt && (
+              <div style={{ display: 'flex', gap: 14, fontSize: 11 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 16, height: 3, background: C.green, borderRadius: 2 }} />Top-quintile basket
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 16, height: 3, background: C.dim, borderRadius: 2 }} />Equal-weight universe
+                </span>
+              </div>
+            )}
           </div>
+          {bt ? (
+            <>
+              <EquityCurve bt={bt} />
+              <div style={{
+                marginTop: 12, padding: '10px 13px', borderRadius: 8, fontSize: 12, lineHeight: 1.6,
+                background: hexA(C.amber, 0.08), border: `1px solid ${hexA(C.amber, 0.35)}`, color: '#e8c98a',
+              }}>
+                <b>Honest verdict: no edge demonstrated.</b> Over {bt.meta.start.slice(0, 4)}–{bt.meta.end.slice(0, 4)},
+                the composite top-quintile returned {(bt.stats.stratCAGR * 100).toFixed(1)}%/yr vs{' '}
+                {(bt.stats.benchCAGR * 100).toFixed(1)}%/yr for equal-weight — value-tilted selection
+                underperformed in this growth-led universe. Treat every screen as a research aid, not a signal with proven alpha.
+              </div>
+            </>
+          ) : (
+            <div style={{
+              border: `1px dashed ${C.borderHi}`, borderRadius: 9, padding: '38px 20px',
+              textAlign: 'center', color: C.dim, fontSize: 12.5, lineHeight: 1.7,
+            }}>
+              <div style={{ fontSize: 13, color: C.mid, fontWeight: 600, marginBottom: 4 }}>Backtest not yet run</div>
+              An honest backtest needs a point-in-time, survivorship-free store (Phase 7).<br />
+              Run backend/backtest.py — no performance claims are shown until it exists.
+            </div>
+          )}
         </div>
         <div style={{ ...card, padding: '18px 20px' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.sec, marginBottom: 14 }}>Data quality</div>
-          {[
-            { label: 'Universe coverage', value: `${meta.covered} / ${meta.covered + meta.excluded.length}`, color: C.green },
-            { label: 'Excluded (honest)', value: String(meta.excluded.length), color: C.amber },
-            { label: 'Data as of', value: meta.asOf.split('·')[0].trim(), color: C.hi },
-            { label: 'Risk-free source', value: meta.riskFreeSource.includes('live') ? 'FRED live' : 'fallback', color: meta.riskFreeSource.includes('live') ? C.green : C.amber },
-            { label: 'Share counts', value: 'Yahoo x-checked', color: C.green },
-          ].map(dq => (
-            <div key={dq.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, marginBottom: 12 }}>
-              <span style={{ color: C.dim3 }}>{dq.label}</span>
-              <span style={{ fontFamily: MONO, fontWeight: 600, color: dq.color }}>{dq.value}</span>
-            </div>
-          ))}
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.sec, marginBottom: 14 }}>
+            {bt ? 'Performance' : 'Data quality'}
+          </div>
+          {bt ? (
+            <>
+              {[
+                { label: 'CAGR', s: (bt.stats.stratCAGR * 100).toFixed(1) + '%', b: (bt.stats.benchCAGR * 100).toFixed(1) + '%', color: bt.stats.stratCAGR >= bt.stats.benchCAGR ? C.green : C.red },
+                { label: 'Hit rate', s: (bt.stats.hitRate * 100).toFixed(0) + '%', b: '—', color: bt.stats.hitRate >= 0.5 ? C.green : C.red },
+                { label: 'Sharpe', s: String(bt.stats.stratSharpe), b: String(bt.stats.benchSharpe), color: C.hi },
+                { label: 'Max drawdown', s: (bt.stats.stratMaxDD * 100).toFixed(0) + '%', b: (bt.stats.benchMaxDD * 100).toFixed(0) + '%', color: C.red },
+                { label: 'Turnover', s: bt.stats.avgTurnover === null ? '—' : (bt.stats.avgTurnover * 100).toFixed(0) + '%/q', b: '—', color: C.mid },
+                { label: 'Avg names', s: String(bt.stats.avgNames), b: '', color: C.mid },
+                { label: 'Coverage', s: (bt.meta.avgCoverage * 100).toFixed(0) + '%', b: '', color: bt.meta.avgCoverage > 0.8 ? C.green : C.amber },
+              ].map(s => (
+                <div key={s.label} style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <span style={{ fontSize: 11.5, color: C.dim3 }}>{s.label}</span>
+                  <span style={{ display: 'flex', gap: 14, alignItems: 'baseline' }}>
+                    <span style={{ fontFamily: MONO, fontSize: 14, fontWeight: 600, color: s.color }}>{s.s}</span>
+                    <span style={{ fontFamily: MONO, fontSize: 11, color: C.dim, width: 44, textAlign: 'right' }}>{s.b}</span>
+                  </span>
+                </div>
+              ))}
+            </>
+          ) : (
+            [
+              { label: 'Universe coverage', value: `${meta.covered} / ${meta.covered + meta.excluded.length}`, color: C.green },
+              { label: 'Excluded (honest)', value: String(meta.excluded.length), color: C.amber },
+              { label: 'Data as of', value: meta.asOf.split('·')[0].trim(), color: C.hi },
+            ].map(dq => (
+              <div key={dq.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, marginBottom: 12 }}>
+                <span style={{ color: C.dim3 }}>{dq.label}</span>
+                <span style={{ fontFamily: MONO, fontWeight: 600, color: dq.color }}>{dq.value}</span>
+              </div>
+            ))
+          )}
         </div>
       </div>
+
+      {bt && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 18 }}>
+          <div style={{ ...card, overflow: 'hidden' }}>
+            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, fontSize: 13, fontWeight: 600, color: C.sec }}>
+              Per-method reliability <span style={{ fontSize: 10, color: C.dim, fontWeight: 400 }}>top quintile vs benchmark, quarterly</span>
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ color: C.dim, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                  <th style={{ textAlign: 'left', padding: '8px 20px', fontWeight: 500 }}>Method</th>
+                  <th style={{ textAlign: 'right', padding: '8px 10px', fontWeight: 500 }}>Hit rate</th>
+                  <th style={{ textAlign: 'right', padding: '8px 20px', fontWeight: 500 }}>Avg excess / q</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bt.perMethod.map(p => (
+                  <tr key={p.method} style={{ borderTop: `1px solid ${C.rowBorder}` }}>
+                    <td style={{ padding: '10px 20px', fontWeight: 600 }}>{p.method}</td>
+                    <td style={{ padding: '10px 10px', textAlign: 'right', fontFamily: MONO, color: p.hitRate >= 0.5 ? C.green : C.red }}>
+                      {(p.hitRate * 100).toFixed(0)}%
+                    </td>
+                    <td style={{ padding: '10px 20px', textAlign: 'right', fontFamily: MONO, color: p.avgExcessQ >= 0 ? C.green : C.red }}>
+                      {(p.avgExcessQ * 100).toFixed(2)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ ...card, padding: '18px 20px' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.sec, marginBottom: 10 }}>Backtest caveats — read before believing anything</div>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11.5, color: C.dim3, lineHeight: 1.8 }}>
+              {bt.meta.caveats.map((c, i) => <li key={i}>{c}</li>)}
+            </ul>
+          </div>
+        </div>
+      )}
 
       {/* engines */}
       <div style={{ marginBottom: 18 }}>

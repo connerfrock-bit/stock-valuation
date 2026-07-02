@@ -111,9 +111,24 @@ Honesty rules: never a single fair value without its range · agreement always b
       FX-at-spot disclosure on non-USD filers, excluded names listed with reasons ✅
 - [x] **Milestone D: the dashboard runs on real numbers** ✅  (`frontend/dev.cmd` → localhost:5173)
 
-## Phase 7 — Backtest (L11)
-- [ ] Point-in-time, survivorship-free harness → real per-method reliability + weights
-- [ ] Methodology screen goes real
+## Phase 7 — Backtest (L11) ✅ COMPLETE — VERDICT: NO EDGE DEMONSTRATED
+- [x] `membership.py` — survivorship-free universe from Wikipedia's change log: 46 quarterly
+      snapshots 2015→2026, 202 distinct names (102 past members), 2 parse anomalies / 225 changes
+- [x] `prices.py` — 15y monthly close+adjclose+splits for all historical members + ^GSPC + ^TNX
+      (169/204 symbols; 35 delisted names unavailable — quantified, not hidden)
+- [x] `pit.py` — POINT-IN-TIME store: every annual vintage keyed by SEC `filed` date
+      (~100k rows, 161 names); non-USD + no-CIK excluded and counted
+- [x] `backtest.py` — quarterly rebalance 2016→2026, PIT signals (rolling betas, ^TNX risk-free
+      at each date, PIT warranted cross-section), top-quintile vs equal-weight, per-method
+      reliability, coverage stats → backtest.json (synced to dashboard)
+- [x] Methodology screen renders the real results — **including the negative verdict**
+- **RESULT: composite 12.6%/yr vs 18.0%/yr equal-weight · 39% hit rate · all engines'
+  excess ≤ 0.** Value-tilted selection underperformed in the 2016–2026 growth-led Nasdaq-100
+  — consistent with the documented value-factor drought in exactly this universe/period.
+  Relative engines degraded least (warranted 49% hit / −0.31%/q); absolute cheapness (DCF,
+  EPV) degraded most. THE TOOL IS A RESEARCH AID; NO PROVEN ALPHA. Known softeners: ~77%
+  avg coverage (survivorship residue), rf fallback 2.5% after mid-2024 (^TNX gap), signal
+  designed after the sample.
 
 ## Phase 8 — Expand & harden
 - [ ] Scale Nasdaq-100 → NYSE · daily refresh/caching · per-company QA sanity panel
