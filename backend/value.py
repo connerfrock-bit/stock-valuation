@@ -8,7 +8,7 @@ Two passes: (1) load + derive inputs for every company, (2) cross-sectional cont
 ranked output + data/output.json (the Company contract the dashboard binds to).
 stdlib only.  Run after ingest_v1.py and betas.py:   python value.py
 """
-import datetime, json, sqlite3, statistics, sys
+import datetime, json, sqlite3, statistics, sys, zlib
 from common import (CFG, DB_PATH, fetch_risk_free, load_company, latest, cagr,
                     avg_margin, avg_roe, money, pct)
 from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim,
@@ -256,6 +256,30 @@ def trap_flags(r, z=None, fscore=None):
     return flags
 
 
+# ---------------- snapshot history (append-only) ----------------
+MODEL_VERSION = "v1"          # frozen model tag — bump whenever scoring/engine logic changes
+
+def append_snapshot(out, universe, run_id):
+    """Append this run's full ranked output to `snapshots` — never overwritten.
+       This is the before/after diff surface for every future model change, and the
+       raw material for the forward paper-trading ledger (Plan 4)."""
+    con = sqlite3.connect(DB_PATH)
+    con.execute("""CREATE TABLE IF NOT EXISTS snapshots(
+        run_date TEXT, model TEXT, universe TEXT, ticker TEXT,
+        price REAL, low REAL, mid REAL, high REAL, upside REAL,
+        conf INTEGER, quality INTEGER, score REAL, flags TEXT,
+        PRIMARY KEY (run_date, ticker))""")
+    con.executemany(
+        "INSERT OR REPLACE INTO snapshots VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        [(run_id, MODEL_VERSION, universe, x["ticker"], x["price"], x["low"], x["mid"],
+          x["high"], x["upside"], x["conf"], x["quality"], x["score"], "|".join(x["flags"]))
+         for x in out])
+    con.commit()
+    n_runs = con.execute("SELECT COUNT(DISTINCT run_date) FROM snapshots").fetchone()[0]
+    con.close()
+    return n_runs
+
+
 # ---------------- pass 2: engines + synthesis ----------------
 def main():
     rf, rf_src = fetch_risk_free()
@@ -295,8 +319,9 @@ def main():
         base_fcf = r["fcf_norm"] if (r["fcf_norm"] or 0) > 0 else r["fcf_last"]
         ndebt = r["debt"] - r["cash"]
 
+        # crc32, not hash(): hash() is salted per process → MC noise in run-to-run diffs
         dcf_res = dcf(base_fcf, r["wacc"], term_g, ndebt, r["shares"], r["g1"], H, S1,
-                      draws=2500, seed=hash(r["t"]) & 0xFFFF)
+                      draws=2500, seed=zlib.crc32(r["t"].encode()))
         dcf_p50 = dcf_res["p50"] if dcf_res else None
         epv_ps = epv((r["om"] or 0) * r["rev_now"], tax, r["wacc"], r["cash"], r["debt"],
                      r["shares"], r["dna"], None)
@@ -393,6 +418,11 @@ def main():
     if fe_public.is_dir():                                # keep the dashboard's copy fresh
         (fe_public / "output.json").write_text(json.dumps(payload), encoding="utf-8")
         print(f"Synced → {fe_public / 'output.json'}")
+
+    run_id = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    n_runs = append_snapshot(out, meta["universe"], run_id)
+    print(f"Snapshot {run_id} [{MODEL_VERSION}] appended ({len(out)} names) · "
+          f"{n_runs} runs in history")
 
 
 def _r2(v):

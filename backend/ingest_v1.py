@@ -250,6 +250,36 @@ def init_db(con):
     """)
 
 
+def coverage_check(con, now, warn_drop=0.05):
+    """Record per-concept ticker coverage in `run_stats` (append-only, survives the
+       companies/financials rebuild) and compare against the previous run. A silent
+       XBRL tag change shows up here as a coverage drop — loudly, not invisibly."""
+    con.execute("CREATE TABLE IF NOT EXISTS run_stats("
+                "run_date TEXT, concept TEXT, tickers INTEGER, "
+                "PRIMARY KEY (run_date, concept))")
+    prev_run = con.execute("SELECT MAX(run_date) FROM run_stats").fetchone()[0]
+    cur = dict(con.execute(
+        "SELECT concept, COUNT(DISTINCT ticker) FROM financials GROUP BY concept"))
+    con.executemany("INSERT OR REPLACE INTO run_stats VALUES (?,?,?)",
+                    [(now, c, n) for c, n in cur.items()])
+    con.commit()
+    if not prev_run or prev_run == now:
+        print("Coverage baseline recorded (first tracked run).")
+        return
+    prev = dict(con.execute(
+        "SELECT concept, tickers FROM run_stats WHERE run_date=?", (prev_run,)))
+    drops = [(c, p, cur.get(c, 0)) for c, p in sorted(prev.items())
+             if cur.get(c, 0) < p * (1 - warn_drop)]
+    if drops:
+        print("\n" + "!" * 64)
+        print(f"!! COVERAGE REGRESSION vs {prev_run} — check for XBRL tag changes")
+        for c, p, n in drops:
+            print(f"!!   {c:16} {p:4} → {n:4} tickers")
+        print("!" * 64)
+    else:
+        print(f"Coverage check vs {prev_run}: all {len(cur)} concepts within {warn_drop:.0%}.")
+
+
 def main():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     cikmap = load_ticker_map()
@@ -297,6 +327,7 @@ def main():
 
     total = con.execute("SELECT COUNT(*) FROM financials").fetchone()[0]
     print(f"\nIngested {ok}/{n} companies ({full} with ≥15/{len(CONCEPTS)} coverage); {total} datapoints → {DB_PATH}")
+    coverage_check(con, now)
     con.close()
 
 

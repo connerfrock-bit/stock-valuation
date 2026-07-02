@@ -147,3 +147,23 @@ Honesty rules: never a single fair value without its range · agreement always b
 - [ ] Later: full-NYSE *live screening* universe (backtest stays constituent-based for honesty)
       · daily refresh/caching · per-company QA panel · signal research (RIM+revDCF-weighted
       composite, quality-within-value, momentum overlay) using this harness as the lab
+
+## Phase 9 — Hardening & correction sprints (post-review plans, worked one at a time)
+- [x] **Plan 1: safety net** ✅ — engine unit tests (30 goldens+invariants, `backend/tests/`,
+      stdlib unittest: Gordon-reduction golden, reverse-DCF inverts the kernel, RIM(ROE=Re)=book,
+      EPV floor never in mid, anchor cap, N/A-never-guessed) · append-only **`snapshots`** table
+      (every value.py run keeps its full ranked output — the before/after diff surface for all
+      future changes + Plan-4 ledger foundation) · **`run_stats` coverage guard** in ingest
+      (>5% per-concept drop vs previous run warns loudly = silent-XBRL-tag-change detector)
+      · fixed nondeterministic MC seed (`hash()` is process-salted → crc32; identical runs
+      now produce identical snapshots — the diff caught it on the first try)
+- [ ] Plan 2: input correctness — short-term debt + operating leases in net debt, Rd from
+      interest expense, effective tax rate, wire real maintenance capex into EPV
+- [ ] Plan 3: evidence-aligned scoring — reweight mid toward RIM/Warranted, revDCF gap into
+      the composite, per-flag decay penalty, sector-gate Altman-Z, growth out of quality;
+      validate on a 2016–21 fit / 2022–26 holdout split before adopting
+- [ ] Plan 4: forward paper-trading ledger — freeze model tag, track basket returns live
+- [ ] Plan 5: TTM fundamentals from 10-Qs (staleness fix)
+- [ ] Plan 6: momentum (12-1) + L7 sector-neutral V+Q+M cross-section — the research sprint
+- [ ] Plan 7: robustness — Wikipedia parse caching/diff-guard, FRED DGS10 history for the
+      backtest rf, de-scope FastAPI, un-hardcode Nasdaq constants
