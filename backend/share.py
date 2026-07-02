@@ -46,8 +46,11 @@ def main():
         p = BASE / "data" / fn
         if p.exists():
             bts[key] = json.loads(p.read_text(encoding="utf-8"))
+    lp = BASE / "data" / "ledger.json"
+    ledger = json.loads(lp.read_text(encoding="utf-8")) if lp.exists() else None
     inject = ("<script>window.__FV_DATA__=" + script_safe(json.dumps(data))
-              + ";window.__FV_BT__=" + script_safe(json.dumps(bts)) + "</script>")
+              + ";window.__FV_BT__=" + script_safe(json.dumps(bts))
+              + ";window.__FV_LEDGER__=" + script_safe(json.dumps(ledger)) + "</script>")
     html = html.replace("<script type=\"module\">", inject + "\n<script type=\"module\">", 1)
 
     OUT.write_text(html, encoding="utf-8")

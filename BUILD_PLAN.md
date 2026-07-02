@@ -171,7 +171,13 @@ Honesty rules: never a single fair value without its range · agreement always b
       **Rejected the revDCF-gap blend** — holdout winner but fit-window loser = value-regime
       loading, not signal; stays displayed, never scored. MC DCF deleted (deterministic).
       Altman-Z gated off for FINL/REIT. Model v2; median |Δmid| 13.2%. See WORKLOG.md.
-- [ ] Plan 4: forward paper-trading ledger — freeze model tag, track basket returns live
+- [x] **Plan 4: forward paper-trading ledger** ✅ — `ledger.py` freezes the top-quintile
+      basket per (model, day) from the snapshots table, marks to latest prices, benchmark
+      = equal-weight covered universe; price-only returns disclosed; ledger.json → dashboard
+      "Forward ledger" card (honest inception state) + share build; REFRESH DATA.cmd step
+      5/5; 6 tests (44 total). Inception 2026-07-02: v1/v1.1/v2 baskets, 18 names each.
+      The v2 basket is the live test — the one number the in-sample caveat can't touch.
+      See WORKLOG.md.
 - [ ] Plan 5: TTM fundamentals from 10-Qs (staleness fix)
 - [ ] Plan 6: momentum (12-1) + L7 sector-neutral V+Q+M cross-section — the research sprint
 - [ ] Plan 7: robustness — Wikipedia parse caching/diff-guard, FRED DGS10 history for the

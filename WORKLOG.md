@@ -133,3 +133,41 @@ out-of-sample — the real test is the Plan-4 forward ledger.
 13.2% — big, as a reweighting should be. Movers all follow the mechanism: warranted-rich
 cyclicals up (MU +47%, STX +45%, WDC +41%), DCF-propped names down (FANG −49%, WBD −47%,
 PDD −40%). Biggest rank moves: ODFL +27 places, WBD −22. Tests: 38/38 green.
+
+---
+
+## Plan 4 — Forward paper-trading ledger (2026-07-02) ✅
+
+**Goal:** the only test with no in-sample escape hatch — freeze the model's top-quintile
+basket at every refresh, then measure forward returns vs the equal-weight universe.
+The backtest's fatal caveat ("the signal's design postdates the sample") does not apply:
+the picks are committed before the returns exist.
+
+**Built:**
+- `backend/ledger.py` — reads the append-only `snapshots` table (Plan 1's foundation,
+  now paying off): one basket per (model, calendar day), last run of the day wins;
+  k = max(10, n//5) matching the backtest's quintile rule; every basket marked to the
+  latest run's prices; benchmark = equal-weight of all names present in both runs.
+  Pure `build_ledger()` core → 6 new tests (44 total, all green): forward-return math,
+  age-0 baskets excluded from the summary, same-day rerun collapse, excluded names
+  dropped-and-counted, per-model tracking.
+- Honest-by-design choices: price-only returns on BOTH legs (no dividends — disclosed);
+  models tracked separately (only the current tag is the live test); an explicit caveat
+  that <90 days of forward data is noise.
+- Output `data/ledger.json` (+ synced to frontend/public; embedded in the share build
+  as `__FV_LEDGER__`).
+- Dashboard: "Forward ledger — the live test" card on Methodology (frozen date, model,
+  age, coverage, basket/bench/excess per basket; summary line once baskets age;
+  honest inception state until then). Verified rendering in the dev server.
+- `REFRESH DATA.cmd` now has step 5/5: `python ledger.py` — the ledger accrues
+  automatically with every routine refresh.
+- Stale text fixed while in there: Methodology's DCF card no longer claims a Monte
+  Carlo (retired in Plan 3); tax assumption cell now says effective-from-filings (Plan 2).
+
+**Inception state (2026-07-02):** three baskets frozen (v1, v1.1, v2 — one per model tag
+that ran today), 18 names each, age 0, returns 0 — exactly as an inception should look.
+The v2 basket is the live test from here forward.
+
+**What would make this meaningful:** refreshes. Each run of REFRESH DATA.cmd adds a
+basket; after ~one quarter the first real forward numbers exist; after ~a year the
+hit rate starts to mean something. Consider a weekly scheduled refresh.

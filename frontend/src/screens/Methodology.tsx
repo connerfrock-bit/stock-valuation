@@ -16,6 +16,18 @@ interface Backtest {
   perMethod: { method: string; hitRate: number; avgExcessQ: number; quarters: number }[];
 }
 
+interface LedgerBasket {
+  model: string; date: string; runDate: string; ageDays: number;
+  k: number; covered: number; missing: number; names: string[];
+  basketRet: number | null; benchRet: number | null; excess: number | null;
+}
+interface Ledger {
+  meta: { generatedAt: string; latestRun: string; caveats: string[] };
+  baskets: LedgerBasket[];
+  summary: Record<string, { baskets: number; aged: number; oldestDays: number;
+    hitRate: number | null; avgExcess: number | null }>;
+}
+
 function EquityCurve({ bt }: { bt: Backtest }) {
   const W = 560, H = 220, pl = 40, pr = 12, pt = 14, pb = 24;
   const pts = bt.curve;
@@ -53,7 +65,7 @@ interface Engine {
 const ENGINES: Engine[] = [
   {
     name: 'DCF', discount: 'WACC',
-    answers: 'Intrinsic value from projected free cash flow — a 2,500-draw Monte Carlo (P10/P50/P90) on a NORMALIZED FCF base, not a point estimate.',
+    answers: 'Intrinsic value from projected free cash flow, on a NORMALIZED FCF base. Deterministic — the Monte Carlo was retired (it never varied the FCF base, the real uncertainty) and the backtest demoted DCF to the lowest engine weight.',
     formula: ['FCFF = CFO − Capex − SBC   (normalized: avg 5y FCF margin × revenue)',
       'TV = FCF₁₀·(1+g) / (WACC − g)',
       'Value = Σ FCFₜ /(1+WACC)ᵗ + PV(TV) − NetDebt'],
@@ -98,11 +110,13 @@ const UNIVERSES: [string, string, string][] = [
 
 export function Methodology({ meta }: { meta: Meta }) {
   const [bts, setBts] = useState<Record<string, Backtest | null>>({});
+  const [ledger, setLedger] = useState<Ledger | null>(null);
   const [uni, setUni] = useState('ndx');
   useEffect(() => {
-    const embedded = (window as unknown as { __FV_BT__?: Record<string, Backtest> }).__FV_BT__;
-    if (embedded) {                                   // single-file share build
-      setBts(embedded);
+    const w = window as unknown as { __FV_BT__?: Record<string, Backtest>; __FV_LEDGER__?: Ledger | null };
+    if (w.__FV_BT__) {                                // single-file share build
+      setBts(w.__FV_BT__);
+      setLedger(w.__FV_LEDGER__ ?? null);
       return;
     }
     for (const [k, f] of UNIVERSES) {
@@ -111,6 +125,10 @@ export function Methodology({ meta }: { meta: Meta }) {
         .then(d => setBts(p => ({ ...p, [k]: d })))
         .catch(() => {});
     }
+    fetch(`${import.meta.env.BASE_URL}ledger.json`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setLedger(d))
+      .catch(() => {});
   }, []);
   const bt = bts[uni] ?? null;
 
@@ -118,7 +136,7 @@ export function Methodology({ meta }: { meta: Meta }) {
     { label: 'Risk-free (10Y)', value: (meta.riskFree * 100).toFixed(2) + '%', src: meta.riskFreeSource },
     { label: 'Equity risk prem.', value: (meta.erp * 100).toFixed(1) + '%', src: 'Damodaran implied' },
     { label: 'Terminal growth', value: (meta.terminalG * 100).toFixed(1) + '%', src: '≤ risk-free ceiling' },
-    { label: 'Tax rate', value: '21%', src: 'US statutory fwd' },
+    { label: 'Tax rate', value: 'effective', src: 'filings, 3y mean, 10–35% clamp' },
     { label: 'Forecast horizon', value: '10 yr', src: '2-stage fade' },
     { label: 'SBC treatment', value: 'Expensed', src: 'subtract from FCF' },
     { label: 'Beta', value: 'Blume-adj', src: '5y monthly vs S&P 500' },
@@ -265,6 +283,74 @@ export function Methodology({ meta }: { meta: Meta }) {
           </div>
         </div>
       )}
+
+      {/* forward paper-trading ledger — the live out-of-sample test */}
+      {ledger && ledger.baskets.length > 0 && (() => {
+        const curModel = ledger.baskets[ledger.baskets.length - 1].model;
+        const s = ledger.summary[curModel];
+        const rows = [...ledger.baskets].reverse().slice(0, 10);
+        const fp = (v: number | null) => (v === null ? '—' : `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}%`);
+        return (
+          <div style={{ ...card, marginBottom: 18, overflow: 'hidden' }}>
+            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: C.sec }}>Forward ledger — the live test</span>
+              <span style={{
+                fontFamily: MONO, fontSize: 9, color: C.mid,
+                border: `1px solid ${C.borderHi}`, borderRadius: 4, padding: '2px 7px',
+              }}>model {curModel}</span>
+              <span style={{ fontSize: 10.5, color: C.dim }}>
+                baskets frozen at each refresh, marked to the latest run — no in-sample escape hatch
+              </span>
+            </div>
+            <div style={{ padding: '12px 20px', fontSize: 11.5, lineHeight: 1.6, color: C.dim3, borderBottom: `1px solid ${C.border}` }}>
+              {s && s.aged > 0 ? (
+                <>Model <b style={{ color: C.sec }}>{curModel}</b>: {s.aged} aged basket{s.aged > 1 ? 's' : ''} over {s.oldestDays} days ·
+                  avg excess <b style={{ color: (s.avgExcess ?? 0) >= 0 ? C.green : C.red }}>{fp(s.avgExcess)}</b> ·
+                  hit rate <b style={{ color: C.sec }}>{s.hitRate === null ? '—' : `${(s.hitRate * 100).toFixed(0)}%`}</b>.
+                  {s.oldestDays < 90 && ' Under ~90 days of forward data this is noise, not evidence.'}</>
+              ) : (
+                <>Ledger inception <b style={{ color: C.sec }}>{ledger.baskets[0].date}</b> — no aged baskets yet.
+                  Forward returns accrue from here; this needs quarters, not days, before it means anything.
+                  Unlike the backtest, this test cannot be flattered: the picks were committed before the returns existed.</>
+              )}
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ color: C.dim, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                  <th style={{ textAlign: 'left', padding: '8px 20px', fontWeight: 500 }}>Frozen</th>
+                  <th style={{ textAlign: 'left', padding: '8px 10px', fontWeight: 500 }}>Model</th>
+                  <th style={{ textAlign: 'right', padding: '8px 10px', fontWeight: 500 }}>Age</th>
+                  <th style={{ textAlign: 'right', padding: '8px 10px', fontWeight: 500 }}>Names</th>
+                  <th style={{ textAlign: 'right', padding: '8px 10px', fontWeight: 500 }}>Basket</th>
+                  <th style={{ textAlign: 'right', padding: '8px 10px', fontWeight: 500 }}>Bench</th>
+                  <th style={{ textAlign: 'right', padding: '8px 20px', fontWeight: 500 }}>Excess</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(b => (
+                  <tr key={b.runDate} style={{ borderTop: `1px solid ${C.rowBorder}` }}>
+                    <td style={{ padding: '9px 20px', fontFamily: MONO }}>{b.date}</td>
+                    <td style={{ padding: '9px 10px', fontFamily: MONO, color: b.model === curModel ? C.sec : C.dim }}>{b.model}</td>
+                    <td style={{ padding: '9px 10px', textAlign: 'right', fontFamily: MONO, color: C.mid }}>{b.ageDays}d</td>
+                    <td style={{ padding: '9px 10px', textAlign: 'right', fontFamily: MONO, color: b.missing ? C.amber : C.mid }}>
+                      {b.covered}/{b.k}
+                    </td>
+                    <td style={{ padding: '9px 10px', textAlign: 'right', fontFamily: MONO }}>{fp(b.basketRet)}</td>
+                    <td style={{ padding: '9px 10px', textAlign: 'right', fontFamily: MONO, color: C.mid }}>{fp(b.benchRet)}</td>
+                    <td style={{
+                      padding: '9px 20px', textAlign: 'right', fontFamily: MONO, fontWeight: 600,
+                      color: b.excess === null ? C.dim : b.excess >= 0 ? C.green : C.red,
+                    }}>{fp(b.excess)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div style={{ padding: '10px 20px', fontSize: 10.5, color: C.dim, lineHeight: 1.7, borderTop: `1px solid ${C.border}` }}>
+              {ledger.meta.caveats.join(' · ')}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* engines */}
       <div style={{ marginBottom: 18 }}>
