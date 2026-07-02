@@ -70,17 +70,107 @@ def collect(con, rf, erp, rd, tax, betas):
         re_ = cost_of_equity(rf, beta, erp)
         wacc = wacc_of(mcap, max(debt, 0.0), re_, rd, tax)
 
+        equity_now = latest(eq_s)
+        inv_cap = (equity_now or 0.0) + debt - cash
+        roic = (ebit_now * (1 - tax) / inv_cap
+                if (ebit_now is not None and inv_cap > 0) else None)
+
         rows.append(dict(
             t=t, name=name, sector=sector, fin_ccy=fin_ccy or "USD",
             price=price, shares=shares, mcap=mcap,
             beta=beta, re_=re_, wacc=wacc, rev=rev, rev_now=rev_now,
             fcf_norm=fcf_norm, fcf_last=fcf_last, fcf_margin=fcf_margin,
             ebit_now=ebit_now, om=om, ni_s=ni_s, eq_s=eq_s, debt=debt, cash=cash,
-            dna=dna, div=div, g_trail=g_trail, g1=g1,
+            dna=dna, div=div, g_trail=g_trail, g1=g1, roic=roic,
             last_fy=max(rev), stale=max(rev) < cur_year - 1,
-            ni_now=latest(ni_s), equity_now=latest(eq_s), cfo_s=cfo_s,
+            ni_now=latest(ni_s), equity_now=equity_now, cfo_s=cfo_s, f=f,
         ))
     return rows, excluded
+
+
+# ---------------- safety metrics (signal-quality sprint) ----------------
+def altman_z(r):
+    """Original Altman Z. None when a core component is unavailable — never guessed."""
+    f = r["f"]
+    ta = latest(f.get("assets", {}))
+    if not ta or ta <= 0:
+        return None
+    tl = latest(f.get("liabilities", {}))
+    if tl is None and r["equity_now"] is not None:
+        tl = ta - r["equity_now"]
+    ac, lc = latest(f.get("assets_current", {})), latest(f.get("liab_current", {}))
+    re_ = latest(f.get("retained", {}))
+    if None in (tl, ac, lc, re_, r["ebit_now"]) or tl <= 0:
+        return None
+    wc = ac - lc
+    return (1.2 * wc / ta + 1.4 * re_ / ta + 3.3 * r["ebit_now"] / ta
+            + 0.6 * r["mcap"] / tl + 1.0 * (r["rev_now"] or 0.0) / ta)
+
+
+def piotroski(r):
+    """F-score over the signals we can actually evaluate (needs 2 overlapping years
+       per signal). -> (score, n_evaluated); score None when fewer than 5 evaluable."""
+    f = r["f"]
+    score = n = 0
+    def add(ok):
+        nonlocal score, n
+        n += 1
+        if ok:
+            score += 1
+    def pair(k1, k2):
+        s1, s2 = f.get(k1, {}), f.get(k2, {})
+        ys = sorted(set(s1) & set(s2))
+        return (ys[-2], ys[-1], s1, s2) if len(ys) >= 2 else None
+    p = pair("net_income", "assets")
+    if p:
+        a, b, ni, ta = p
+        add(ni[b] > 0)                                            # 1 ROA > 0
+        if ta[a] and ta[b]:
+            add(ni[b] / ta[b] > ni[a] / ta[a])                    # 3 ΔROA > 0
+    p = pair("cfo", "net_income")
+    if p:
+        a, b, cfo, ni = p
+        add(cfo[b] > 0)                                           # 2 CFO > 0
+        add(cfo[b] > ni[b])                                       # 4 CFO > NI (accruals)
+    p = pair("long_debt", "assets")
+    if p:
+        a, b, d, ta = p
+        if ta[a] and ta[b]:
+            add(d[b] / ta[b] <= d[a] / ta[a])                     # 5 leverage not up
+    p = pair("assets_current", "liab_current")
+    if p:
+        a, b, ac, lc = p
+        if lc[a] and lc[b]:
+            add(ac[b] / lc[b] > ac[a] / lc[a])                    # 6 liquidity up
+    sh = f.get("shares", {})
+    ys = sorted(sh)
+    if len(ys) >= 2 and sh[ys[-2]]:
+        add(sh[ys[-1]] <= sh[ys[-2]] * 1.005)                     # 7 no net issuance
+    p = pair("gross_profit", "revenue") or pair("ebit", "revenue")
+    if p:
+        a, b, gp, rv = p
+        if rv[a] and rv[b]:
+            add(gp[b] / rv[b] > gp[a] / rv[a])                    # 8 margin up
+    p = pair("revenue", "assets")
+    if p:
+        a, b, rv, ta = p
+        if ta[a] and ta[b]:
+            add(rv[b] / ta[b] > rv[a] / ta[a])                    # 9 turnover up
+    return (score if n >= 5 else None), n
+
+
+def rev_volatility(r):
+    """Stdev of YoY revenue growth (≤6 obs) — the data-driven cyclicality detector."""
+    s = r["rev"]
+    ys = sorted(s)
+    gr = [s[ys[i]] / s[ys[i - 1]] - 1 for i in range(1, len(ys)) if s[ys[i - 1]]][-6:]
+    if len(gr) < 3:
+        return None
+    m = sum(gr) / len(gr)
+    return (sum((x - m) ** 2 for x in gr) / len(gr)) ** 0.5
+
+
+ADR_STRUCTURE_RISK = {"PDD"}          # VIE/ADR structures the numbers can't see
 
 
 # ---------------- quality (cross-sectional percentiles) ----------------
@@ -94,6 +184,7 @@ def quality_scores(rows):
     dims = {
         "om":        [r["om"] for r in rows if r["om"] is not None],
         "roe":       [avg_roe(r["ni_s"], r["eq_s"]) for r in rows],
+        "roic":      [r["roic"] for r in rows if r["roic"] is not None],
         "growth":    [r["g_trail"] for r in rows if r["g_trail"] is not None],
         "fcfm":      [r["fcf_margin"] for r in rows if r["fcf_margin"] is not None],
         "lowlev":    [-(r["debt"] - r["cash"]) / r["ebit_now"] for r in rows
@@ -105,13 +196,14 @@ def quality_scores(rows):
         lev = (-(r["debt"] - r["cash"]) / r["ebit_now"]
                if r["ebit_now"] and r["ebit_now"] > 0 else None)
         ps = [pct_rank(S["om"], r["om"]), pct_rank(S["roe"], roe),
+              pct_rank(S["roic"], r["roic"]),
               pct_rank(S["growth"], r["g_trail"]), pct_rank(S["fcfm"], r["fcf_margin"]),
               pct_rank(S["lowlev"], lev)]
         ps = [p for p in ps if p is not None]
         r["quality"] = round(100 * sum(ps) / len(ps)) if ps else None
 
 
-def trap_flags(r):
+def trap_flags(r, z=None, fscore=None):
     flags = []
     rev_yrs = sorted(r["rev"])
     if len(rev_yrs) >= 4 and r["rev"][rev_yrs[-1]] < r["rev"][rev_yrs[-4]]:
@@ -126,6 +218,15 @@ def trap_flags(r):
     ni, cfo = r["ni_now"], latest(r["cfo_s"])
     if ni and cfo and ni > cfo * 1.2:
         flags.append("High accruals")
+    if z is not None and z < 1.81:
+        flags.append("Altman-Z: distress")
+    if fscore is not None and fscore <= 3:
+        flags.append(f"Piotroski {fscore}/9")
+    vol = rev_volatility(r)
+    if vol is not None and vol > 0.18:
+        flags.append("Cyclical revenue")
+    if r["t"] in ADR_STRUCTURE_RISK:
+        flags.append("VIE/ADR structure")
     if r["mcap"] < MIN_N100_MCAP:
         flags.append("Suspect share count")
     if r["stale"]:
@@ -154,14 +255,18 @@ def main():
 
     # cross-sectional context
     quality_scores(rows)
-    fit_rows = [((r["mcap"] + r["debt"] - r["cash"]) / r["ebit_now"], r["g1"],
-                 r["om"] or 0.0, r["beta"])
+    fit_rows = [(r["sector"], (r["mcap"] + r["debt"] - r["cash"]) / r["ebit_now"],
+                 r["g1"], r["om"] or 0.0)
                 for r in rows if r["ebit_now"] and r["ebit_now"] > 0
                 and (r["mcap"] + r["debt"] - r["cash"]) / r["ebit_now"] > 0]
-    coef = warranted_fit(fit_rows)
-    print(f"Warranted-multiple fit on {len(fit_rows)} names: "
-          + ("EV/EBIT = {:.1f} + {:.1f}·g + {:.1f}·margin + {:.1f}·β".format(*coef)
-         if coef else "FAILED — engine disabled") + "\n")
+    wfit = warranted_fit(fit_rows)
+    if wfit:
+        smeans, gmean, coef = wfit
+        print(f"Warranted v2 fit on {len(fit_rows)} names · {len(smeans)} sector anchors "
+              f"(global mean EV/EBIT {gmean[0]:.1f}) · within-sector: "
+              f"+{coef[0]:.1f}·Δg +{coef[1]:.1f}·Δmargin\n")
+    else:
+        print("Warranted v2 fit FAILED — engine disabled\n")
 
     out = []
     for r in rows:
@@ -178,13 +283,15 @@ def main():
         rim_ok = (book_ps and book_ps > 0 and roe is not None
                   and book_ps / r["price"] >= 0.15 and roe <= 0.40)
         rim_ps = rim(book_ps, roe, r["re_"], H) if rim_ok else None
-        warr_ps = warranted_value(coef, r["g1"], r["om"] or 0.0, r["beta"],
+        warr_ps = warranted_value(wfit, r["sector"], r["g1"], r["om"] or 0.0,
                                   r["ebit_now"], r["cash"], r["debt"], r["shares"])
         impl, op = reverse_dcf(base_fcf, r["wacc"], term_g, ndebt, r["mcap"], H, S1)
 
+        z = altman_z(r)
+        fscore, fn = piotroski(r)
         tri = triangulate({"DCF": dcf_p50, "RIM": rim_ps, "Warranted": warr_ps},
                           epv_ps, r["price"])
-        flags = trap_flags(r)
+        flags = trap_flags(r, z, fscore)
         if not tri:
             excluded.append((r["t"], "no positive FCF/earnings base (GAAP loss-maker)")); continue
 
@@ -213,7 +320,9 @@ def main():
             "evebitda": round((r["mcap"] + ndebt) / ebitda, 1) if ebitda > 0 else None,
             "fcfy": round((base_fcf or 0) / r["mcap"], 4) if r["mcap"] else None,
             "om": None if r["om"] is None else round(r["om"], 4),
-            "roic": None,  # needs invested-capital history — Phase 3 hardening
+            "roic": None if r["roic"] is None else round(r["roic"], 4),
+            "altmanZ": None if z is None else round(z, 2),
+            "piotroski": fscore, "piotroskiN": fn,
             "nde": round(ndebt / ebitda, 2) if ebitda > 0 else None,
             "flags": flags, "score": round(score, 4),
             "methods": [
@@ -228,7 +337,7 @@ def main():
                  "note": "no-growth NOPAT / WACC — sets the LOW bound, never in mid"},
                 {"key": "warranted", "name": "Warranted mult.", "value": _r2(warr_ps),
                  "applicable": warr_ps is not None,
-                 "note": "peer regression: EV/EBIT on growth·margin·β"},
+                 "note": "sector-anchored EV/EBIT, adjusted within sector for growth/margin"},
                 {"key": "ddm", "name": "DDM", "value": None, "applicable": False,
                  "note": "replaced by warranted multiple for this universe (few payers)"},
             ],

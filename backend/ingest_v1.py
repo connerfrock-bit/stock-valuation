@@ -46,6 +46,13 @@ CONCEPTS = {
     "cash":        ["CashAndCashEquivalentsAtCarryingValue",
                     "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"],
     "shares":      ["CommonStockSharesOutstanding", "CommonStockSharesIssued"],
+    # balance-sheet concepts for Altman-Z / Piotroski / ROIC (signal-quality sprint)
+    "assets":         ["Assets"],
+    "assets_current": ["AssetsCurrent"],
+    "liab_current":   ["LiabilitiesCurrent"],
+    "retained":       ["RetainedEarningsAccumulatedDeficit"],
+    "liabilities":    ["Liabilities"],
+    "gross_profit":   ["GrossProfit"],
 }
 
 # IFRS fallback map for true ifrs-full filers (TRI 40-F, CCEP/FER 20-F).
@@ -63,6 +70,12 @@ IFRS_CONCEPTS = {
     "long_debt":   ["NoncurrentBorrowingsAndCurrentPortionOfNoncurrentBorrowings", "Borrowings"],
     "cash":        ["CashAndCashEquivalents"],
     "shares":      [],                                    # handled by current_shares()
+    "assets":         ["Assets"],
+    "assets_current": ["CurrentAssets"],
+    "liab_current":   ["CurrentLiabilities"],
+    "retained":       ["RetainedEarnings"],
+    "liabilities":    ["Liabilities"],
+    "gross_profit":   ["GrossProfit"],
 }
 
 ANNUAL_FORMS = ("10-K", "20-F", "40-F")                   # amendments match via startswith
@@ -276,14 +289,14 @@ def main():
         rev = fins["revenue"]; last_fy = max(rev) if rev else None
         rv = f"${rev[last_fy]/1e9:,.0f}B" if rev.get(last_fy) else "n/a"
         mc = f"${price*shares_now/1e9:,.0f}B" if (price and shares_now) else "n/a"
-        ok += 1; full += (len(have) >= 11)
+        ok += 1; full += (len(have) >= 15)
         pr = f"${price:,.0f}" if price else "n/a"
         cflag = "" if fin_ccy == "USD" else f" [{fin_ccy}→USD]"
         print(f"[{i:3}/{n}] {ticker:6} {pr:>8} mcap {mc:>8} FY{last_fy or '----'} "
               f"rev {rv:>8} cov {len(have):2}/{len(CONCEPTS)}{cflag}")
 
     total = con.execute("SELECT COUNT(*) FROM financials").fetchone()[0]
-    print(f"\nIngested {ok}/{n} companies ({full} with ≥11/12 coverage); {total} datapoints → {DB_PATH}")
+    print(f"\nIngested {ok}/{n} companies ({full} with ≥15/{len(CONCEPTS)} coverage); {total} datapoints → {DB_PATH}")
     con.close()
 
 

@@ -67,10 +67,14 @@ Honesty rules: never a single fair value without its range · agreement always b
 - [x] Version control: git repo initialized, initial commit `28280b2`
 
 ## Phase 3 — Metrics & classify (L4–L5)
-- [x] Quality score — cross-sectional percentile composite (margin·ROE·growth·FCF-margin·leverage) ✅
+- [x] Quality score — cross-sectional percentile composite (margin·ROE·**ROIC**·growth·FCF-margin·leverage) ✅
 - [x] **Normalized FCF base** — avg 5y FCF margin × current revenue (fixes cyclical peak/trough bias) ✅
+- [x] **Safety metrics** ✅ — 6 balance-sheet concepts ingested (assets, current A/L, retained,
+      liabilities, gross profit; 97 names ≥15/18 coverage) → real **ROIC**, **Altman-Z**,
+      **Piotroski F** (scored over evaluable signals, needs ≥5)
+      ⚠ original Altman-Z is calibrated for manufacturers — harsh on capital-intensive names (FANG); Z″ variant is a refinement
+- [x] Data-driven **cyclicality flag** (YoY revenue-growth σ > 18%) + **VIE/ADR structure** flag (PDD) ✅
 - [~] Archetype router — RIM/DDM gates live; full bank/REIT/cyclical classifier TBD (needed for NYSE)
-- [ ] roic / Altman-Z / Piotroski — need total-assets & current-liabilities concepts ingested
 
 ## Phase 4 — Valuation engines (L6) — per VALUATION_DEFAULTS_SPEC
 - [~] Assumption resolver — global layer live; archetype + per-company override log TBD
@@ -78,8 +82,12 @@ Honesty rules: never a single fair value without its range · agreement always b
 - [x] DCF + Monte Carlo (P10/P50/P90), normalized-FCF base ✅
 - [x] RIM — Ohlson AR(1), router-gated ✅
 - [x] EPV — explicit floor (low bound, never in mid) ✅
-- [x] Warranted multiple — stdlib OLS: EV/EBIT ~ g + margin + β across 78 names, winsorized+clamped ✅
-      ⚠ v1 caveat: coefficient signs (−margin, +β) say it's absorbing sector/momentum effects — v2: within-sector fit + better features
+- [x] **Warranted multiple v2** ✅ — sector-anchored (fixed-effects): company gets its SECTOR
+      median EV/EBIT (global median for sectors <3 names), residual regression on within-sector
+      growth/margin with sign-guarded coefficients, **anchor capped at 28× EV/EBIT** so the
+      relative engine cannot inherit market froth. β removed (belongs in the discount rate).
+      Note: with the cap, the sign guard zeroed the growth adj this run → pure capped-sector-median
+      engine; revisit features when subsector data exists (TECH is too heterogeneous: semis vs software).
 - [x] DDM — consciously replaced by warranted multiple for this universe (spec §6 note)
 - [x] **Milestone B: all engines live on the full universe** ✅
 

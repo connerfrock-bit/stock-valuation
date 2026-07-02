@@ -68,9 +68,12 @@ def rim(book_ps, roe, re_, H, omega=0.62):
     return book_ps + pv + tv / (1 + re_) ** H
 
 
-# ---------- §6-alt Warranted multiple (cross-sectional regression) ----------
-# Replaces DDM for this universe (VALUATION_DEFAULTS_SPEC §6 note): regress EV/EBIT on
-# growth + margin + risk across the universe, winsorized; value = fitted multiple × EBIT.
+# ---------- §6-alt Warranted multiple v2 (sector-anchored regression) ----------
+# Replaces DDM for this universe (VALUATION_DEFAULTS_SPEC §6 note). v1 regressed the
+# whole cross-section and its coefficients absorbed SECTOR COMPOSITION (+β from rich
+# semis, −margin from cheap cash cows) — inflating names like CMCSA. v2 anchors each
+# company to its SECTOR mean multiple and only adjusts for within-sector growth/margin
+# differences, with sign-guarded coefficients (economic prior: both raise the multiple).
 
 def ols(X, y):
     """Least squares via normal equations + Gaussian elimination. -> coeffs or None."""
@@ -92,26 +95,50 @@ def ols(X, y):
     return [A[i][k] / A[i][i] for i in range(k)]
 
 
-def warranted_fit(rows):
-    """rows: (ev_ebit, growth, margin, beta) across the universe. Winsorize the multiple,
-       clamp features, fit EV/EBIT = b0 + b1·g + b2·margin + b3·beta."""
-    X, y = [], []
-    for ev_ebit, g, m, b in rows:
-        y.append(max(5.0, min(60.0, ev_ebit)))            # winsorize the target
-        X.append([1.0, max(0.0, min(0.30, g)), max(0.0, min(0.60, m)),
-                  max(0.5, min(2.0, b))])
-    return ols(X, y)
+def _wclamp(y, g, m):
+    return (max(5.0, min(60.0, y)), max(0.0, min(0.30, g)), max(0.0, min(0.60, m)))
 
 
-def warranted_value(coef, g, margin, beta, ebit, cash, debt, shares):
-    """Fitted 'justified' EV/EBIT applied to this company's EBIT -> equity per share."""
-    if not coef or ebit is None or ebit <= 0 or not shares:
+def warranted_fit(rows, min_sector=3):
+    """rows: (sector, ev_ebit, growth, margin). Fixed-effects fit: center within sector
+       (global anchors for sectors with < min_sector names), regress the residual multiple
+       on centered growth/margin, zero any coefficient that violates the economic prior.
+       Anchors are MEDIANS — a mean anchor gets dragged by the winsorize-capped rich tail
+       (semis at 60×) and then inflates every name that falls back to the global anchor.
+       -> (sector_medians, global_medians, coefs)"""
+    data = [(s,) + _wclamp(y, g, m) for s, y, g, m in rows]
+    if not data:
         return None
-    x = [1.0, max(0.0, min(0.30, g)), max(0.0, min(0.60, margin)),
-         max(0.5, min(2.0, beta))]
-    mult = sum(c * xi for c, xi in zip(coef, x))
-    if not (4.0 <= mult <= 70.0):                         # implausible fit — refuse to emit
+    # Anchor cap: a "warranted" multiple must not inherit market froth — when the whole
+    # universe trades above ~28× EV/EBIT (3.5% earnings yield), the anchor stays at 28.
+    ANCHOR_CAP = 28.0
+    med = lambda v: statistics.median(v)
+    cap = lambda t: (min(t[0], ANCHOR_CAP),) + t[1:]
+    cols = list(zip(*[(y, g, m) for _, y, g, m in data]))
+    gmed = cap(tuple(med(list(c)) for c in cols))
+    by = {}
+    for s, y, g, m in data:
+        by.setdefault(s, []).append((y, g, m))
+    smeds = {s: cap(tuple(med(list(c)) for c in zip(*v)))
+             for s, v in by.items() if len(v) >= min_sector}
+    X, Y = [], []
+    for s, y, g, m in data:
+        my, mg, mm = smeds.get(s, gmed)
+        X.append([g - mg, m - mm]); Y.append(y - my)
+    coef = ols(X, Y) or [0.0, 0.0]
+    coef = [max(0.0, c) for c in coef]                    # sign guard (prior: positive)
+    return smeds, gmed, coef
+
+
+def warranted_value(fit, sector, g, margin, ebit, cash, debt, shares):
+    """Sector-anchored 'justified' EV/EBIT applied to this company's EBIT -> $/share."""
+    if not fit or ebit is None or ebit <= 0 or not shares:
         return None
+    smeans, gmean, coef = fit
+    my, mg, mm = smeans.get(sector, gmean)
+    _, gc, mc = _wclamp(0, g, margin)
+    mult = my + coef[0] * (gc - mg) + coef[1] * (mc - mm)
+    mult = max(4.0, min(40.0, mult))
     return (mult * ebit - debt + cash) / shares
 
 
