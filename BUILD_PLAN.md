@@ -164,9 +164,13 @@ Honesty rules: never a single fair value without its range · agreement always b
       3-yr mean [10%, 35%]; EPV maintenance-capex param was dead code since inception — wired.
       Model v1.1; isolated snapshot diff: median |Δmid| 0.3%, movers all leverage stories
       (WDC −6%, CMCSA +5.5%), SBUX/INTC/KDP/MDLZ gained the leverage flag (leases). See WORKLOG.md.
-- [ ] Plan 3: evidence-aligned scoring — reweight mid toward RIM/Warranted, revDCF gap into
-      the composite, per-flag decay penalty, sector-gate Altman-Z, growth out of quality;
-      validate on a 2016–21 fit / 2022–26 holdout split before adopting
+- [x] **Plan 3: evidence-aligned scoring** ✅ — backtest refactored into a variant harness
+      (signals built once, scored per variant); 3 variants × fit/holdout/full × both
+      universes. **Adopted v2w** (weights DCF .10/RIM .35/W .30, 0.85^n flag decay,
+      growth out of quality): beats v1 in 5/6 cells, NDX full −5.27 → −0.99pp.
+      **Rejected the revDCF-gap blend** — holdout winner but fit-window loser = value-regime
+      loading, not signal; stays displayed, never scored. MC DCF deleted (deterministic).
+      Altman-Z gated off for FINL/REIT. Model v2; median |Δmid| 13.2%. See WORKLOG.md.
 - [ ] Plan 4: forward paper-trading ledger — freeze model tag, track basket returns live
 - [ ] Plan 5: TTM fundamentals from 10-Qs (staleness fix)
 - [ ] Plan 6: momentum (12-1) + L7 sector-neutral V+Q+M cross-section — the research sprint

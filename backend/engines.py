@@ -1,6 +1,6 @@
 """Valuation engines (VALUATION_DEFAULTS_SPEC). Each returns a fair value PER SHARE,
 except reverse_dcf which returns the market-IMPLIED growth. stdlib only."""
-import random, statistics
+import statistics
 from common import CFG, ev_present_value
 
 
@@ -26,23 +26,18 @@ def reverse_dcf(fcf0, wacc, term_g, net_debt, target_equity, H, S1, lo=-0.30, hi
     return (lo + hi) / 2, "="
 
 
-# ---------- §2 DCF (multi-stage, Monte Carlo) ----------
-def dcf(fcf0, wacc, term_g, net_debt, shares, g1, H, S1, draws=3000, seed=0):
-    """Returns P10/P50/P90 fair value per share from a Monte Carlo over g1, WACC, terminal g."""
+# ---------- §2 DCF (multi-stage, deterministic) ----------
+# The Monte Carlo variant was removed (Plan 3): it perturbed g1/WACC/terminal-g in a
+# narrow band around the point estimate but never the FCF base — the dominant
+# uncertainty — so its P50 tracked the deterministic value while implying a rigor the
+# backtest never rewarded (DCF degraded most of all engines). The honest range is L8's.
+def dcf(fcf0, wacc, term_g, net_debt, shares, g1, H, S1):
+    """Deterministic 2-stage FCFF DCF -> fair value per share (None when inapplicable)."""
     if fcf0 is None or fcf0 <= 0 or not shares:
         return None
-    rng = random.Random(seed)
-    out = []
-    for _ in range(draws):
-        gg = rng.triangular(g1 - 0.03, g1 + 0.03, g1)
-        ww = max(rng.gauss(wacc, 0.01), term_g + CFG["min_wacc_minus_g"])
-        tg = min(rng.triangular(term_g - 0.005, term_g + 0.005, term_g),
-                 ww - CFG["min_wacc_minus_g"])
-        ev = ev_present_value(fcf0, ww, tg, gg, H, S1)
-        out.append((ev - net_debt) / shares)
-    out.sort()
-    q = lambda p: out[int(p * (len(out) - 1))]
-    return {"p10": q(0.10), "p50": q(0.50), "p90": q(0.90)}
+    if wacc - term_g < CFG["min_wacc_minus_g"]:          # TV explodes — refuse, don't emit
+        return None
+    return (ev_present_value(fcf0, wacc, term_g, g1, H, S1) - net_debt) / shares
 
 
 # ---------- §5 EPV (Earnings Power Value — no-growth floor) ----------
@@ -146,18 +141,23 @@ def warranted_value(fit, sector, g, margin, ebit, cash, debt, shares):
 # EPV is a no-growth FLOOR, not a central estimate — it sets the low bound and is shown
 # separately, never averaged into the mid. The mid is a weight-blended central value from
 # the growth-aware engines; agreement is measured among those engines only.
-CENTRAL_WEIGHTS = {"DCF": 0.25, "RIM": 0.20, "Warranted": 0.25, "DDM": 0.10}
+# Plan 3 (split-validated, both universes — see WORKLOG.md): DCF demoted, RIM/Warranted
+# promoted — the engines the backtest ranked most reliable. The old weights (DCF .25,
+# RIM .20, W .25) live on in backtest.py's V1_WEIGHTS for the variant comparison.
+CENTRAL_WEIGHTS = {"DCF": 0.10, "RIM": 0.35, "Warranted": 0.30, "DDM": 0.10}
 
-def triangulate(growth, floor, price):
+def triangulate(growth, floor, price, weights=None):
     """growth: {engine_name: per-share value} for applicable growth engines.
-       floor:  EPV per-share value (or None)."""
+       floor:  EPV per-share value (or None). weights: override CENTRAL_WEIGHTS
+       (the backtest's variant harness passes historical weight sets)."""
+    W  = weights or CENTRAL_WEIGHTS
     g  = {k: v for k, v in growth.items() if v is not None and v > 0}
     fl = floor if (floor is not None and floor > 0) else None
     if not g and fl is None:
         return None
     if g:
-        tw  = sum(CENTRAL_WEIGHTS.get(k, 0.10) for k in g)
-        mid = sum(v * CENTRAL_WEIGHTS.get(k, 0.10) for k, v in g.items()) / tw
+        tw  = sum(W.get(k, 0.10) for k in g)
+        mid = sum(v * W.get(k, 0.10) for k, v in g.items()) / tw
     else:
         mid = fl                          # only the floor is available
     allvals    = list(g.values()) + ([fl] if fl else [])

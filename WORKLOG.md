@@ -80,3 +80,56 @@ two snapshots — same data, same fallback rf (4.30%) in both, so the diff is pu
 - betas not re-run (table persists; new universe entrants fall back to β=1.0).
 - IFRS tag choices for the 3 foreign filers are best-effort; verify if TRI/CCEP/FER
   numbers look off.
+
+---
+
+## Plan 3 — Evidence-aligned scoring (2026-07-02) ✅
+
+**Goal:** make the product consistent with its own backtest evidence — but only adopt
+changes that survive a time-split validation, not a fit to the full sample.
+
+**Harness:** backtest.py refactored — `build_quarter()` now returns raw PIT signals
+(the expensive part, computed once); `compose(sigs, variant)` scores them per variant;
+`triangulate()` takes a weights override. Three variants × three windows × two universes:
+
+| variant | what it is |
+|---|---|
+| v1  | shipped composite (weights DCF .25 / RIM .20 / W .25, binary 0.55 flag penalty, growth in quality) |
+| v2w | weights DCF .10 / RIM .35 / W .30 · 0.85^n flag decay (cyclical informational) · growth out of quality |
+| v2  | v2w + reverse-DCF gap rank-blended into the composite at 0.4 |
+
+**Results (excess CAGR vs equal-weight bench · hit rate):**
+
+| | NDX full | NDX fit 16-21 | NDX holdout 22-26 | SPX full | SPX fit 16-21 | SPX holdout 22-26 |
+|---|---|---|---|---|---|---|
+| v1  | −5.27pp · 51% | −6.84 · 48% | −2.53 · 59% | +0.10 · 49% | −0.41 · 35% | +0.85 · 71% |
+| v2w | **−0.99 · 46%** | **−2.47 · 39%** | **+1.62 · 59%** | **+0.19 · 54%** | −1.35 · 39% | **+2.61 · 76%** |
+| v2  | −3.39 · 49% | −6.94 · 35% | +1.49 · 71% | +0.17 · 56% | −2.14 · 39% | +3.18 · 76% |
+
+Sanity: v1 full-window reproduces the published Phase 7/8 numbers exactly (refactor faithful).
+
+**Decision — adopt v2w, reject the gap blend.** v2w beats v1 in 5 of 6 cells (NDX full
+−5.27 → −0.99pp) and is positive on both holdouts. v2's gap blend wins the 2022-26
+holdout (+3.18pp SPX) but LOSES to v1 on 2016-21 (−6.94pp NDX): the reverse-DCF-gap
+tilt is a value-factor loading that got crushed pre-2022 and paid after — regime, not
+signal. Trying intermediate gap weights would be curve-fitting; the gap stays displayed
+("impl vs trail" on the board), not scored. **Honesty note:** the v2w weights were
+motivated by full-sample per-method stats from Phase 7/8, so this "holdout" is not fully
+out-of-sample — the real test is the Plan-4 forward ledger.
+
+**Live changes (model v2):**
+- `CENTRAL_WEIGHTS` → DCF .10 / RIM .35 / Warranted .30 (engines.py).
+- **Monte Carlo DCF deleted** — it perturbed g1/WACC/terminal-g in a narrow band but never
+  the FCF base (the dominant uncertainty), so P50 tracked the deterministic value while
+  implying rigor the backtest never rewarded. `dcf()` is now the deterministic kernel.
+- Flag penalty: binary ×0.55 cliff → `0.85^n`; "Cyclical revenue" reclassified as
+  informational (shown, never penalized).
+- Growth removed from the quality composite (quality = profitability/stability/leverage).
+- Altman-Z gated off for Financials/Real Estate (calibrated for industrials; n/a, no flag).
+- backtest.json contract: + `meta.scoring`, + `validation` (all variants × windows),
+  caveats refreshed. Frontend needed no change (no hardcoded weights; additive JSON keys).
+
+**Measured live effect (v1.1 → v2 snapshot diff, 94 names, same data):** median |Δmid|
+13.2% — big, as a reweighting should be. Movers all follow the mechanism: warranted-rich
+cyclicals up (MU +47%, STX +45%, WDC +41%), DCF-propped names down (FANG −49%, WBD −47%,
+PDD −40%). Biggest rank moves: ODFL +27 places, WBD −22. Tests: 38/38 green.

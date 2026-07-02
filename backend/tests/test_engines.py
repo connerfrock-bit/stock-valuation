@@ -111,21 +111,17 @@ class TestReverseDCF(unittest.TestCase):
         self.assertEqual(reverse_dcf(100, 0.03, 0.025, 0, 100, 10, 5), (None, None))
 
 
-class TestDCFMonteCarlo(unittest.TestCase):
-    def test_percentiles_ordered(self):
-        r = dcf(100, 0.10, 0.02, 50, 10, 0.05, 10, 5, draws=500, seed=42)
-        self.assertLessEqual(r["p10"], r["p50"])
-        self.assertLessEqual(r["p50"], r["p90"])
-
-    def test_deterministic_for_seed(self):
-        a = dcf(100, 0.10, 0.02, 50, 10, 0.05, 10, 5, draws=300, seed=7)
-        b = dcf(100, 0.10, 0.02, 50, 10, 0.05, 10, 5, draws=300, seed=7)
-        self.assertEqual(a, b)
+class TestDCF(unittest.TestCase):
+    def test_is_the_kernel_minus_net_debt_per_share(self):
+        expected = (ev_present_value(100, 0.10, 0.02, 0.05, 10, 5) - 50) / 10
+        self.assertAlmostEqual(dcf(100, 0.10, 0.02, 50, 10, 0.05, 10, 5), expected)
 
     def test_na_on_bad_inputs(self):
         self.assertIsNone(dcf(None, 0.10, 0.02, 0, 10, 0.05, 10, 5))
         self.assertIsNone(dcf(-5, 0.10, 0.02, 0, 10, 0.05, 10, 5))
         self.assertIsNone(dcf(100, 0.10, 0.02, 0, None, 0.05, 10, 5))
+        # wacc − g below the clamp → TV explodes → refuse, don't emit
+        self.assertIsNone(dcf(100, 0.03, 0.025, 0, 10, 0.05, 10, 5))
 
 
 class TestEPV(unittest.TestCase):
@@ -198,10 +194,17 @@ class TestTriangulate(unittest.TestCase):
         self.assertAlmostEqual(tri["low"], 10.0)      # but it does set the low bound
         self.assertAlmostEqual(tri["high"], 100.0)
 
-    def test_weighted_mid(self):
-        # DCF 0.25, RIM 0.20 → (100*.25 + 200*.20)/0.45
-        tri = triangulate({"DCF": 100.0, "RIM": 200.0}, None, price=100.0)
+    def test_weighted_mid_explicit_weights(self):
+        # explicit override: DCF 0.25, RIM 0.20 → (100*.25 + 200*.20)/0.45
+        tri = triangulate({"DCF": 100.0, "RIM": 200.0}, None, price=100.0,
+                          weights={"DCF": 0.25, "RIM": 0.20})
         self.assertAlmostEqual(tri["mid"], 65.0 / 0.45)
+
+    def test_weighted_mid_default_weights(self):
+        from engines import CENTRAL_WEIGHTS as W
+        tri = triangulate({"DCF": 100.0, "RIM": 200.0}, None, price=100.0)
+        expected = (100 * W["DCF"] + 200 * W["RIM"]) / (W["DCF"] + W["RIM"])
+        self.assertAlmostEqual(tri["mid"], expected)
 
     def test_single_engine_cannot_claim_agreement(self):
         tri = triangulate({"DCF": 100.0}, None, price=80.0)

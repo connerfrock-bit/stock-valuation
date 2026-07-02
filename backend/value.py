@@ -8,7 +8,7 @@ Two passes: (1) load + derive inputs for every company, (2) cross-sectional cont
 ranked output + data/output.json (the Company contract the dashboard binds to).
 stdlib only.  Run after ingest_v1.py and betas.py:   python value.py
 """
-import datetime, json, sqlite3, statistics, sys, zlib
+import datetime, json, sqlite3, statistics, sys
 from common import (CFG, DB_PATH, fetch_risk_free, load_company, latest, cagr,
                     avg_margin, avg_roe, effective_tax, cost_of_debt, money, pct)
 from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim,
@@ -184,6 +184,9 @@ def rev_volatility(r):
 
 
 ADR_STRUCTURE_RISK = {"PDD"}          # VIE/ADR structures the numbers can't see
+INFO_FLAGS = {"Cyclical revenue"}     # shown but not score-penalized — a characteristic, not a trap
+Z_NA_SECTORS = {"Financials", "Real Estate"}   # Altman-Z is calibrated for industrials —
+                                               # meaningless for banks/REITs; show n/a, never flag
 
 
 def trend_series(f):
@@ -216,11 +219,12 @@ def pct_rank(sorted_vals, v):
     return bisect.bisect_right(sorted_vals, v) / len(sorted_vals)
 
 def quality_scores(rows):
+    # growth removed from quality (Plan 3): quality = profitability/stability/leverage;
+    # growth is the value/growth axis scored elsewhere — mixing entangled the two.
     dims = {
         "om":        [r["om"] for r in rows if r["om"] is not None],
         "roe":       [avg_roe(r["ni_s"], r["eq_s"]) for r in rows],
         "roic":      [r["roic"] for r in rows if r["roic"] is not None],
-        "growth":    [r["g_trail"] for r in rows if r["g_trail"] is not None],
         "fcfm":      [r["fcf_margin"] for r in rows if r["fcf_margin"] is not None],
         "lowlev":    [-(r["debt_risk"] - r["cash"]) / r["ebit_now"] for r in rows
                       if r["ebit_now"] and r["ebit_now"] > 0],
@@ -232,7 +236,7 @@ def quality_scores(rows):
                if r["ebit_now"] and r["ebit_now"] > 0 else None)
         ps = [pct_rank(S["om"], r["om"]), pct_rank(S["roe"], roe),
               pct_rank(S["roic"], r["roic"]),
-              pct_rank(S["growth"], r["g_trail"]), pct_rank(S["fcfm"], r["fcf_margin"]),
+              pct_rank(S["fcfm"], r["fcf_margin"]),
               pct_rank(S["lowlev"], lev)]
         ps = [p for p in ps if p is not None]
         r["quality"] = round(100 * sum(ps) / len(ps)) if ps else None
@@ -270,10 +274,14 @@ def trap_flags(r, z=None, fscore=None):
 
 
 # ---------------- snapshot history (append-only) ----------------
-MODEL_VERSION = "v1.1"        # frozen model tag — bump whenever scoring/engine logic changes
+MODEL_VERSION = "v2"          # frozen model tag — bump whenever scoring/engine logic changes
 # v1   — original inputs (long-term debt only, flat Rd = rf+1%, statutory 21% tax)
 # v1.1 — Plan 2: + short debt in borrowings · leases in risk debt · Rd from interest
 #        expense · effective tax from filings · maintenance capex wired into EPV
+# v2   — Plan 3 (split-validated as backtest variant 'v2w'): engine weights DCF .10 /
+#        RIM .35 / Warranted .30 · deterministic DCF (MC removed) · 0.85^n flag decay
+#        (Cyclical revenue informational) · growth out of quality · Altman-Z gated off
+#        for Financials/Real Estate. Reverse-DCF gap blend REJECTED (regime-fragile).
 
 def append_snapshot(out, universe, run_id):
     """Append this run's full ranked output to `snapshots` — never overwritten.
@@ -334,10 +342,7 @@ def main():
         base_fcf = r["fcf_norm"] if (r["fcf_norm"] or 0) > 0 else r["fcf_last"]
         ndebt = r["debt"] - r["cash"]
 
-        # crc32, not hash(): hash() is salted per process → MC noise in run-to-run diffs
-        dcf_res = dcf(base_fcf, r["wacc"], term_g, ndebt, r["shares"], r["g1"], H, S1,
-                      draws=2500, seed=zlib.crc32(r["t"].encode()))
-        dcf_p50 = dcf_res["p50"] if dcf_res else None
+        dcf_ps = dcf(base_fcf, r["wacc"], term_g, ndebt, r["shares"], r["g1"], H, S1)
         epv_ps = epv((r["om"] or 0) * r["rev_now"], r["tax_r"], r["wacc"], r["cash"],
                      r["debt"], r["shares"], r["dna"], r["capex_now"])
         book_ps = r["equity_now"] / r["shares"] if (r["equity_now"] and r["shares"]) else None
@@ -349,9 +354,9 @@ def main():
                                   r["ebit_now"], r["cash"], r["debt"], r["shares"])
         impl, op = reverse_dcf(base_fcf, r["wacc"], term_g, ndebt, r["mcap"], H, S1)
 
-        z = altman_z(r)
+        z = altman_z(r) if r["sector"] not in Z_NA_SECTORS else None
         fscore, fn = piotroski(r)
-        tri = triangulate({"DCF": dcf_p50, "RIM": rim_ps, "Warranted": warr_ps},
+        tri = triangulate({"DCF": dcf_ps, "RIM": rim_ps, "Warranted": warr_ps},
                           epv_ps, r["price"])
         flags = trap_flags(r, z, fscore)
         if not tri:
@@ -359,8 +364,10 @@ def main():
 
         q = r["quality"] or 50
         upside = tri["upside"]
+        # per-flag decay (Plan 3): one flag ≠ five flags; informational flags don't penalize
+        n_pen = sum(1 for fl in flags if fl not in INFO_FLAGS)
         score = ((max(-0.5, min(0.6, upside)) + 0.5) * (tri["conf"] / 5)
-                 * (q / 100) * (0.55 if flags else 1.0))
+                 * (q / 100) * (0.85 ** n_pen))
 
         ni_ps = (r["ni_now"] or 0) / r["shares"]
         ebitda = (r["ebit_now"] or 0) + (r["dna"] or 0)
@@ -389,8 +396,8 @@ def main():
             "flags": flags, "score": round(score, 4),
             "cik": r["cik"], "trends": trend_series(r["f"]),
             "methods": [
-                {"key": "dcf", "name": "DCF", "value": _r2(dcf_p50),
-                 "applicable": dcf_p50 is not None,
+                {"key": "dcf", "name": "DCF", "value": _r2(dcf_ps),
+                 "applicable": dcf_ps is not None,
                  "note": f"normalized FCF · g₁ {r['g1']*100:.0f}% capped · WACC {r['wacc']*100:.1f}%"},
                 {"key": "rim", "name": "RIM", "value": _r2(rim_ps), "applicable": rim_ps is not None,
                  "note": "book + PV excess ROE · ω 0.62" if rim_ps is not None else

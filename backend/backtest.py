@@ -9,7 +9,7 @@ stdlib only.  Run after membership.py, prices.py, pit.py:   python backtest.py
 import json, sqlite3, statistics, sys
 from datetime import date
 from common import DB_PATH, CFG, cagr
-from engines import (cost_of_equity, wacc_of, ev_present_value, reverse_dcf,
+from engines import (cost_of_equity, wacc_of, dcf, reverse_dcf,
                      epv, rim, warranted_fit, warranted_value, triangulate)
 
 try:
@@ -142,9 +142,7 @@ def signal(t, D, month, pit, px, adj, spl, sectors, rf, adj_mkt):
     g_tr = cagr(rev)
     g1 = min(max(g_tr or 0.0, 0.0), CFG["initial_growth_cap"])
 
-    dcf_ps = None
-    if fcf_norm and fcf_norm > 0 and wacc - term_g >= CFG["min_wacc_minus_g"]:
-        dcf_ps = (ev_present_value(fcf_norm, wacc, term_g, g1, 10, 5) - ndebt) / shares
+    dcf_ps = dcf(fcf_norm, wacc, term_g, ndebt, shares, g1, 10, 5)
     epv_ps = epv((om or 0) * rev_now, TAX, wacc, cash, debt, shares)
     impl, _op = reverse_dcf(fcf_norm, wacc, term_g, ndebt, mcap, 10, 5)
 
@@ -160,7 +158,7 @@ def signal(t, D, month, pit, px, adj, spl, sectors, rf, adj_mkt):
     if (book_ps and roe is not None and roe <= 0.40 and book_ps / price >= 0.15):
         rim_ps = rim(book_ps, roe, re_, 10)
 
-    flags = 0
+    flags = 0        # penalized traps: declining rev · neg FCF · leverage · accruals
     ry = sorted(rev)
     if len(ry) >= 4 and rev[ry[-1]] < rev[ry[-4]]:
         flags += 1
@@ -171,16 +169,17 @@ def signal(t, D, month, pit, px, adj, spl, sectors, rf, adj_mkt):
     ni_now, cfo_now = latest(ni), latest(cfo)
     if ni_now and cfo_now and ni_now > cfo_now * 1.2:
         flags += 1
+    cyc = 0          # cyclical revenue — informational; the scoring variant decides penalty
     gr = [rev[ry[i]] / rev[ry[i - 1]] - 1 for i in range(1, len(ry)) if rev[ry[i - 1]]][-6:]
     if len(gr) >= 3:
         m = sum(gr) / len(gr)
         if (sum((x - m) ** 2 for x in gr) / len(gr)) ** 0.5 > 0.18:
-            flags += 1
+            cyc = 1
 
     return dict(t=t, price=price, shares=shares, mcap=mcap, sector=sectors.get(t),
                 g1=g1, g_tr=g_tr, om=om, roe=roe, lev=lev, fcf_margin=fcf_margin,
                 ebit_now=ebit_now, debt=debt, cash=cash, dcf=dcf_ps, epv=epv_ps,
-                rim=rim_ps, impl=impl, flags=flags)
+                rim=rim_ps, impl=impl, flags=flags, cyc=cyc)
 
 
 def pct_rank(sorted_vals, v):
@@ -191,6 +190,9 @@ def pct_rank(sorted_vals, v):
 
 
 def build_quarter(D, month, members, pit, px, adj, spl, sectors, rf, adj_mkt):
+    """One quarter's PIT signals, enriched with the warranted value (the only
+       cross-sectional engine). Scoring lives in compose() — per variant — so the
+       expensive part runs once and every scoring variant reuses it."""
     sigs = []
     for t in sorted(members):
         s = signal(t, D, month, pit, px, adj, spl, sectors, rf, adj_mkt)
@@ -198,37 +200,74 @@ def build_quarter(D, month, members, pit, px, adj, spl, sectors, rf, adj_mkt):
             sigs.append(s)
     if len(sigs) < 20:
         return []
-    # warranted multiple: PIT cross-section only
     fit_rows = [(s["sector"] or "UNKNOWN", (s["mcap"] + s["debt"] - s["cash"]) / s["ebit_now"],
                  s["g1"], s["om"] or 0.0)
                 for s in sigs if s["ebit_now"] and s["ebit_now"] > 0
                 and (s["mcap"] + s["debt"] - s["cash"]) > 0]
     wfit = warranted_fit(fit_rows)
-    # quality percentiles
-    dims = {k: sorted(v for v in (s[k] for s in sigs) if v is not None)
-            for k in ("om", "roe", "g_tr", "fcf_margin", "lev")}
-    out = []
     for s in sigs:
-        warr = warranted_value(wfit, s["sector"] or "UNKNOWN", s["g1"], s["om"] or 0.0,
-                               s["ebit_now"], s["cash"], s["debt"], s["shares"])
-        tri = triangulate({"DCF": s["dcf"], "RIM": s["rim"], "Warranted": warr},
-                          s["epv"], s["price"])
+        s["warr"] = warranted_value(wfit, s["sector"] or "UNKNOWN", s["g1"], s["om"] or 0.0,
+                                    s["ebit_now"], s["cash"], s["debt"], s["shares"])
+    return sigs
+
+
+# ---------------- scoring variants (Plan 3 split validation) ----------------
+# v1  — the shipped composite of Phase 7/8 (reproduces the published results)
+# v2w — evidence-aligned engine weights (DCF demoted, RIM/Warranted promoted) +
+#       per-flag decay (cyclical informational, not penalized) + growth out of quality
+# v2  — v2w + reverse-DCF gap rank-blended into the composite (the candidate)
+V1_WEIGHTS = {"DCF": 0.25, "RIM": 0.20, "Warranted": 0.25}
+V2_WEIGHTS = {"DCF": 0.10, "RIM": 0.35, "Warranted": 0.30}
+VARIANTS = {
+    "v1":  dict(weights=V1_WEIGHTS, q_dims=("om", "roe", "g_tr", "fcf_margin", "lev"),
+                flag_decay=False, gap_w=0.0),
+    "v2w": dict(weights=V2_WEIGHTS, q_dims=("om", "roe", "fcf_margin", "lev"),
+                flag_decay=True, gap_w=0.0),
+    "v2":  dict(weights=V2_WEIGHTS, q_dims=("om", "roe", "fcf_margin", "lev"),
+                flag_decay=True, gap_w=0.4),
+}
+# ADOPTION (2026-07-02, both universes): v2w beats v1 in 5 of 6 window/universe cells
+# (ndx full −5.27 → −0.99pp). v2's gap blend wins the 2022-26 holdout but LOSES to v1
+# on the 2016-21 window (ndx −6.94pp) — that's the value-factor regime, not signal.
+# Rejected; the reverse-DCF gap stays displayed, not scored.
+ADOPTED = "v2w"                    # the variant the published curve/stats are built from
+
+
+def compose(sigs, variant):
+    """Score one quarter's signals under a scoring variant -> ranked rows."""
+    if not sigs:
+        return []
+    dims = {k: sorted(v for v in (s[k] for s in sigs) if v is not None)
+            for k in variant["q_dims"]}
+    rows = []
+    for s in sigs:
+        tri = triangulate({"DCF": s["dcf"], "RIM": s["rim"], "Warranted": s["warr"]},
+                          s["epv"], s["price"], weights=variant["weights"])
         if not tri:
             continue
         ps = [pct_rank(dims[k], s[k]) for k in dims]
         ps = [p for p in ps if p is not None]
         q = 100 * sum(ps) / len(ps) if ps else 50
         upside = tri["upside"]
-        score = ((max(-0.5, min(0.6, upside)) + 0.5) * (tri["conf"] / 5)
-                 * (q / 100) * (0.55 if s["flags"] else 1.0))
+        pen = (0.85 ** s["flags"] if variant["flag_decay"]
+               else (0.55 if (s["flags"] + s["cyc"]) else 1.0))
+        score = ((max(-0.5, min(0.6, upside)) + 0.5) * (tri["conf"] / 5) * (q / 100) * pen)
         gap = (s["g_tr"] - s["impl"]) if (s["g_tr"] is not None and s["impl"] is not None) else None
-        out.append(dict(t=s["t"], score=score, upside=upside,
-                        dcf_up=(s["dcf"] / s["price"] - 1) if s["dcf"] else None,
-                        warr_up=(warr / s["price"] - 1) if warr else None,
-                        epv_up=(s["epv"] / s["price"] - 1) if s["epv"] else None,
-                        rim_up=(s["rim"] / s["price"] - 1) if s["rim"] else None,
-                        rev_gap=gap))
-    return out
+        rows.append(dict(t=s["t"], score=score, upside=upside,
+                         dcf_up=(s["dcf"] / s["price"] - 1) if s["dcf"] else None,
+                         warr_up=(s["warr"] / s["price"] - 1) if s["warr"] else None,
+                         epv_up=(s["epv"] / s["price"] - 1) if s["epv"] else None,
+                         rim_up=(s["rim"] / s["price"] - 1) if s["rim"] else None,
+                         rev_gap=gap))
+    if variant["gap_w"] > 0 and rows:      # rank-blend: composite × reverse-DCF gap
+        gw = variant["gap_w"]
+        bsort = sorted(r["score"] for r in rows)
+        gsort = sorted(r["rev_gap"] for r in rows if r["rev_gap"] is not None)
+        for r in rows:
+            rb = pct_rank(bsort, r["score"])
+            rg = pct_rank(gsort, r["rev_gap"]) if r["rev_gap"] is not None else None
+            r["score"] = (1 - gw) * rb + gw * rg if rg is not None else rb
+    return rows
 
 
 # ---------------- simulation ----------------
@@ -312,28 +351,53 @@ def main(universe="ndx"):
     tnx = px.get("^TNX", {})
     adj_mkt = adj.get("^GSPC", {})
 
-    ranked, coverage = {}, []
+    sig_q, coverage = {}, []
     for D in quarters:
         month = D[:7]
         raw_rf = tnx.get(month)
         rf = (raw_rf / 1000 if raw_rf and raw_rf > 20 else raw_rf / 100) if raw_rf else 0.025
         members = mem[D]
-        rows = build_quarter(D, month, members, pit, px, adj, spl, sectors, rf, adj_mkt)
-        ranked[D] = rows
-        coverage.append({"d": D, "members": len(members), "signals": len(rows),
+        sig_q[D] = build_quarter(D, month, members, pit, px, adj, spl, sectors, rf, adj_mkt)
+        coverage.append({"d": D, "members": len(members), "signals": len(sig_q[D]),
                          "rf": round(rf, 4)})
-        print(f"  {D}  members {len(members):3}  signals {len(rows):3}  rf {rf*100:.2f}%")
+        print(f"  {D}  members {len(members):3}  signals {len(sig_q[D]):3}  rf {rf*100:.2f}%")
 
     # forward returns from adjclose (total-return proxy)
     fwd = {}
     for i in range(len(quarters) - 1):
         D, Dn = quarters[i], quarters[i + 1]
         m0, m1 = D[:7], Dn[:7]
-        for r in ranked.get(D, []):
+        for r in sig_q.get(D, []):
             a = adj.get(r["t"], {})
             if a.get(m0) and a.get(m1):
                 fwd[(D, r["t"])] = a[m1] / a[m0] - 1
 
+    # ---- split validation: every scoring variant on fit / holdout / full windows ----
+    windows = [("full", quarters[0], quarters[-1]),
+               ("fit2016-21", quarters[0], "2021-12-31"),
+               ("holdout2022-26", "2022-01-01", quarters[-1])]
+    validation = {}
+    for vn, var in VARIANTS.items():
+        rv = {D: compose(sig_q[D], var) for D in quarters}
+        for wn, a, b in windows:
+            qs = [q for q in quarters if a <= q <= b]
+            c_, u_, h_, t_, _ = simulate(qs, rv, fwd)
+            s_ = stats_from(c_, u_, h_, t_)
+            if s_:
+                validation.setdefault(vn, {})[wn] = {
+                    "excess": round(s_["stratCAGR"] - s_["benchCAGR"], 4),
+                    "hitRate": s_["hitRate"], "quarters": s_["quarters"]}
+    print(f"\n===== SPLIT VALIDATION [{universe}]  (excess CAGR vs bench · hit rate) =====")
+    print(f"{'variant':9}" + "".join(f"{wn:>24}" for wn, _, _ in windows))
+    for vn in VARIANTS:
+        row = f"{vn:9}"
+        for wn, _, _ in windows:
+            v = validation.get(vn, {}).get(wn)
+            row += (f"{v['excess']*100:+12.2f}pp · {v['hitRate']*100:3.0f}%"
+                    if v else f"{'n/a':>24}")
+        print(row)
+
+    ranked = {D: compose(sig_q[D], VARIANTS[ADOPTED]) for D in quarters}
     curve, used, hits, turnover, per_method = simulate(quarters, ranked, fwd)
     st = stats_from(curve, used, hits, turnover)
     if not st:
@@ -358,15 +422,18 @@ def main(universe="ndx"):
             "rebalance": "quarterly", "portfolio": "top quintile by composite score, equal-weight",
             "benchmark": "equal-weight of all covered members",
             "avgCoverage": round(avg_cov, 3), "namesExcluded": n_missing,
+            "scoring": ADOPTED,
             "caveats": [
                 "Fundamentals are point-in-time (vintages by SEC `filed` date) — no restatement look-ahead.",
                 f"Average signal coverage {avg_cov:.0%} of members; delisted names without price/EDGAR data are missing (residual survivorship bias, direction unknown).",
-                "RIM, Altman-Z and Piotroski excluded from the historical signal (v1); DCF is deterministic (no Monte Carlo).",
+                f"Scoring variant '{ADOPTED}' — see `validation` for every variant on fit (2016-21) / holdout (2022-26) windows.",
+                "Altman-Z and Piotroski excluded from the historical signal; DCF deterministic.",
                 "ERP constant at 5.0%; risk-free from ^TNX at each date; sector for departed names unknown (global multiple anchor).",
-                "The signal's design postdates the sample — treat results as validation of plausibility, not proof.",
+                "Honesty note: the v2w reweighting was motivated by full-sample per-method stats (Phase 7/8), so the 'holdout' is not fully out-of-sample — the real test is the forward ledger.",
             ],
         },
         "coverage": coverage, "curve": curve, "stats": st, "perMethod": pm,
+        "validation": validation,
     }
     out = DB_PATH.parent / f"backtest{suf}.json"
     out.write_text(json.dumps(payload, indent=1), encoding="utf-8")
