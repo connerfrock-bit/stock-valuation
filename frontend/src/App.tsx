@@ -28,6 +28,12 @@ export default function App() {
   });
 
   useEffect(() => {
+    const embedded = (window as unknown as { __FV_DATA__?: Payload }).__FV_DATA__;
+    if (embedded) {                                   // single-file share build
+      setData(embedded);
+      if (embedded.companies.length) setSelected(embedded.companies[0].ticker);
+      return;
+    }
     fetch(`${import.meta.env.BASE_URL}output.json`)
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then((p: Payload) => {

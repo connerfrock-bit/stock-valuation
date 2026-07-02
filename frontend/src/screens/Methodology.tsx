@@ -100,6 +100,11 @@ export function Methodology({ meta }: { meta: Meta }) {
   const [bts, setBts] = useState<Record<string, Backtest | null>>({});
   const [uni, setUni] = useState('ndx');
   useEffect(() => {
+    const embedded = (window as unknown as { __FV_BT__?: Record<string, Backtest> }).__FV_BT__;
+    if (embedded) {                                   // single-file share build
+      setBts(embedded);
+      return;
+    }
     for (const [k, f] of UNIVERSES) {
       fetch(`${import.meta.env.BASE_URL}${f}`)
         .then(r => (r.ok ? r.json() : null))

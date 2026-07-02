@@ -2,3 +2,7 @@
 backend/data/
 __pycache__/
 *.pyc
+
+# generated share artifact (rebuild with backend/share.py)
+FairValue-SHARE.html
+frontend/public/FairValue-SHARE.html
