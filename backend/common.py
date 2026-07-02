@@ -71,6 +71,26 @@ def avg_roe(ni, equity, years=5):
     rs = [ni[y] / equity[y] for y in yrs if equity[y] > 0]
     return sum(rs) / len(rs) if rs else None
 
+def effective_tax(tax_s, pretax_s, years=3, floor=0.10, cap=0.35, fallback=0.21):
+    """Mean effective tax rate over recent overlapping years, clamped to [floor, cap].
+       Years with non-positive pretax income or a net tax benefit are skipped (a loss
+       year's 'rate' is meaningless); falls back to the statutory default when nothing
+       is measurable."""
+    yrs = sorted(set(tax_s) & set(pretax_s))[-years:]
+    rs = [tax_s[y] / pretax_s[y] for y in yrs
+          if pretax_s[y] and pretax_s[y] > 0 and tax_s[y] is not None and tax_s[y] > 0]
+    if not rs:
+        return fallback
+    return max(floor, min(cap, sum(rs) / len(rs)))
+
+def cost_of_debt(interest, debt, rf, spread, cap=0.15):
+    """Effective Rd = interest expense / total borrowings, floored at rf+0.5% and
+       capped (the ratio explodes when debt shrank mid-year). Falls back to
+       rf + spread when interest expense or debt is unmeasurable."""
+    if interest and debt and debt > 0 and interest > 0:
+        return max(rf + 0.005, min(cap, interest / debt))
+    return rf + spread
+
 
 # ---------- shared DCF kernel ----------
 def ev_present_value(fcf0, wacc, term_g, g1, horizon, stage1):

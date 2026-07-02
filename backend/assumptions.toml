@@ -7,8 +7,13 @@ equity_risk_premium  = 0.050    # Damodaran implied ERP (single most consequenti
 beta_default         = 1.00     # PLACEHOLDER until Blume-adjusted regression / Damodaran industry betas (Phase 3)
 beta_floor           = 0.50
 beta_cap             = 2.00
-tax_rate             = 0.21     # US federal statutory, forward-looking
-cost_of_debt_spread  = 0.010    # Rd ≈ risk_free + spread, until interest-expense-based Rd is added
+tax_rate             = 0.21     # FALLBACK only — effective rate from filings preferred (Plan 2)
+tax_floor            = 0.10     # effective-rate clamp band (one-off benefits/charges distort)
+tax_cap              = 0.35
+cost_of_debt_spread  = 0.010    # Rd fallback = risk_free + spread when interest expense unmeasurable
+cost_of_debt_cap     = 0.15     # Rd sanity cap (interest/debt explodes when debt shrank mid-year)
+include_op_leases    = true     # leases count in RISK debt (leverage flag, ND/EBITDA) only —
+                                # engine flows are post-rent, so leases in the EV bridge would double-count
 terminal_growth      = 0.025    # hard ceiling = risk_free (enforced in code)
 forecast_horizon     = 10       # years, 2-stage
 stage1_years         = 5        # explicit; years 6-10 fade linearly to terminal_growth

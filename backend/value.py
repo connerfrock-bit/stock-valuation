@@ -10,7 +10,7 @@ stdlib only.  Run after ingest_v1.py and betas.py:   python value.py
 """
 import datetime, json, sqlite3, statistics, sys, zlib
 from common import (CFG, DB_PATH, fetch_risk_free, load_company, latest, cagr,
-                    avg_margin, avg_roe, money, pct)
+                    avg_margin, avg_roe, effective_tax, cost_of_debt, money, pct)
 from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim,
                      warranted_fit, warranted_value, triangulate)
 
@@ -28,7 +28,7 @@ MIN_N100_MCAP = 15e9          # smallest plausible Nasdaq-100 member — below t
 
 
 # ---------------- pass 1: inputs ----------------
-def collect(con, rf, erp, rd, tax, betas):
+def collect(con, rf, erp, tax_fallback, betas):
     cur_year = datetime.date.today().year
     rows, excluded = [], []
     for (t,) in con.execute("SELECT ticker FROM companies ORDER BY ticker"):
@@ -59,7 +59,14 @@ def collect(con, rf, erp, rd, tax, betas):
         ebit_now = latest(ebit_s)
         om = avg_margin(ebit_s, rev, years=5)
         ni_s, eq_s = f.get("net_income", {}), f.get("equity", {})
-        debt = latest(f.get("long_debt", {})) or 0.0
+        # Plan 2: valuation debt = ALL borrowings (long + previously-missing short/current).
+        # Operating leases go in debt_risk only — every engine discounts post-rent flows
+        # (CFO and EBIT are after lease expense), so leases in the EV bridge double-count.
+        borrowings = ((latest(f.get("long_debt", {})) or 0.0)
+                      + (latest(f.get("short_debt", {})) or 0.0))
+        leases = latest(f.get("op_leases", {})) or 0.0
+        debt = borrowings
+        debt_risk = borrowings + (leases if CFG["include_op_leases"] else 0.0)
         cash = latest(f.get("cash", {})) or 0.0
         dna = latest(f.get("dep_amort", {}))
         div = latest(f.get("dividends", {})) or 0.0
@@ -68,11 +75,16 @@ def collect(con, rf, erp, rd, tax, betas):
         g_trail = cagr(rev)                                # honest trailing growth (uncapped)
         g1 = min(max(g_trail or 0.0, CFG["initial_growth_floor"]), CFG["initial_growth_cap"])
         re_ = cost_of_equity(rf, beta, erp)
-        wacc = wacc_of(mcap, max(debt, 0.0), re_, rd, tax)
+        rd = cost_of_debt(latest(f.get("interest_exp", {})), borrowings, rf,
+                          CFG["cost_of_debt_spread"], CFG["cost_of_debt_cap"])
+        tax_r = effective_tax(f.get("tax_exp", {}), f.get("pretax", {}),
+                              floor=CFG["tax_floor"], cap=CFG["tax_cap"],
+                              fallback=tax_fallback)
+        wacc = wacc_of(mcap, max(debt, 0.0), re_, rd, tax_r)
 
         equity_now = latest(eq_s)
         inv_cap = (equity_now or 0.0) + debt - cash
-        roic = (ebit_now * (1 - tax) / inv_cap
+        roic = (ebit_now * (1 - tax_r) / inv_cap
                 if (ebit_now is not None and inv_cap > 0) else None)
 
         rows.append(dict(
@@ -81,6 +93,7 @@ def collect(con, rf, erp, rd, tax, betas):
             beta=beta, re_=re_, wacc=wacc, rev=rev, rev_now=rev_now,
             fcf_norm=fcf_norm, fcf_last=fcf_last, fcf_margin=fcf_margin,
             ebit_now=ebit_now, om=om, ni_s=ni_s, eq_s=eq_s, debt=debt, cash=cash,
+            debt_risk=debt_risk, rd=rd, tax_r=tax_r, capex_now=latest(cap_s),
             dna=dna, div=div, g_trail=g_trail, g1=g1, roic=roic,
             last_fy=max(rev), stale=max(rev) < cur_year - 1,
             ni_now=latest(ni_s), equity_now=equity_now, cfo_s=cfo_s, f=f,
@@ -209,13 +222,13 @@ def quality_scores(rows):
         "roic":      [r["roic"] for r in rows if r["roic"] is not None],
         "growth":    [r["g_trail"] for r in rows if r["g_trail"] is not None],
         "fcfm":      [r["fcf_margin"] for r in rows if r["fcf_margin"] is not None],
-        "lowlev":    [-(r["debt"] - r["cash"]) / r["ebit_now"] for r in rows
+        "lowlev":    [-(r["debt_risk"] - r["cash"]) / r["ebit_now"] for r in rows
                       if r["ebit_now"] and r["ebit_now"] > 0],
     }
     S = {k: sorted(v for v in vals if v is not None) for k, vals in dims.items()}
     for r in rows:
         roe = avg_roe(r["ni_s"], r["eq_s"])
-        lev = (-(r["debt"] - r["cash"]) / r["ebit_now"]
+        lev = (-(r["debt_risk"] - r["cash"]) / r["ebit_now"]
                if r["ebit_now"] and r["ebit_now"] > 0 else None)
         ps = [pct_rank(S["om"], r["om"]), pct_rank(S["roe"], roe),
               pct_rank(S["roic"], r["roic"]),
@@ -233,7 +246,7 @@ def trap_flags(r, z=None, fscore=None):
     if (r["fcf_norm"] is None or r["fcf_norm"] <= 0) and (r["fcf_last"] is None or r["fcf_last"] <= 0):
         flags.append("Negative FCF")
     ebitda = (r["ebit_now"] or 0) + (r["dna"] or 0)
-    if ebitda > 0 and (r["debt"] - r["cash"]) / ebitda > 3.5:
+    if ebitda > 0 and (r["debt_risk"] - r["cash"]) / ebitda > 3.5:   # leases count as risk
         flags.append("High leverage")
     if r["equity_now"] is not None and r["equity_now"] < 0:
         flags.append("Negative book value")
@@ -257,7 +270,10 @@ def trap_flags(r, z=None, fscore=None):
 
 
 # ---------------- snapshot history (append-only) ----------------
-MODEL_VERSION = "v1"          # frozen model tag — bump whenever scoring/engine logic changes
+MODEL_VERSION = "v1.1"        # frozen model tag — bump whenever scoring/engine logic changes
+# v1   — original inputs (long-term debt only, flat Rd = rf+1%, statutory 21% tax)
+# v1.1 — Plan 2: + short debt in borrowings · leases in risk debt · Rd from interest
+#        expense · effective tax from filings · maintenance capex wired into EPV
 
 def append_snapshot(out, universe, run_id):
     """Append this run's full ranked output to `snapshots` — never overwritten.
@@ -286,17 +302,16 @@ def main():
     erp, tax = CFG["equity_risk_premium"], CFG["tax_rate"]
     term_g = min(CFG["terminal_growth"], rf)
     H, S1 = CFG["forecast_horizon"], CFG["stage1_years"]
-    rd = rf + CFG["cost_of_debt_spread"]
     asof = datetime.datetime.now().strftime("%b %d %Y · %H:%M")
     print(f"Risk-free {rf*100:.2f}% [{rf_src}] · ERP {erp*100:.1f}% · terminal g {term_g*100:.1f}% "
-          f"· normalized-FCF base · EPV=floor\n")
+          f"· normalized-FCF base · EPV=floor · Rd from interest exp · effective tax\n")
 
     con = sqlite3.connect(DB_PATH)
     try:
         betas = dict(con.execute("SELECT ticker, beta FROM betas"))
     except sqlite3.OperationalError:
         betas = {}
-    rows, excluded = collect(con, rf, erp, rd, tax, betas)
+    rows, excluded = collect(con, rf, erp, tax, betas)
     con.close()
 
     # cross-sectional context
@@ -323,8 +338,8 @@ def main():
         dcf_res = dcf(base_fcf, r["wacc"], term_g, ndebt, r["shares"], r["g1"], H, S1,
                       draws=2500, seed=zlib.crc32(r["t"].encode()))
         dcf_p50 = dcf_res["p50"] if dcf_res else None
-        epv_ps = epv((r["om"] or 0) * r["rev_now"], tax, r["wacc"], r["cash"], r["debt"],
-                     r["shares"], r["dna"], None)
+        epv_ps = epv((r["om"] or 0) * r["rev_now"], r["tax_r"], r["wacc"], r["cash"],
+                     r["debt"], r["shares"], r["dna"], r["capex_now"])
         book_ps = r["equity_now"] / r["shares"] if (r["equity_now"] and r["shares"]) else None
         roe = avg_roe(r["ni_s"], r["eq_s"])
         rim_ok = (book_ps and book_ps > 0 and roe is not None
@@ -370,7 +385,7 @@ def main():
             "roic": None if r["roic"] is None else round(r["roic"], 4),
             "altmanZ": None if z is None else round(z, 2),
             "piotroski": fscore, "piotroskiN": fn,
-            "nde": round(ndebt / ebitda, 2) if ebitda > 0 else None,
+            "nde": round((r["debt_risk"] - r["cash"]) / ebitda, 2) if ebitda > 0 else None,
             "flags": flags, "score": round(score, 4),
             "cik": r["cik"], "trends": trend_series(r["f"]),
             "methods": [

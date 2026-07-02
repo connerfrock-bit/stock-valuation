@@ -157,8 +157,13 @@ Honesty rules: never a single fair value without its range · agreement always b
       (>5% per-concept drop vs previous run warns loudly = silent-XBRL-tag-change detector)
       · fixed nondeterministic MC seed (`hash()` is process-salted → crc32; identical runs
       now produce identical snapshots — the diff caught it on the first try)
-- [ ] Plan 2: input correctness — short-term debt + operating leases in net debt, Rd from
-      interest expense, effective tax rate, wire real maintenance capex into EPV
+- [x] **Plan 2: input correctness** ✅ — 5 new XBRL concepts (short debt, op leases,
+      interest exp, tax exp, pretax; 30.4k datapoints); borrowings = long+short in all
+      valuation math; leases in RISK debt only (engines discount post-rent flows — EV-bridge
+      leases would double-count); Rd = interest/borrowings [rf+0.5%, 15%]; effective tax
+      3-yr mean [10%, 35%]; EPV maintenance-capex param was dead code since inception — wired.
+      Model v1.1; isolated snapshot diff: median |Δmid| 0.3%, movers all leverage stories
+      (WDC −6%, CMCSA +5.5%), SBUX/INTC/KDP/MDLZ gained the leverage flag (leases). See WORKLOG.md.
 - [ ] Plan 3: evidence-aligned scoring — reweight mid toward RIM/Warranted, revDCF gap into
       the composite, per-flag decay penalty, sector-gate Altman-Z, growth out of quality;
       validate on a 2016–21 fit / 2022–26 holdout split before adopting

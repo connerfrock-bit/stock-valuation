@@ -46,6 +46,17 @@ CONCEPTS = {
     "cash":        ["CashAndCashEquivalentsAtCarryingValue",
                     "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"],
     "shares":      ["CommonStockSharesOutstanding", "CommonStockSharesIssued"],
+    # Plan 2 — net-debt completeness + effective Rd/tax. Tag order matters only for
+    # same-filed collisions (pick_annual: newest filed wins per FY, first tag breaks ties):
+    # DebtCurrent (total current debt) preferred over its components.
+    "short_debt":  ["DebtCurrent", "LongTermDebtCurrent", "ShortTermBorrowings",
+                    "CommercialPaper"],
+    "op_leases":   ["OperatingLeaseLiability", "OperatingLeaseLiabilityNoncurrent"],
+    "interest_exp": ["InterestExpenseDebt", "InterestExpense",
+                     "InterestExpenseNonoperating"],
+    "tax_exp":     ["IncomeTaxExpenseBenefit"],
+    "pretax":      ["IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest",
+                    "IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndIncomeLossFromEquityMethodInvestments"],
     # balance-sheet concepts for Altman-Z / Piotroski / ROIC (signal-quality sprint)
     "assets":         ["Assets"],
     "assets_current": ["AssetsCurrent"],
@@ -70,6 +81,12 @@ IFRS_CONCEPTS = {
     "long_debt":   ["NoncurrentBorrowingsAndCurrentPortionOfNoncurrentBorrowings", "Borrowings"],
     "cash":        ["CashAndCashEquivalents"],
     "shares":      [],                                    # handled by current_shares()
+    "short_debt":  ["CurrentBorrowingsAndCurrentPortionOfNoncurrentBorrowings",
+                    "ShorttermBorrowings", "CurrentPortionOfLongtermBorrowings"],
+    "op_leases":   ["LeaseLiabilities", "NoncurrentLeaseLiabilities"],
+    "interest_exp": ["InterestExpense", "FinanceCosts"],
+    "tax_exp":     ["IncomeTaxExpenseContinuingOperations"],
+    "pretax":      ["ProfitLossBeforeTax"],
     "assets":         ["Assets"],
     "assets_current": ["CurrentAssets"],
     "liab_current":   ["CurrentLiabilities"],

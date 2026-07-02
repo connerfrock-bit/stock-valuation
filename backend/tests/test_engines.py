@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from common import ev_present_value
+from common import ev_present_value, effective_tax, cost_of_debt
 from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim,
                      warranted_fit, warranted_value, triangulate)
 
@@ -26,6 +26,42 @@ class TestRates(unittest.TestCase):
 
     def test_wacc_degenerate_returns_re(self):
         self.assertAlmostEqual(wacc_of(0, 0, 0.10, 0.05, 0.21), 0.10)
+
+
+class TestEffectiveTax(unittest.TestCase):
+    def test_mean_of_clean_years(self):
+        r = effective_tax({2023: 21, 2024: 24}, {2023: 100, 2024: 100})
+        self.assertAlmostEqual(r, 0.225)
+
+    def test_clamped_to_band(self):
+        self.assertAlmostEqual(effective_tax({2024: 50}, {2024: 100}), 0.35)   # cap
+        self.assertAlmostEqual(effective_tax({2024: 2}, {2024: 100}), 0.10)    # floor
+
+    def test_loss_and_benefit_years_skipped(self):
+        # 2023: pretax loss; 2024: net tax benefit — neither has a meaningful rate
+        r = effective_tax({2023: 10, 2024: -5, 2025: 20},
+                          {2023: -100, 2024: 100, 2025: 100})
+        self.assertAlmostEqual(r, 0.20)                    # only 2025 counts
+
+    def test_fallback_when_unmeasurable(self):
+        self.assertAlmostEqual(effective_tax({}, {}), 0.21)
+        self.assertAlmostEqual(effective_tax({2024: -5}, {2024: -100}, fallback=0.25), 0.25)
+
+
+class TestCostOfDebt(unittest.TestCase):
+    def test_effective_rate(self):
+        self.assertAlmostEqual(cost_of_debt(5, 100, rf=0.04, spread=0.01), 0.05)
+
+    def test_floored_at_rf_plus_50bp(self):
+        self.assertAlmostEqual(cost_of_debt(0.1, 100, rf=0.04, spread=0.01), 0.045)
+
+    def test_capped(self):
+        self.assertAlmostEqual(cost_of_debt(30, 100, rf=0.04, spread=0.01), 0.15)
+
+    def test_fallback_when_unmeasurable(self):
+        self.assertAlmostEqual(cost_of_debt(None, 100, rf=0.04, spread=0.01), 0.05)
+        self.assertAlmostEqual(cost_of_debt(5, 0, rf=0.04, spread=0.01), 0.05)
+        self.assertAlmostEqual(cost_of_debt(-2, 100, rf=0.04, spread=0.01), 0.05)
 
 
 class TestPresentValueKernel(unittest.TestCase):
