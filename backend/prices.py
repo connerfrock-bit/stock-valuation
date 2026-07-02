@@ -4,7 +4,7 @@ plus ^GSPC (rolling betas) and ^TNX (historical 10Y yield = risk-free at date D)
 Delisted names that Yahoo no longer serves are LOGGED — that residual survivorship
 gap is quantified by the backtest, never hidden. stdlib only.  python prices.py
 """
-import json, sqlite3, time, urllib.parse
+import json, sqlite3, sys, time, urllib.parse
 from common import DB_PATH, http_text
 
 
@@ -31,17 +31,17 @@ def fetch_monthly(symbol, rng="15y"):
     return rows, splits
 
 
-def main():
+def main(suf=""):
     con = sqlite3.connect(DB_PATH)
     con.executescript("""
-    DROP TABLE IF EXISTS price_monthly;
-    CREATE TABLE price_monthly(ticker TEXT, month TEXT, close REAL, adjclose REAL,
+    CREATE TABLE IF NOT EXISTS price_monthly(ticker TEXT, month TEXT, close REAL, adjclose REAL,
         PRIMARY KEY (ticker, month));
-    DROP TABLE IF EXISTS splits;
-    CREATE TABLE splits(ticker TEXT, sdate TEXT, factor REAL, PRIMARY KEY (ticker, sdate));
+    CREATE TABLE IF NOT EXISTS splits(ticker TEXT, sdate TEXT, factor REAL, PRIMARY KEY (ticker, sdate));
     """)
-    names = (DB_PATH.parent / "membership_names.txt").read_text().split()
-    symbols = names + ["^GSPC", "^TNX"]
+    names = (DB_PATH.parent / f"membership_names{suf}.txt").read_text().split()
+    have = {r[0] for r in con.execute("SELECT DISTINCT ticker FROM price_monthly")}
+    names = [n for n in names if n not in have]           # incremental: only new symbols
+    symbols = names + [s for s in ("^GSPC", "^TNX") if s not in have]
     ok, missing = 0, []
     for i, s in enumerate(symbols, 1):
         try:
@@ -69,4 +69,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main("_sp500" if len(sys.argv) > 1 and sys.argv[1] == "sp500" else "")

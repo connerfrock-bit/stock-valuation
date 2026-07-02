@@ -54,7 +54,9 @@ def cagr(series, years=5):
     yrs = sorted(series)
     a = yrs[0] if len(yrs) <= years else yrs[-1 - years]
     b = yrs[-1]
-    if b - a <= 0 or series[a] <= 0: return None
+    # both endpoints must be positive — a negative ratio to a fractional power
+    # yields a COMPLEX number (insurers can report negative annual revenue)
+    if b - a <= 0 or series[a] <= 0 or series[b] <= 0: return None
     return (series[b] / series[a]) ** (1 / (b - a)) - 1
 
 def avg_margin(ebit, revenue, years=7):

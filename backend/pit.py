@@ -6,7 +6,7 @@ exactly the rows with filed <= D. Non-USD reporters are excluded from the backte
 (historical FX would be another approximation layer) and counted, not hidden.
 stdlib only.   python pit.py     (run membership.py first)
 """
-import json, sqlite3, time
+import json, sqlite3, sys, time
 from common import DB_PATH
 from ingest_v1 import (CONCEPTS, IFRS_CONCEPTS, ANNUAL_FORMS, SEC_UA,
                        http_json, load_ticker_map, choose_currency)
@@ -39,19 +39,19 @@ def annual_vintages(ns, tags, ccy):
     return out
 
 
-def main():
+def main(suf=""):
     cikmap = load_ticker_map()
-    names = (DB_PATH.parent / "membership_names.txt").read_text().split()
+    names = (DB_PATH.parent / f"membership_names{suf}.txt").read_text().split()
     con = sqlite3.connect(DB_PATH)
     con.executescript("""
-    DROP TABLE IF EXISTS financials_pit;
-    CREATE TABLE financials_pit(
+    CREATE TABLE IF NOT EXISTS financials_pit(
         ticker TEXT, concept TEXT, fy INTEGER, end_date TEXT, filed TEXT, value REAL,
         PRIMARY KEY (ticker, concept, fy, filed));
     CREATE INDEX IF NOT EXISTS pit_idx ON financials_pit(ticker, filed);
-    DROP TABLE IF EXISTS pit_meta;
-    CREATE TABLE pit_meta(ticker TEXT PRIMARY KEY, fin_currency TEXT, status TEXT);
+    CREATE TABLE IF NOT EXISTS pit_meta(ticker TEXT PRIMARY KEY, fin_currency TEXT, status TEXT);
     """)
+    done = {t for (t,) in con.execute("SELECT ticker FROM pit_meta WHERE status='ok'")}
+    names = [n for n in names if n not in done]           # incremental: only new names
 
     ok = no_cik = non_usd = failed = 0
     for i, t in enumerate(names, 1):
@@ -109,4 +109,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main("_sp500" if len(sys.argv) > 1 and sys.argv[1] == "sp500" else "")

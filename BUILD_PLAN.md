@@ -130,5 +130,20 @@ Honesty rules: never a single fair value without its range · agreement always b
   avg coverage (survivorship residue), rf fallback 2.5% after mid-2024 (^TNX gap), signal
   designed after the sample.
 
-## Phase 8 — Expand & harden
-- [ ] Scale Nasdaq-100 → NYSE · daily refresh/caching · per-company QA sanity panel
+## Phase 8 — Universe expansion ✅ (S&P 500 backtest) — VERDICT: MARKET-MATCHING, NO EDGE
+- [x] Harness generalized (membership/prices/pit/backtest all take a universe arg; incremental fetches)
+- [x] S&P 500 survivorship-free membership: 46 snapshots, 720 distinct names (220 past members),
+      GICS sectors captured → real sector anchors for the warranted engine
+- [x] Data: +475 price series (106k month-rows) · +459 PIT names (415k total vintage rows)
+      · 117 price-missing + 126 no-CIK delisted names quantified (incl. SIVB/FRC — the 2023
+      bank failures are ABSENT, which flatters financials results; disclosed)
+- [x] **RIM added to the backtest signal** (router-gated) — finally applicable in a bank-rich universe
+- [x] Dashboard: universe toggle (NASDAQ-100 / S&P 500) + dynamic honest verdict banner
+- **RESULT (2016–2026): 13.49% vs 13.39% — market-matching.** Same signal that lost −5.3%/yr
+  in the Nasdaq is neutral in the value-richer S&P 500 → the universe hypothesis was right
+  directionally, but still NO deployable alpha. Coherent method pattern: **RIM 54% hit /
+  +0.15%/q and Reverse-DCF gap 54% / +0.11%/q are the only >50% methods** — the two most
+  theoretically-grounded engines. Deep cheapness (EPV −0.30%/q) still doesn't pay.
+- [ ] Later: full-NYSE *live screening* universe (backtest stays constituent-based for honesty)
+      · daily refresh/caching · per-company QA panel · signal research (RIM+revDCF-weighted
+      composite, quality-within-value, momentum overlay) using this harness as the lab

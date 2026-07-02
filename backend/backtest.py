@@ -10,7 +10,7 @@ import json, sqlite3, statistics, sys
 from datetime import date
 from common import DB_PATH, CFG, cagr
 from engines import (cost_of_equity, wacc_of, ev_present_value, reverse_dcf,
-                     epv, warranted_fit, warranted_value, triangulate)
+                     epv, rim, warranted_fit, warranted_value, triangulate)
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -22,7 +22,7 @@ START = "2016-03-31"
 
 
 # ---------------- data access ----------------
-def load_all(con):
+def load_all(con, suf):
     pit = {}
     for t, c, fy, end, filed, v in con.execute(
             "SELECT ticker, concept, fy, end_date, filed, value FROM financials_pit"):
@@ -38,9 +38,12 @@ def load_all(con):
     for t, d, f in con.execute("SELECT ticker, sdate, factor FROM splits"):
         spl.setdefault(t, []).append((d, f))
     mem = {}
-    for q, t in con.execute("SELECT qdate, ticker FROM membership"):
+    for q, t in con.execute(f"SELECT qdate, ticker FROM membership{suf}"):
         mem.setdefault(q, set()).add(t)
-    sectors = dict(con.execute("SELECT ticker, sector FROM companies"))
+    try:
+        sectors = dict(con.execute(f"SELECT ticker, sector FROM sectors{suf}"))
+    except sqlite3.OperationalError:
+        sectors = dict(con.execute("SELECT ticker, sector FROM companies"))
     status = dict(con.execute("SELECT ticker, status FROM pit_meta"))
     return pit, px, adj, spl, mem, sectors, status
 
@@ -151,6 +154,12 @@ def signal(t, D, month, pit, px, adj, spl, sectors, rf, adj_mkt):
     roe = (sum(ni[y] / eq[y] for y in roe_yrs if eq[y] and eq[y] > 0) / len(roe_yrs)) if roe_yrs else None
     lev = (-(ndebt) / ebit_now) if ebit_now and ebit_now > 0 else None
 
+    # RIM — router-gated exactly like live; in a bank-rich universe it finally applies
+    book_ps = (latest(eq) / shares) if (latest(eq) and latest(eq) > 0) else None
+    rim_ps = None
+    if (book_ps and roe is not None and roe <= 0.40 and book_ps / price >= 0.15):
+        rim_ps = rim(book_ps, roe, re_, 10)
+
     flags = 0
     ry = sorted(rev)
     if len(ry) >= 4 and rev[ry[-1]] < rev[ry[-4]]:
@@ -171,7 +180,7 @@ def signal(t, D, month, pit, px, adj, spl, sectors, rf, adj_mkt):
     return dict(t=t, price=price, shares=shares, mcap=mcap, sector=sectors.get(t),
                 g1=g1, g_tr=g_tr, om=om, roe=roe, lev=lev, fcf_margin=fcf_margin,
                 ebit_now=ebit_now, debt=debt, cash=cash, dcf=dcf_ps, epv=epv_ps,
-                impl=impl, flags=flags)
+                rim=rim_ps, impl=impl, flags=flags)
 
 
 def pct_rank(sorted_vals, v):
@@ -202,7 +211,8 @@ def build_quarter(D, month, members, pit, px, adj, spl, sectors, rf, adj_mkt):
     for s in sigs:
         warr = warranted_value(wfit, s["sector"] or "UNKNOWN", s["g1"], s["om"] or 0.0,
                                s["ebit_now"], s["cash"], s["debt"], s["shares"])
-        tri = triangulate({"DCF": s["dcf"], "Warranted": warr}, s["epv"], s["price"])
+        tri = triangulate({"DCF": s["dcf"], "RIM": s["rim"], "Warranted": warr},
+                          s["epv"], s["price"])
         if not tri:
             continue
         ps = [pct_rank(dims[k], s[k]) for k in dims]
@@ -216,6 +226,7 @@ def build_quarter(D, month, members, pit, px, adj, spl, sectors, rf, adj_mkt):
                         dcf_up=(s["dcf"] / s["price"] - 1) if s["dcf"] else None,
                         warr_up=(warr / s["price"] - 1) if warr else None,
                         epv_up=(s["epv"] / s["price"] - 1) if s["epv"] else None,
+                        rim_up=(s["rim"] / s["price"] - 1) if s["rim"] else None,
                         rev_gap=gap))
     return out
 
@@ -230,7 +241,7 @@ def simulate(quarters, ranked, fwd):
     prev_basket = set()
     turnover = []
     per_method = {k: {"hit": 0, "n": 0, "excess": []} for k in
-                  ("score", "dcf_up", "warr_up", "epv_up", "rev_gap")}
+                  ("score", "dcf_up", "warr_up", "epv_up", "rim_up", "rev_gap")}
     for i in range(len(quarters) - 1):
         D = quarters[i]
         rows = [r for r in ranked.get(D, []) if (D, r["t"]) in fwd]
@@ -290,10 +301,12 @@ def stats_from(curve, used, hits, turnover):
             "avgNames": round(sum(u[3] for u in used) / n, 1)}
 
 
-def main():
+def main(universe="ndx"):
+    suf = "_sp500" if universe == "sp500" else ""
     con = sqlite3.connect(DB_PATH)
-    pit, px, adj, spl, mem, sectors, status = load_all(con)
+    pit, px, adj, spl, mem, sectors, status = load_all(con, suf)
     con.close()
+    print(f"Universe: {universe}  ({len(mem)} snapshots)")
 
     quarters = sorted(q for q in mem if q >= START)
     tnx = px.get("^TNX", {})
@@ -329,7 +342,7 @@ def main():
 
     pm = []
     label = {"score": "Composite score", "dcf_up": "DCF upside", "warr_up": "Warranted upside",
-             "epv_up": "EPV-floor upside", "rev_gap": "Reverse-DCF gap"}
+             "epv_up": "EPV-floor upside", "rim_up": "RIM upside", "rev_gap": "Reverse-DCF gap"}
     for k, agg in per_method.items():
         if agg["n"]:
             pm.append({"method": label[k], "hitRate": round(agg["hit"] / agg["n"], 3),
@@ -340,7 +353,8 @@ def main():
     n_missing = sum(1 for s in status.values() if s != "ok")
     payload = {
         "meta": {
-            "ranAt": date.today().isoformat(), "start": quarters[0], "end": quarters[-1],
+            "ranAt": date.today().isoformat(), "universe": universe,
+            "start": quarters[0], "end": quarters[-1],
             "rebalance": "quarterly", "portfolio": "top quintile by composite score, equal-weight",
             "benchmark": "equal-weight of all covered members",
             "avgCoverage": round(avg_cov, 3), "namesExcluded": n_missing,
@@ -354,13 +368,13 @@ def main():
         },
         "coverage": coverage, "curve": curve, "stats": st, "perMethod": pm,
     }
-    out = DB_PATH.parent / "backtest.json"
+    out = DB_PATH.parent / f"backtest{suf}.json"
     out.write_text(json.dumps(payload, indent=1), encoding="utf-8")
     fe = DB_PATH.parent.parent.parent / "frontend" / "public"
     if fe.is_dir():
-        (fe / "backtest.json").write_text(json.dumps(payload), encoding="utf-8")
+        (fe / f"backtest{suf}.json").write_text(json.dumps(payload), encoding="utf-8")
 
-    print(f"\n===== BACKTEST {quarters[0]} → {quarters[-1]} =====")
+    print(f"\n===== BACKTEST [{universe}] {quarters[0]} → {quarters[-1]} =====")
     print(f"Strategy CAGR {st['stratCAGR']*100:6.2f}%   vs benchmark {st['benchCAGR']*100:6.2f}%   "
           f"({st['quarters']} quarters, avg {st['avgNames']:.0f} names)")
     print(f"Hit rate {st['hitRate']*100:.0f}% · Sharpe {st['stratSharpe']} vs {st['benchSharpe']} · "
@@ -373,4 +387,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main("sp500" if len(sys.argv) > 1 and sys.argv[1] == "sp500" else "ndx")

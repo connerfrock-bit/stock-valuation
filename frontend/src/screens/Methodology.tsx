@@ -91,14 +91,23 @@ const ENGINES: Engine[] = [
   },
 ];
 
+const UNIVERSES: [string, string, string][] = [
+  ['ndx', 'backtest.json', 'NASDAQ-100'],
+  ['sp500', 'backtest_sp500.json', 'S&P 500'],
+];
+
 export function Methodology({ meta }: { meta: Meta }) {
-  const [bt, setBt] = useState<Backtest | null>(null);
+  const [bts, setBts] = useState<Record<string, Backtest | null>>({});
+  const [uni, setUni] = useState('ndx');
   useEffect(() => {
-    fetch(`${import.meta.env.BASE_URL}backtest.json`)
-      .then(r => (r.ok ? r.json() : null))
-      .then(setBt)
-      .catch(() => setBt(null));
+    for (const [k, f] of UNIVERSES) {
+      fetch(`${import.meta.env.BASE_URL}${f}`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => setBts(p => ({ ...p, [k]: d })))
+        .catch(() => {});
+    }
   }, []);
+  const bt = bts[uni] ?? null;
 
   const assumptions = [
     { label: 'Risk-free (10Y)', value: (meta.riskFree * 100).toFixed(2) + '%', src: meta.riskFreeSource },
@@ -124,8 +133,18 @@ export function Methodology({ meta }: { meta: Meta }) {
       {/* backtest — real results (honest even when negative) or empty state */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 18, marginBottom: 18 }}>
         <div style={{ ...card, padding: '18px 20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: C.sec }}>Backtest equity curve</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.sec }}>Backtest equity curve</div>
+              {UNIVERSES.filter(([k]) => bts[k]).map(([k, , label]) => (
+                <span key={k} onClick={() => setUni(k)} style={{
+                  fontSize: 10.5, cursor: 'pointer', borderRadius: 5, padding: '3px 9px',
+                  border: `1px solid ${uni === k ? hexA(C.blue, 0.4) : C.borderHi}`,
+                  background: uni === k ? 'rgba(68,147,248,0.15)' : 'transparent',
+                  color: uni === k ? '#fff' : C.mid, fontWeight: 600,
+                }}>{label}</span>
+              ))}
+            </div>
             {bt && (
               <div style={{ display: 'flex', gap: 14, fontSize: 11 }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -144,10 +163,14 @@ export function Methodology({ meta }: { meta: Meta }) {
                 marginTop: 12, padding: '10px 13px', borderRadius: 8, fontSize: 12, lineHeight: 1.6,
                 background: hexA(C.amber, 0.08), border: `1px solid ${hexA(C.amber, 0.35)}`, color: '#e8c98a',
               }}>
-                <b>Honest verdict: no edge demonstrated.</b> Over {bt.meta.start.slice(0, 4)}–{bt.meta.end.slice(0, 4)},
-                the composite top-quintile returned {(bt.stats.stratCAGR * 100).toFixed(1)}%/yr vs{' '}
-                {(bt.stats.benchCAGR * 100).toFixed(1)}%/yr for equal-weight — value-tilted selection
-                underperformed in this growth-led universe. Treat every screen as a research aid, not a signal with proven alpha.
+                <b>Honest verdict: {bt.stats.stratCAGR - bt.stats.benchCAGR < -0.01
+                  ? 'no edge — value-tilted selection underperformed this growth-led universe.'
+                  : bt.stats.stratCAGR - bt.stats.benchCAGR > 0.01
+                  ? 'modest outperformance — but within the noise and coverage caveats; not proof of alpha.'
+                  : 'market-matching — the signal neither helped nor hurt here; no edge demonstrated.'}</b>{' '}
+                Over {bt.meta.start.slice(0, 4)}–{bt.meta.end.slice(0, 4)}, the composite top-quintile returned{' '}
+                {(bt.stats.stratCAGR * 100).toFixed(1)}%/yr vs {(bt.stats.benchCAGR * 100).toFixed(1)}%/yr
+                for equal-weight. Treat every screen as a research aid, not a signal with proven alpha.
               </div>
             </>
           ) : (
