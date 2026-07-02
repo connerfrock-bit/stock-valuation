@@ -100,10 +100,16 @@ Honesty rules: never a single fair value without its range · agreement always b
 - [ ] FastAPI (or stdlib http.server) serving output.json → **Milestone C** formal API
 
 ## Phase 6 — Frontend port (React/TS) — swap mock→real
-- [ ] Scaffold Vite + React + TS; port design tokens + 10 components + 4 screens
-- [ ] Wire the dead buttons (Export CSV, filing links, watchlist persistence, settings, universe picker)
-- [ ] Point DataSource at the live API
-- [ ] **Milestone D:** the dashboard runs on real numbers
+- [x] Scaffold Vite + React + TS (Node 24.18 via winget); strict TS, clean build ✅
+- [x] Port design tokens + components (RangeBar ⭐, ConfMeter, Quality gauges, FlagChips,
+      SectorTag, FilterRail, Sparkline, floating Tooltip) + all 4 screens ✅
+- [x] Dead buttons wired: **Export CSV** (real download), **watchlist** (localStorage),
+      **EDGAR filing links** (per-CIK), settings→Methodology, '/' focuses search ✅
+- [x] Data source = `public/output.json`, auto-synced by value.py; contract enriched with
+      `cik` + real 8-yr `trends` (revenue, op margin, FCF, book equity — as filed) ✅
+- [x] Honest additions beyond the prototype: backtest shown as "not yet run" (no fake curve),
+      FX-at-spot disclosure on non-USD filers, excluded names listed with reasons ✅
+- [x] **Milestone D: the dashboard runs on real numbers** ✅  (`frontend/dev.cmd` → localhost:5173)
 
 ## Phase 7 — Backtest (L11)
 - [ ] Point-in-time, survivorship-free harness → real per-method reliability + weights

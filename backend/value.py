@@ -33,8 +33,8 @@ def collect(con, rf, erp, rd, tax, betas):
     rows, excluded = [], []
     for (t,) in con.execute("SELECT ticker FROM companies ORDER BY ticker"):
         name, price, f = load_company(con, t)
-        sector, shares_out, fin_ccy = con.execute(
-            "SELECT sector, shares_out, fin_currency FROM companies WHERE ticker=?",
+        sector, shares_out, fin_ccy, cik = con.execute(
+            "SELECT sector, shares_out, fin_currency, cik FROM companies WHERE ticker=?",
             (t,)).fetchone()
         rev = f.get("revenue", {})
         shares = shares_out or latest(f.get("shares", {}))
@@ -76,7 +76,7 @@ def collect(con, rf, erp, rd, tax, betas):
                 if (ebit_now is not None and inv_cap > 0) else None)
 
         rows.append(dict(
-            t=t, name=name, sector=sector, fin_ccy=fin_ccy or "USD",
+            t=t, name=name, sector=sector, fin_ccy=fin_ccy or "USD", cik=cik,
             price=price, shares=shares, mcap=mcap,
             beta=beta, re_=re_, wacc=wacc, rev=rev, rev_now=rev_now,
             fcf_norm=fcf_norm, fcf_last=fcf_last, fcf_margin=fcf_margin,
@@ -171,6 +171,28 @@ def rev_volatility(r):
 
 
 ADR_STRUCTURE_RISK = {"PDD"}          # VIE/ADR structures the numbers can't see
+
+
+def trend_series(f):
+    """Real 8-yr trend series for the dashboard sparklines (None where unavailable)."""
+    yrs = sorted(f.get("revenue", {}))[-8:]
+    rev, ebit = f.get("revenue", {}), f.get("ebit", {})
+    cfo, cap, sbc = f.get("cfo", {}), f.get("capex", {}), f.get("sbc", {})
+    eq = f.get("equity", {})
+    def ser(fn):
+        out = []
+        for y in yrs:
+            v = fn(y)
+            out.append(None if v is None else round(v, 3))
+        return out
+    return {
+        "years": yrs,
+        "revenueB": ser(lambda y: rev[y] / 1e9 if y in rev else None),
+        "opMargin": ser(lambda y: ebit[y] / rev[y] if (y in ebit and rev.get(y)) else None),
+        "fcfB": ser(lambda y: (cfo[y] - cap[y] - sbc.get(y, 0.0)) / 1e9
+                    if (y in cfo and y in cap) else None),
+        "equityB": ser(lambda y: eq[y] / 1e9 if y in eq else None),
+    }
 
 
 # ---------------- quality (cross-sectional percentiles) ----------------
@@ -325,6 +347,7 @@ def main():
             "piotroski": fscore, "piotroskiN": fn,
             "nde": round(ndebt / ebitda, 2) if ebitda > 0 else None,
             "flags": flags, "score": round(score, 4),
+            "cik": r["cik"], "trends": trend_series(r["f"]),
             "methods": [
                 {"key": "dcf", "name": "DCF", "value": _r2(dcf_p50),
                  "applicable": dcf_p50 is not None,
@@ -366,6 +389,10 @@ def main():
     out_path.write_text(json.dumps(payload, indent=1), encoding="utf-8")
     print(f"\nExcluded ({len(excluded)}): " + ", ".join(t for t, _ in excluded))
     print(f"Wrote {len(out)} Company records → {out_path}")
+    fe_public = DB_PATH.parent.parent.parent / "frontend" / "public"
+    if fe_public.is_dir():                                # keep the dashboard's copy fresh
+        (fe_public / "output.json").write_text(json.dumps(payload), encoding="utf-8")
+        print(f"Synced → {fe_public / 'output.json'}")
 
 
 def _r2(v):

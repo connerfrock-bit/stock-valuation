@@ -1,0 +1,186 @@
+import { C, MONO, upColor } from '../theme';
+import { fmtPrice, fmtPct, fmtMcapB, na } from '../format';
+import { FilterRail } from '../components/FilterRail';
+import { RangeBar } from '../components/RangeBar';
+import { ConfMeter, QualityGauge } from '../components/Meters';
+import { FlagChips } from '../components/FlagChips';
+import { SectorTag } from '../components/SectorTag';
+import type { Company, Filters, SortKey } from '../types';
+
+const PRESETS: [string, Partial<Filters>][] = [
+  ['Deep value', { upside: 25, minConf: 3, hideTraps: false }],
+  ['Quality compounders', { minQ: 78, upside: 0, hideTraps: true }],
+  ['Clean & cheap', { upside: 10, minQ: 65, hideTraps: true }],
+];
+
+export function Screener(props: {
+  rows: Company[];
+  filters: Filters;
+  setFilters: (f: Filters) => void;
+  allSectors: string[];
+  sortKey: SortKey; sortDir: 'asc' | 'desc';
+  setSort: (k: SortKey) => void;
+  showMultiples: boolean; setShowMultiples: (b: boolean) => void;
+  watch: Record<string, boolean>; toggleWatch: (t: string) => void;
+  selected: string | null;
+  openDeep: (t: string) => void;
+}) {
+  const { rows, filters, setFilters, allSectors, sortKey, sortDir, setSort,
+    showMultiples, setShowMultiples, watch, toggleWatch, selected, openDeep } = props;
+
+  const exportCsv = () => {
+    const head = ['ticker', 'name', 'sector', 'price', 'low', 'mid', 'high', 'upside',
+      'confidence', 'quality', 'impliedGrowth', 'trailingGrowth', 'pe', 'evEbitda',
+      'fcfYield', 'mcapB', 'flags', 'score'];
+    const lines = rows.map(c => [
+      c.ticker, `"${c.name}"`, `"${c.sector}"`, c.price, c.low, c.mid, c.high,
+      (c.upside * 100).toFixed(1) + '%', c.conf, c.quality,
+      c.impliedGrowth === null ? '' : (c.impliedGrowth * 100).toFixed(1) + '%',
+      c.trailingG === null ? '' : (c.trailingG * 100).toFixed(1) + '%',
+      c.pe ?? '', c.evebitda ?? '', c.fcfy === null ? '' : (c.fcfy * 100).toFixed(1) + '%',
+      c.mcapB, `"${c.flags.join('; ')}"`, c.score,
+    ].join(','));
+    const blob = new Blob([head.join(',') + '\n' + lines.join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'fairvalue_screen.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  const th = (label: string, key: SortKey | null, align: 'left' | 'right' = 'right', extra?: React.CSSProperties) => (
+    <th key={label} onClick={key ? () => setSort(key) : undefined} style={{
+      textAlign: align, padding: '10px 12px', fontSize: 10, letterSpacing: '.05em',
+      textTransform: 'uppercase', color: C.dim, fontWeight: 600,
+      cursor: key ? 'pointer' : 'default', borderBottom: `1px solid ${C.border}`,
+      userSelect: 'none', whiteSpace: 'nowrap', background: C.panel, ...extra,
+    }}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        {label}
+        <span style={{ color: C.green, fontSize: 9 }}>
+          {key && sortKey === key ? (sortDir === 'desc' ? '▼' : '▲') : ''}
+        </span>
+      </span>
+    </th>
+  );
+
+  const chip: React.CSSProperties = {
+    fontSize: 11, color: C.mid, cursor: 'pointer',
+    border: `1px solid ${C.borderHi}`, borderRadius: 6, padding: '5px 10px',
+  };
+
+  return (
+    <div style={{ minHeight: '100%', display: 'flex' }}>
+      <FilterRail filters={filters} setFilters={setFilters} allSectors={allSectors} />
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        {/* toolbar */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, padding: '11px 18px',
+          borderBottom: `1px solid ${C.border}`, flexWrap: 'wrap',
+        }}>
+          <div style={{ fontSize: 14, fontWeight: 600, marginRight: 4 }}>Screener</div>
+          <div style={{ fontFamily: MONO, fontSize: 11, color: C.dim, marginRight: 6 }}>{rows.length} matches</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {PRESETS.map(([label, patch]) => (
+              <div key={label} style={chip} onClick={() => setFilters({ ...filters, ...patch })}>{label}</div>
+            ))}
+          </div>
+          <div style={{ flex: 1 }} />
+          <div style={chip} onClick={() => setShowMultiples(!showMultiples)}>
+            {showMultiples ? 'Hide' : 'Show'} multiples
+          </div>
+          <div style={{ ...chip, color: C.sec, display: 'flex', alignItems: 'center', gap: 6 }} onClick={exportCsv}>
+            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" /><line x1={12} y1={15} x2={12} y2={3} />
+            </svg>
+            Export CSV
+          </div>
+        </div>
+
+        {/* table */}
+        <div style={{ flex: 1, overflow: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+            <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
+              <tr>
+                {th('Company', 'ticker', 'left', { paddingLeft: 16 })}
+                {th('Price', 'price')}
+                {th('Fair-value range', null, 'left')}
+                {th('Upside', 'upside')}
+                {th('Agreement', 'conf', 'left')}
+                {th('Quality', 'quality', 'left')}
+                {th('Flags', null, 'left')}
+                {showMultiples && th('P/E', 'pe', 'right', { background: C.inset })}
+                {showMultiples && th('EV/EBITDA', null, 'right', { background: C.inset })}
+                {showMultiples && th('FCF yield', null, 'right', { background: C.inset })}
+                {th('Mkt cap', 'mcapB', 'right', { paddingRight: 16 })}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(c => {
+                const starred = !!watch[c.ticker];
+                return (
+                  <tr key={c.ticker} onClick={() => openDeep(c.ticker)} style={{
+                    borderBottom: `1px solid ${C.rowBorder}`, cursor: 'pointer',
+                    background: selected === c.ticker ? 'rgba(68,147,248,0.06)' : 'transparent',
+                  }}>
+                    <td style={{ padding: '7px 10px 7px 16px', borderRight: `1px solid ${C.rowBorder}` }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                        <span onClick={e => { e.stopPropagation(); toggleWatch(c.ticker); }}
+                          style={{ color: starred ? C.amber : C.dim, fontSize: 13, lineHeight: 1 }}>
+                          {starred ? '★' : '☆'}
+                        </span>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                            <span style={{ fontFamily: MONO, fontWeight: 600, fontSize: 12.5 }}>{c.ticker}</span>
+                            <SectorTag sector={c.sector} label={c.sectorShort} />
+                            {c.finCurrency !== 'USD' && (
+                              <span style={{ fontSize: 8.5, color: C.dim }}>{c.finCurrency}→USD</span>
+                            )}
+                          </div>
+                          <div style={{
+                            fontSize: 10.5, color: C.dim3, marginTop: 1, overflow: 'hidden',
+                            textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160,
+                          }}>{c.name}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: MONO }}>{fmtPrice(c.price)}</td>
+                    <td style={{ padding: '7px 12px', width: 180 }}><RangeBar c={c} /></td>
+                    <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: MONO, fontWeight: 600, color: upColor(c.upside) }}>
+                      {fmtPct(c.upside)}
+                    </td>
+                    <td style={{ padding: '7px 12px' }}><ConfMeter score={c.conf} /></td>
+                    <td style={{ padding: '7px 12px', width: 96 }}><QualityGauge q={c.quality} /></td>
+                    <td style={{ padding: '7px 12px' }}><FlagChips flags={c.flags} /></td>
+                    {showMultiples && (
+                      <>
+                        <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: MONO, color: C.mid, background: C.inset }}>
+                          {na(c.pe, v => v.toFixed(1))}
+                        </td>
+                        <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: MONO, color: C.mid, background: C.inset }}>
+                          {na(c.evebitda, v => v.toFixed(1))}
+                        </td>
+                        <td style={{ padding: '7px 10px', textAlign: 'right', fontFamily: MONO, color: C.mid, background: C.inset }}>
+                          {na(c.fcfy, v => (v * 100).toFixed(1) + '%')}
+                        </td>
+                      </>
+                    )}
+                    <td style={{ padding: '7px 16px 7px 12px', textAlign: 'right', fontFamily: MONO, color: C.mid }}>
+                      {fmtMcapB(c.mcapB)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {rows.length === 0 && (
+            <div style={{ padding: 60, textAlign: 'center', color: C.dim, fontSize: 13 }}>
+              No stocks match — loosen filters.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
