@@ -1,11 +1,16 @@
 """
 Nasdaq-100 constituent list (L0). Pulls the live components table from Wikipedia
-(ticker + GICS sector); falls back to a built-in list if the fetch/parse fails.
+(ticker + GICS sector). Robustness (Plan 7): every good parse is cached to disk;
+on Wikipedia failure the cache is used (a stale-but-real list beats the 50-name
+built-in); abnormal churn vs the cache warns loudly (parse-drift detector).
 stdlib only.  python universe.py  to inspect.
 """
-import re
+import json, re, time
 from html.parser import HTMLParser
+from pathlib import Path
 from common import http_text
+
+CACHE = Path(__file__).resolve().parent / "data" / "universe_cache.json"
 
 # Wikipedia's components table uses ICB industry names — map them to our sector scheme.
 ICB_MAP = {
@@ -81,12 +86,29 @@ def from_wikipedia():
 
 
 def get_universe():
+    cached = None
+    if CACHE.exists():
+        try:
+            cached = json.loads(CACHE.read_text(encoding="utf-8"))
+        except Exception:
+            cached = None
+    u = []
     try:
         u = from_wikipedia()
-        if len(u) >= 90:
-            return u, "Wikipedia (live)"
     except Exception as e:
         print(f"  ! Wikipedia fetch failed ({e!r})")
+    if len(u) >= 90:
+        if cached:
+            churn = {t for t, _, _ in cached["names"]} ^ {t for t, _, _ in u}
+            if len(churn) > max(8, len(cached["names"]) // 10):
+                print(f"  ⚠ universe churn vs cache {cached['date']}: {len(churn)} names "
+                      f"({', '.join(sorted(churn)[:10])}…) — verify the Wikipedia parse")
+        CACHE.parent.mkdir(parents=True, exist_ok=True)
+        CACHE.write_text(json.dumps({"date": time.strftime("%Y-%m-%d"), "names": u}),
+                         encoding="utf-8")
+        return u, "Wikipedia (live)"
+    if cached and len(cached.get("names", [])) >= 90:
+        return [tuple(x) for x in cached["names"]], f"cache ({cached['date']})"
     return FALLBACK, "built-in fallback"
 
 

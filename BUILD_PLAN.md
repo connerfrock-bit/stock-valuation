@@ -97,7 +97,9 @@ Honesty rules: never a single fair value without its range · agreement always b
 - [x] Composite score + ranked board — upside × conf × quality × trap-penalty ✅
 - [x] **`data/output.json`** — Company-contract records (the artifact the dashboard binds to) ✅
 - [x] **`data/report.html`** — self-contained dark QA dashboard (KPIs, search, sort, range bars) ✅
-- [ ] FastAPI (or stdlib http.server) serving output.json → **Milestone C** formal API
+- [x] ~~FastAPI (or stdlib http.server) serving output.json → **Milestone C** formal API~~
+      **CANCELLED (Plan 7):** static output.json + the share build serve the actual use
+      case; a server adds surface area with zero benefit at this scale.
 
 ## Phase 6 — Frontend port (React/TS) — swap mock→real
 - [x] Scaffold Vite + React + TS (Node 24.18 via winget); strict TS, clean build ✅
@@ -193,5 +195,12 @@ Honesty rules: never a single fair value without its range · agreement always b
       search. Residual lead: STANDALONE momentum tops the per-method table (NDX +2.03%/q
       at 51% hit — real but lumpy); stays a displayed diagnostic. Third published
       negative verdict. See WORKLOG.md.
-- [ ] Plan 7: robustness — Wikipedia parse caching/diff-guard, FRED DGS10 history for the
-      backtest rf, de-scope FastAPI, un-hardcode Nasdaq constants
+- [x] **Plan 7: robustness & de-scoping** ✅ — `rf_monthly` history (FRED-first, ^TNX
+      fallback, LOCF across the 2024-06→2026-06 Yahoo feed hole that had the backtest
+      silently using 2.5% while the real 10Y was ~4.3%); **v2w adoption re-validated
+      under corrected rf — holds on both universes** (SPX holdout +3.41pp · 88% hit).
+      Wikipedia parse caching + churn/shrink guards (universe + membership). Universe
+      un-hardcoded to [universe] toml (badges data-driven, zero literals in bundle).
+      Milestone C (FastAPI) formally cancelled. Warranted OLS reviewed and kept
+      (data-dependent, not zombie). Loss-maker revDCF deferred to a future feature plan.
+      See WORKLOG.md. **Phase 9 complete: 54 tests · model v2.1 · ledger armed.**

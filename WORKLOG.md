@@ -268,3 +268,42 @@ window. Until then it stays what it is — a displayed diagnostic, not a scored 
 **Meta-note:** this is the third honest negative verdict this project has published
 (Phase 7 no-edge, Plan 3 gap rejection, now L7). The harness is doing its job:
 cheap to test, hard to fool, and the dashboard renders whatever the evidence says.
+
+---
+
+## Plan 7 — Robustness & de-scoping (2026-07-02) ✅
+
+**1. Risk-free history fixed — and the backtest's biggest silent input error with it.**
+`^TNX` (and the whole CBOE yield family on Yahoo) has a feed hole from 2024-06 to
+2026-06; the backtest had been filling those ~8 quarters with a 2.5% constant while the
+real 10Y sat near 4.3% — flattering every fair value in exactly the holdout window.
+New `rf_monthly` table (`prices.refresh_rf`): FRED DGS10 first (authoritative; retried
+every run — self-heals when reachable), Yahoo `^TNX` re-fetch as fallback, and
+last-observation-carried-forward across feed-gap months (disclosed in caveats; LOCF at
+~4.3% is honest, the 2.5% constant was not). 215 months loaded through 2026-07.
+**Re-validated all scoring variants under corrected rf: the v2w adoption HOLDS on both
+universes** (NDX: v2w −1.03 full / +1.53 holdout, still the fit-window winner; SPX: v2w
++0.52 full / +3.41 holdout at 88% hit — strengthened). Plans 3 and 6 are rf-robust.
+
+**2. Wikipedia hardening.** `universe.py`: every good parse cached to
+`data/universe_cache.json`; on fetch failure the cache is used (a stale-but-real 101-name
+list beats the 50-name built-in fallback); churn >max(8, 10%) vs cache warns loudly
+(parse-drift detector). `membership.py`: parse-shrink guard vs `membership_cache.json` —
+a Wikipedia table-format change now announces itself before corrupting the backtest's
+membership walk-back.
+
+**3. Universe un-hardcoded.** `[universe]` section in assumptions.toml (name, min_mcap);
+`MIN_N100_MCAP` gone from value.py; `meta.universe` flows from config; both dashboard
+badges render `meta.universe` (verified: zero hardcoded literals in the built bundle).
+The live screener is now one toml edit away from a different universe.
+
+**4. De-scoped.** Milestone C (FastAPI) formally CANCELLED in BUILD_PLAN — static JSON +
+the share build serve the actual use case; a server is surface area with no benefit.
+The warranted engine's OLS was reviewed and KEPT (not zombie code: the sign guard zeroes
+coefficients only when the cross-section disagrees with the prior — data-dependent, and
+the S&P universe can activate it). Loss-maker coverage (revenue-based reverse-DCF for
+the excluded GAAP loss-makers) explicitly deferred to a future feature plan — it needs
+design care, not hygiene-sprint leftovers.
+
+**State at close: 54 tests green · model v2.1 · 12 runs in snapshot history · ledger
+armed · all Phase-9 plans complete.**

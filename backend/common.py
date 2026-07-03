@@ -9,7 +9,9 @@ except Exception:
 
 BASE       = Path(__file__).resolve().parent
 DB_PATH    = BASE / "data" / "fairvalue.db"
-CFG        = tomllib.load(open(BASE / "assumptions.toml", "rb"))["global"]
+_TOML      = tomllib.load(open(BASE / "assumptions.toml", "rb"))
+CFG        = _TOML["global"]
+UCFG       = _TOML.get("universe", {"name": "Universe", "min_mcap": 0.0})
 BROWSER_UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
 

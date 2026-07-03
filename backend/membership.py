@@ -9,7 +9,7 @@ Universes:
 
 python membership.py [ndx|sp500]
 """
-import re, sqlite3, sys, time
+import json, re, sqlite3, sys, time
 from datetime import date
 from common import DB_PATH, http_text
 from universe import get_universe, _Tables
@@ -117,6 +117,21 @@ def main(key):
     members, sectors, changes, suf, src = load_universe(key)
     print(f"[{key}] current members: {len(members)} [{src}]")
     print(f"[{key}] parsed {len(changes)} changes ({changes[-1][0]} → {changes[0][0]})")
+
+    # Plan 7 parse-drift guard: a Wikipedia table-format change shows up as a shrunken
+    # parse — warn against the last known-good counts before overwriting anything.
+    mc_path = DB_PATH.parent / "membership_cache.json"
+    try:
+        mcache = json.loads(mc_path.read_text(encoding="utf-8"))
+    except Exception:
+        mcache = {}
+    prev = mcache.get(key)
+    if prev and (len(members) < prev["members"] * 0.9 or len(changes) < prev["changes"] * 0.9):
+        print(f"⚠ [{key}] parse SHRANK vs {prev['date']}: members {prev['members']}→{len(members)}, "
+              f"changes {prev['changes']}→{len(changes)} — check Wikipedia's table format")
+    mcache[key] = {"members": len(members), "changes": len(changes),
+                   "date": date.today().isoformat()}
+    mc_path.write_text(json.dumps(mcache), encoding="utf-8")
 
     snaps, anomalies, cur, ci = {}, [], set(members), 0
     today = date.today()

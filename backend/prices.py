@@ -31,6 +31,34 @@ def fetch_monthly(symbol, rng="15y"):
     return rows, splits
 
 
+def refresh_rf(con):
+    """Historical monthly 10Y risk-free -> rf_monthly (Plan 7).
+       FRED DGS10 (authoritative, daily since 1962) first; if FRED is unreachable,
+       force-refetch ^TNX from Yahoo (the incremental fetch never refreshed it, which
+       left a mid-2024 → 2026 hole the backtest silently filled with 2.5%)."""
+    con.execute("CREATE TABLE IF NOT EXISTS rf_monthly(month TEXT PRIMARY KEY, rate REAL)")
+    rows, src = {}, None
+    try:
+        txt = http_text("https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10", timeout=20)
+        for line in txt.strip().splitlines()[1:]:
+            d, v = line.split(",")
+            if v.strip() and v.strip() != ".":
+                rows[d[:7]] = float(v) / 100.0            # last trading day of month wins
+        src = "FRED DGS10"
+    except Exception:
+        try:
+            monthly, _ = fetch_monthly("^TNX", rng="20y")
+            for m, c, _a in monthly:
+                rows[m] = c / 1000 if c > 20 else c / 100  # ^TNX quotes 10× in old data
+            src = "Yahoo ^TNX (FRED unreachable)"
+        except Exception as e:
+            print(f"rf history unavailable (FRED and Yahoo failed: {e!r}) — rf_monthly unchanged")
+            return
+    con.executemany("INSERT OR REPLACE INTO rf_monthly VALUES (?,?)", sorted(rows.items()))
+    con.commit()
+    print(f"rf_monthly: {len(rows)} months [{src}] through {max(rows)}")
+
+
 def main(suf=""):
     con = sqlite3.connect(DB_PATH)
     con.executescript("""
@@ -38,6 +66,7 @@ def main(suf=""):
         PRIMARY KEY (ticker, month));
     CREATE TABLE IF NOT EXISTS splits(ticker TEXT, sdate TEXT, factor REAL, PRIMARY KEY (ticker, sdate));
     """)
+    refresh_rf(con)
     names = (DB_PATH.parent / f"membership_names{suf}.txt").read_text().split()
     have = {r[0] for r in con.execute("SELECT DISTINCT ticker FROM price_monthly")}
     names = [n for n in names if n not in have]           # incremental: only new symbols

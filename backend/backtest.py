@@ -41,11 +41,15 @@ def load_all(con, suf):
     for q, t in con.execute(f"SELECT qdate, ticker FROM membership{suf}"):
         mem.setdefault(q, set()).add(t)
     try:
+        rfm = dict(con.execute("SELECT month, rate FROM rf_monthly"))
+    except sqlite3.OperationalError:
+        rfm = {}
+    try:
         sectors = dict(con.execute(f"SELECT ticker, sector FROM sectors{suf}"))
     except sqlite3.OperationalError:
         sectors = dict(con.execute("SELECT ticker, sector FROM companies"))
     status = dict(con.execute("SELECT ticker, status FROM pit_meta"))
-    return pit, px, adj, spl, mem, sectors, status
+    return pit, px, adj, spl, mem, sectors, status, rfm
 
 
 def series_asof(pit_t, concept, D):
@@ -416,19 +420,33 @@ def stats_from(curve, used, hits, turnover):
 def main(universe="ndx"):
     suf = "_sp500" if universe == "sp500" else ""
     con = sqlite3.connect(DB_PATH)
-    pit, px, adj, spl, mem, sectors, status = load_all(con, suf)
+    pit, px, adj, spl, mem, sectors, status, rfm = load_all(con, suf)
     con.close()
-    print(f"Universe: {universe}  ({len(mem)} snapshots)")
+    print(f"Universe: {universe}  ({len(mem)} snapshots · rf_monthly {len(rfm)} months)")
 
     quarters = sorted(q for q in mem if q >= START)
     tnx = px.get("^TNX", {})
     adj_mkt = adj.get("^GSPC", {})
 
+    import bisect
+    rf_keys = sorted(rfm)
+
+    def rf_at(month):
+        """rf_monthly first; gap months carry the last observed rate forward (the
+           Yahoo yield feed has a 2024-06→2026-06 hole — LOCF at ~4.3% is honest,
+           the old 2.5% constant was not); legacy ^TNX heuristic as last resort."""
+        if month in rfm:
+            return rfm[month]
+        i = bisect.bisect_right(rf_keys, month) - 1
+        if i >= 0:
+            return rfm[rf_keys[i]]
+        raw = tnx.get(month)
+        return (raw / 1000 if raw > 20 else raw / 100) if raw else 0.025
+
     sig_q, coverage = {}, []
     for D in quarters:
         month = D[:7]
-        raw_rf = tnx.get(month)
-        rf = (raw_rf / 1000 if raw_rf and raw_rf > 20 else raw_rf / 100) if raw_rf else 0.025
+        rf = rf_at(month)
         members = mem[D]
         sig_q[D] = build_quarter(D, month, members, pit, px, adj, spl, sectors, rf, adj_mkt)
         coverage.append({"d": D, "members": len(members), "signals": len(sig_q[D]),
@@ -502,7 +520,7 @@ def main(universe="ndx"):
                 f"Average signal coverage {avg_cov:.0%} of members; delisted names without price/EDGAR data are missing (residual survivorship bias, direction unknown).",
                 f"Scoring variant '{ADOPTED}' — see `validation` for every variant on fit (2016-21) / holdout (2022-26) windows.",
                 "Altman-Z and Piotroski excluded from the historical signal; DCF deterministic.",
-                "ERP constant at 5.0%; risk-free from ^TNX at each date; sector for departed names unknown (global multiple anchor).",
+                "ERP constant at 5.0%; risk-free = FRED DGS10 / ^TNX monthly history, feed-gap months carried forward from the last observation (2024-06→2026-06 hole ≈ 4.3%, not the old 2.5% constant); sector for departed names unknown (global multiple anchor).",
                 "Honesty note: the v2w reweighting was motivated by full-sample per-method stats (Phase 7/8), so the 'holdout' is not fully out-of-sample — the real test is the forward ledger.",
             ],
         },

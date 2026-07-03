@@ -9,7 +9,7 @@ ranked output + data/output.json (the Company contract the dashboard binds to).
 stdlib only.  Run after ingest_v1.py and betas.py:   python value.py
 """
 import datetime, json, sqlite3, statistics, sys
-from common import (CFG, DB_PATH, fetch_risk_free, load_company, latest, cagr,
+from common import (CFG, UCFG, DB_PATH, fetch_risk_free, load_company, latest, cagr,
                     avg_margin, avg_roe, effective_tax, cost_of_debt, money, pct)
 from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim,
                      warranted_fit, warranted_value, triangulate)
@@ -24,7 +24,7 @@ SHORT = {"Information Technology": "TECH", "Communication Services": "COMM",
          "Industrials": "INDU", "Financials": "FINL", "Real Estate": "REIT",
          "Materials": "MATL", "Energy": "ENGY", "Utilities": "UTIL"}
 
-MIN_N100_MCAP = 15e9          # smallest plausible Nasdaq-100 member — below this, suspect data
+# universe identity + plausibility floor come from assumptions.toml [universe] (Plan 7)
 
 
 # ---------------- pass 1: inputs ----------------
@@ -299,7 +299,7 @@ def trap_flags(r, z=None, fscore=None):
         flags.append("Cyclical revenue")
     if r["t"] in ADR_STRUCTURE_RISK:
         flags.append("VIE/ADR structure")
-    if r["mcap"] < MIN_N100_MCAP:
+    if r["mcap"] < UCFG["min_mcap"]:
         flags.append("Suspect share count")
     if r["stale"]:
         flags.append("Stale filings")
@@ -465,7 +465,7 @@ def main():
           f"(upside × confidence × quality × trap-penalty)")
 
     meta = {"asOf": asof, "riskFree": rf, "riskFreeSource": rf_src, "erp": erp,
-            "terminalG": term_g, "universe": "Nasdaq-100",
+            "terminalG": term_g, "universe": UCFG["name"],
             "covered": len(out), "excluded": [{"ticker": t, "why": w} for t, w in excluded]}
     payload = {"meta": meta, "companies": out}
     out_path = DB_PATH.parent / "output.json"

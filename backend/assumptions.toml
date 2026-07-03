@@ -24,3 +24,7 @@ min_wacc_minus_g     = 0.015    # clamp/skip when WACC - g is below this (TV exp
 
 # risk_free is pulled LIVE from FRED DGS10 — never hardcoded. Fallback only if the fetch fails.
 risk_free_fallback   = 0.043
+
+[universe]                      # Plan 7: the live-screener universe, no longer hardcoded
+name     = "Nasdaq-100"
+min_mcap = 15e9                 # smallest plausible member — below this, suspect share count

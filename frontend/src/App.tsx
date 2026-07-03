@@ -176,7 +176,7 @@ export default function App() {
             <div style={{
               fontFamily: MONO, fontSize: 9.5, letterSpacing: '.1em', color: C.mid,
               border: `1px solid ${C.borderHi}`, borderRadius: 4, padding: '2px 6px',
-            }}>NASDAQ·100</div>
+            }}>{data.meta.universe.toUpperCase().replace('-', '·')}</div>
           </div>
 
           {/* search */}
@@ -230,8 +230,8 @@ export default function App() {
           <div style={{
             display: 'flex', alignItems: 'center', gap: 7, height: 30, padding: '0 11px',
             border: `1px solid ${C.borderHi}`, borderRadius: 7, fontSize: 11.5, color: C.sec, cursor: 'default',
-          }} title="NYSE expansion is Phase 8">
-            <span style={{ fontWeight: 600 }}>NASDAQ&nbsp;100</span>
+          }} title="Live-screener universe (assumptions.toml)">
+            <span style={{ fontWeight: 600 }}>{data.meta.universe.toUpperCase()}</span>
             <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={C.dim} strokeWidth={3}>
               <polyline points="6 9 12 15 18 9" />
             </svg>
