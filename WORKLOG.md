@@ -225,3 +225,46 @@ cyclical-flagged names.
 
 **Deferred:** PIT/backtest stays on annual vintages (quarterly PIT = a Plan 6 decision;
 the backtest's quarterly rebalance on annual data remains internally consistent).
+
+---
+
+## Plan 6 — Momentum + L7 cross-section (2026-07-02) ✅ — VERDICT: REJECTED, v2w STANDS
+
+**Goal:** the blueprint's most empirically-supported unbuilt layer — L7 sector-neutral
+Value/Quality/Momentum z-scores — tested under the same split discipline as Plan 3.
+Two candidates declared a priori (no weight search): v3 = equal V/Q/M, v3m = momentum-
+tilted (.25/.25/.50). Value legs = warranted upside + revDCF gap; Quality = the v2
+quality percentile; Momentum = 12-1 from adjclose (skip-month, splits+dividends handled).
+
+**Built (backtest.py):** `month_add`, 12-1 momentum in `signal()`, winsorized
+sector-neutral z machinery (`_winsor`, `_sector_z`, thin sectors → global stats,
+z clamped ±3, missing factors renormalize), L7 blend branch in `compose()`,
+"Momentum 12-1" added to the per-method reliability table (auto-renders on the
+dashboard's Methodology screen).
+
+**Results (excess CAGR vs bench · hit rate):**
+
+| | NDX full | NDX fit 16-21 | NDX holdout 22-26 | SPX full | SPX fit 16-21 | SPX holdout 22-26 |
+|---|---|---|---|---|---|---|
+| v2w (adopted) | −0.99 · 46% | −2.47 · 39% | +1.62 · 59% | +0.19 · 54% | −1.35 · 39% | +2.61 · 76% |
+| v3  | −2.53 · 51% | −3.52 · 48% | −0.47 · 59% | −1.19 · 54% | −3.62 · 39% | +2.66 · 76% |
+| v3m | −1.14 · 46% | −4.49 · 48% | +3.18 · **47%** | −0.16 · 54% | −2.62 · 48% | +4.01 · 65% |
+
+**Decision — reject both, v2w remains ADOPTED.** Both L7 variants lose to v2w on the
+fit window in both universes and on the full sample; they only outperform on the
+2022-26 holdout — the identical regime signature that got the gap blend rejected in
+Plan 3 (momentum's 2023-25 AI run flatters exactly that window). v3m's NDX holdout
+(+3.18pp) comes with a 47% hit rate — a few huge quarters, not a reliable signal.
+The declared rule (adopt only what wins both windows) says no. **No live model change;
+v2.1 stands. No curve-fitting rescue attempts.**
+
+**The interesting residual, logged as a future lead:** STANDALONE momentum now tops the
+per-method table — NDX +2.03%/q excess (≈8%/yr!) at only 51% hit, SPX +0.61%/q at 54%.
+The signal is real but lumpy and regime-concentrated, and diluting it into a fixed-weight
+z-blend destroyed its value. If it's ever pursued: monthly rebalance (quarterly is blunt
+for momentum), overlay/filter designs rather than z-blends, and a fresh out-of-sample
+window. Until then it stays what it is — a displayed diagnostic, not a scored input.
+
+**Meta-note:** this is the third honest negative verdict this project has published
+(Phase 7 no-edge, Plan 3 gap rejection, now L7). The harness is doing its job:
+cheap to test, hard to fool, and the dashboard renders whatever the evidence says.

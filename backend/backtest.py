@@ -73,6 +73,13 @@ def shares_asof(pit_t, splits_t, D):
     return val
 
 
+def month_add(m, k):
+    """'YYYY-MM' shifted by k months."""
+    y, mo = int(m[:4]), int(m[5:7])
+    i = y * 12 + (mo - 1) + k
+    return f"{i // 12:04d}-{i % 12 + 1:02d}"
+
+
 def rolling_beta(adj_t, adj_mkt, month, n=60):
     ms = sorted(m for m in adj_t if m <= month and m in adj_mkt)[-(n + 1):]
     if len(ms) < 25:
@@ -176,10 +183,16 @@ def signal(t, D, month, pit, px, adj, spl, sectors, rf, adj_mkt):
         if (sum((x - m) ** 2 for x in gr) / len(gr)) ** 0.5 > 0.18:
             cyc = 1
 
+    # 12-1 momentum (Plan 6): return from t−12m to t−1m, skipping the latest month
+    # (the classic short-term-reversal skip). adjclose ⇒ splits+dividends handled.
+    at = adj.get(t, {})
+    m1, m12 = month_add(month, -1), month_add(month, -12)
+    mom = (at[m1] / at[m12] - 1) if (at.get(m1) and at.get(m12)) else None
+
     return dict(t=t, price=price, shares=shares, mcap=mcap, sector=sectors.get(t),
                 g1=g1, g_tr=g_tr, om=om, roe=roe, lev=lev, fcf_margin=fcf_margin,
                 ebit_now=ebit_now, debt=debt, cash=cash, dcf=dcf_ps, epv=epv_ps,
-                rim=rim_ps, impl=impl, flags=flags, cyc=cyc)
+                rim=rim_ps, impl=impl, flags=flags, cyc=cyc, mom=mom)
 
 
 def pct_rank(sorted_vals, v):
@@ -211,26 +224,70 @@ def build_quarter(D, month, members, pit, px, adj, spl, sectors, rf, adj_mkt):
     return sigs
 
 
-# ---------------- scoring variants (Plan 3 split validation) ----------------
+# ---------------- scoring variants (Plans 3+6 split validation) ----------------
 # v1  — the shipped composite of Phase 7/8 (reproduces the published results)
 # v2w — evidence-aligned engine weights (DCF demoted, RIM/Warranted promoted) +
 #       per-flag decay (cyclical informational, not penalized) + growth out of quality
-# v2  — v2w + reverse-DCF gap rank-blended into the composite (the candidate)
+# v2  — v2w + reverse-DCF gap rank-blended into the composite (REJECTED in Plan 3)
+# v3  — Plan 6, the blueprint's L7: sector-neutral winsorized z-blend of
+#       Value (warranted upside + revDCF gap) · Quality · 12-1 Momentum, equal weights
+# v3m — v3 momentum-tilted (declared a priori — no weight search beyond these two)
 V1_WEIGHTS = {"DCF": 0.25, "RIM": 0.20, "Warranted": 0.25}
 V2_WEIGHTS = {"DCF": 0.10, "RIM": 0.35, "Warranted": 0.30}
+Q_DIMS_V2 = ("om", "roe", "fcf_margin", "lev")
 VARIANTS = {
     "v1":  dict(weights=V1_WEIGHTS, q_dims=("om", "roe", "g_tr", "fcf_margin", "lev"),
                 flag_decay=False, gap_w=0.0),
-    "v2w": dict(weights=V2_WEIGHTS, q_dims=("om", "roe", "fcf_margin", "lev"),
-                flag_decay=True, gap_w=0.0),
-    "v2":  dict(weights=V2_WEIGHTS, q_dims=("om", "roe", "fcf_margin", "lev"),
-                flag_decay=True, gap_w=0.4),
+    "v2w": dict(weights=V2_WEIGHTS, q_dims=Q_DIMS_V2, flag_decay=True, gap_w=0.0),
+    "v2":  dict(weights=V2_WEIGHTS, q_dims=Q_DIMS_V2, flag_decay=True, gap_w=0.4),
+    "v3":  dict(weights=V2_WEIGHTS, q_dims=Q_DIMS_V2, flag_decay=True, gap_w=0.0,
+                l7={"V": 1 / 3, "Q": 1 / 3, "M": 1 / 3}),
+    "v3m": dict(weights=V2_WEIGHTS, q_dims=Q_DIMS_V2, flag_decay=True, gap_w=0.0,
+                l7={"V": 0.25, "Q": 0.25, "M": 0.50}),
 }
 # ADOPTION (2026-07-02, both universes): v2w beats v1 in 5 of 6 window/universe cells
 # (ndx full −5.27 → −0.99pp). v2's gap blend wins the 2022-26 holdout but LOSES to v1
 # on the 2016-21 window (ndx −6.94pp) — that's the value-factor regime, not signal.
 # Rejected; the reverse-DCF gap stays displayed, not scored.
 ADOPTED = "v2w"                    # the variant the published curve/stats are built from
+
+
+def _winsor(pairs, p=0.05):
+    """pairs [(name, val)] -> {name: value clamped to the p/1−p quantiles}."""
+    vs = sorted(v for _, v in pairs)
+    if not vs:
+        return {}
+    lo, hi = vs[int(p * (len(vs) - 1))], vs[int((1 - p) * (len(vs) - 1))]
+    return {n: max(lo, min(hi, v)) for n, v in pairs}
+
+
+def _sector_z(pairs, sec_of, min_n=5):
+    """Winsorized sector-neutral z-scores (global stats for thin sectors), clamped ±3."""
+    w = _winsor(pairs)
+    if not w:
+        return {}
+    allv = list(w.values())
+    gm = sum(allv) / len(allv)
+    gs = (sum((x - gm) ** 2 for x in allv) / len(allv)) ** 0.5 or 1.0
+    by = {}
+    for n, v in w.items():
+        by.setdefault(sec_of.get(n) or "UNKNOWN", []).append(v)
+    stats = {}
+    for s, vs in by.items():
+        if len(vs) >= min_n:
+            m = sum(vs) / len(vs)
+            sd = (sum((x - m) ** 2 for x in vs) / len(vs)) ** 0.5
+            stats[s] = (m, sd if sd > 1e-12 else gs)
+        else:
+            stats[s] = (gm, gs)
+    return {n: max(-3.0, min(3.0, (v - stats[sec_of.get(n) or "UNKNOWN"][0])
+                             / stats[sec_of.get(n) or "UNKNOWN"][1]))
+            for n, v in w.items()}
+
+
+# L7 factor legs: Value = warranted upside + revDCF gap · Quality = the q percentile ·
+# Momentum = 12-1. Multiple legs per factor are z-scored separately then averaged.
+L7_LEGS = {"V": ("warr_up", "rev_gap"), "Q": ("q",), "M": ("mom",)}
 
 
 def compose(sigs, variant):
@@ -253,7 +310,8 @@ def compose(sigs, variant):
                else (0.55 if (s["flags"] + s["cyc"]) else 1.0))
         score = ((max(-0.5, min(0.6, upside)) + 0.5) * (tri["conf"] / 5) * (q / 100) * pen)
         gap = (s["g_tr"] - s["impl"]) if (s["g_tr"] is not None and s["impl"] is not None) else None
-        rows.append(dict(t=s["t"], score=score, upside=upside,
+        rows.append(dict(t=s["t"], score=score, upside=upside, q=q,
+                         sector=s["sector"], mom=s["mom"],
                          dcf_up=(s["dcf"] / s["price"] - 1) if s["dcf"] else None,
                          warr_up=(s["warr"] / s["price"] - 1) if s["warr"] else None,
                          epv_up=(s["epv"] / s["price"] - 1) if s["epv"] else None,
@@ -267,6 +325,21 @@ def compose(sigs, variant):
             rb = pct_rank(bsort, r["score"])
             rg = pct_rank(gsort, r["rev_gap"]) if r["rev_gap"] is not None else None
             r["score"] = (1 - gw) * rb + gw * rg if rg is not None else rb
+    if variant.get("l7") and rows:         # Plan 6: sector-neutral V/Q/M z-blend
+        sec_of = {r["t"]: r["sector"] for r in rows}
+        legz = {f: [_sector_z([(r["t"], r[leg]) for r in rows if r.get(leg) is not None],
+                              sec_of)
+                    for leg in legs]
+                for f, legs in L7_LEGS.items()}
+        wts = variant["l7"]
+        for r in rows:
+            num = den = 0.0
+            for f, zs in legz.items():
+                vals = [z[r["t"]] for z in zs if r["t"] in z]
+                if vals:                   # missing factor → weights renormalize
+                    num += wts[f] * (sum(vals) / len(vals))
+                    den += wts[f]
+            r["score"] = num / den if den else 0.0
     return rows
 
 
@@ -280,7 +353,7 @@ def simulate(quarters, ranked, fwd):
     prev_basket = set()
     turnover = []
     per_method = {k: {"hit": 0, "n": 0, "excess": []} for k in
-                  ("score", "dcf_up", "warr_up", "epv_up", "rim_up", "rev_gap")}
+                  ("score", "dcf_up", "warr_up", "epv_up", "rim_up", "rev_gap", "mom")}
     for i in range(len(quarters) - 1):
         D = quarters[i]
         rows = [r for r in ranked.get(D, []) if (D, r["t"]) in fwd]
@@ -406,7 +479,8 @@ def main(universe="ndx"):
 
     pm = []
     label = {"score": "Composite score", "dcf_up": "DCF upside", "warr_up": "Warranted upside",
-             "epv_up": "EPV-floor upside", "rim_up": "RIM upside", "rev_gap": "Reverse-DCF gap"}
+             "epv_up": "EPV-floor upside", "rim_up": "RIM upside", "rev_gap": "Reverse-DCF gap",
+             "mom": "Momentum 12-1"}
     for k, agg in per_method.items():
         if agg["n"]:
             pm.append({"method": label[k], "hitRate": round(agg["hit"] / agg["n"], 3),

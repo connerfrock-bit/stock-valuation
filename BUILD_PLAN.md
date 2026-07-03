@@ -186,6 +186,12 @@ Honesty rules: never a single fair value without its range · agreement always b
       Found+fixed pre-existing `pick_annual` bug (partial-year fp=FY points; MPWR FY25
       rev was Q4-only) — the Plan-1 coverage guard fired its first real alert on the
       side effect. 54 tests. See WORKLOG.md.
-- [ ] Plan 6: momentum (12-1) + L7 sector-neutral V+Q+M cross-section — the research sprint
+- [x] **Plan 6: momentum + L7 cross-section** ✅ — VERDICT: REJECTED, v2w stands.
+      12-1 momentum + winsorized sector-neutral V/Q/M z-blend (two a-priori variants);
+      both lose to v2w on fit windows in both universes, win only the 2022-26 holdout =
+      the same regime signature as the Plan-3 gap rejection. No live change; no weight
+      search. Residual lead: STANDALONE momentum tops the per-method table (NDX +2.03%/q
+      at 51% hit — real but lumpy); stays a displayed diagnostic. Third published
+      negative verdict. See WORKLOG.md.
 - [ ] Plan 7: robustness — Wikipedia parse caching/diff-guard, FRED DGS10 history for the
       backtest rf, de-scope FastAPI, un-hardcode Nasdaq constants
