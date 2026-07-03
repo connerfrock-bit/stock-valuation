@@ -96,6 +96,17 @@ IFRS_CONCEPTS = {
 }
 
 ANNUAL_FORMS = ("10-K", "20-F", "40-F")                   # amendments match via startswith
+TTM_FORMS    = ("10-Q", "10-K")                           # quarterly stitching: US filers only
+                                                          # (foreign 6-K interims are irregular — they fall back to FY)
+
+# balance-sheet (instant) concepts — everything else is a flow (duration) that gets TTM'd
+INSTANT_CONCEPTS = {"equity", "long_debt", "short_debt", "op_leases", "cash", "shares",
+                    "assets", "assets_current", "liab_current", "retained", "liabilities"}
+
+
+def _days(start, end):
+    from datetime import date
+    return (date.fromisoformat(end) - date.fromisoformat(start)).days
 
 
 def http_json(url, headers, timeout=25):
@@ -118,6 +129,8 @@ def pick_annual(ns, tags, ccy=None):
     """Return {fiscal_year:int -> value} from annual (10-K/20-F/40-F, fp=FY) datapoints.
        Merges across ALL candidate tags (companies switch tags over time — NVDA revenue);
        per fiscal year the most recently filed value wins (handles restatements).
+       Duration points must span a full year — some filers put Q4-only durations in the
+       10-K with fp=FY (MPWR: 'FY2025 revenue' was one quarter, 0.64B vs the real 2.96B).
        ccy: restrict monetary units to one currency (PDD files CNY *and* USD — mixing
        units by newest-filed would interleave magnitudes)."""
     chosen = {}  # fy -> (val, filed)
@@ -136,10 +149,123 @@ def pick_annual(ns, tags, ccy=None):
                 end = u.get("end")
                 if not end:
                     continue
+                start = u.get("start")
+                if start and not (350 <= _days(start, end) <= 380):
+                    continue                              # partial-year FY-labeled point
                 fy, filed = int(end[:4]), u.get("filed", "")
                 if fy not in chosen or filed > chosen[fy][1]:
                     chosen[fy] = (u.get("val"), filed)
     return {fy: v[0] for fy, v in sorted(chosen.items())}
+
+
+# ---------------- TTM (Plan 5) ----------------
+def _units_arrs(node, ccy):
+    """The unit arrays to scan for a tag node, honoring the chosen currency."""
+    units = node.get("units", {})
+    return ([units[ccy]] if (ccy and ccy in units) else
+            ([units["shares"]] if "shares" in units else
+             ([] if ccy else list(units.values()))))
+
+
+def duration_points(ns, tags, ccy):
+    """Deduped duration datapoints [(start, end, value)] across candidate tags from
+       10-Q/10-K filings — newest filed wins per (start, end) span."""
+    seen = {}                                             # (start, end) -> (filed, val)
+    for tag in tags:
+        node = ns.get(tag)
+        if not node:
+            continue
+        for arr in _units_arrs(node, ccy):
+            for u in arr:
+                s, e, v, filed = u.get("start"), u.get("end"), u.get("val"), u.get("filed", "")
+                if not (s and e and v is not None):
+                    continue
+                if not u.get("form", "").startswith(TTM_FORMS):
+                    continue
+                key = (s, e)
+                if key not in seen or filed > seen[key][0]:
+                    seen[key] = (filed, float(v))
+    return [(s, e, v) for (s, e), (_, v) in sorted(seen.items())]
+
+
+def ttm_from_durations(points):
+    """TTM through the latest reported period end:
+         TTM = FY  +  post-FY chain covering (fy_end, latest_end]  −  prior-year mirror.
+       Handles both YTD reporters (one 9-month point) and QTD chains. Chain links and
+       year-mirrors tolerate a few days' drift (52/53-week fiscal calendars).
+       -> (value, thru_date, basis 'ttm'|'fy') or None when no annual point exists."""
+    from datetime import date
+
+    def d(s):
+        return date.fromisoformat(s)
+
+    fys = [p for p in points if 350 <= (d(p[1]) - d(p[0])).days <= 380]
+    if not fys:
+        return None
+    fy = max(fys, key=lambda p: p[1])
+    fy_end, fy_val = fy[1], fy[2]
+    post = [p for p in points if p[0] >= fy_end and p[1] > fy_end
+            and (d(p[1]) - d(p[0])).days < 350]
+    if not post:
+        return fy_val, fy_end, "fy"                       # fresh 10-K, no 10-Q yet
+
+    chain, cur_end = [], max(p[1] for p in post)
+    for _ in range(8):                                    # walk back to the FY boundary
+        cands = [p for p in post if abs((d(p[1]) - d(cur_end)).days) <= 5]
+        if not cands:
+            return fy_val, fy_end, "fy"
+        p = max(cands, key=lambda p: (d(p[1]) - d(p[0])).days)   # prefer YTD over QTD
+        chain.append(p)
+        if abs((d(p[0]) - d(fy_end)).days) <= 10:
+            break
+        cur_end = p[0]
+    else:
+        return fy_val, fy_end, "fy"
+
+    prior_sum = 0.0                                       # same periods, one year earlier
+    for s, e, _v in chain:
+        m = [p for p in points
+             if abs((d(p[0]) - d(s)).days - (-365)) <= 10
+             and abs((d(p[1]) - d(e)).days - (-365)) <= 10]
+        if not m:
+            return fy_val, fy_end, "fy"                   # can't mirror → honest fallback
+        prior_sum += m[0][2]
+    ttm = fy_val + sum(v for _, _, v in chain) - prior_sum
+    return ttm, max(p[1] for p in chain), "ttm"
+
+
+def freshest_instant(ns, tags, ccy):
+    """Freshest balance-sheet point across candidate tags (10-Q/10-K/20-F/40-F).
+       -> (value, end_date) or None."""
+    best = None                                           # (end, filed, val)
+    for tag in tags:
+        node = ns.get(tag)
+        if not node:
+            continue
+        for arr in _units_arrs(node, ccy):
+            for u in arr:
+                e, v, filed = u.get("end"), u.get("val"), u.get("filed", "")
+                if e and v is not None and u.get("form", "").startswith(TTM_FORMS + ANNUAL_FORMS):
+                    if best is None or (e, filed) > (best[0], best[1]):
+                        best = (e, filed, float(v))
+    return (best[2], best[0]) if best else None
+
+
+def compute_now(ns, cmap, ccy):
+    """-> {concept: (value, thru, basis)} — TTM flows + freshest instants (Plan 5)."""
+    out = {}
+    for name, tags in cmap.items():
+        if name == "shares":
+            continue                                      # current_shares() owns this
+        if name in INSTANT_CONCEPTS:
+            r = freshest_instant(ns, tags, ccy)
+            if r:
+                out[name] = (r[0], r[1], "instant")
+        else:
+            r = ttm_from_durations(duration_points(ns, tags, ccy))
+            if r:
+                out[name] = r
+    return out
 
 
 def choose_currency(ns, rev_tags):
@@ -221,7 +347,7 @@ def fetch_financials(cik):
        to USD at today's spot — an approximation, disclosed via the currency field."""
     data = http_json(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json", SEC_UA)
     facts = data.get("facts", {})
-    out, ccy = {}, None
+    out, ccy, win = {}, None, None
     for ns_name, cmap in [("us-gaap", CONCEPTS), ("ifrs-full", IFRS_CONCEPTS)]:
         ns = facts.get(ns_name, {})
         if not ns:
@@ -229,9 +355,10 @@ def fetch_financials(cik):
         ns_ccy = choose_currency(ns, cmap["revenue"])
         got = {name: pick_annual(ns, tags, ns_ccy) for name, tags in cmap.items()}
         if not out.get("revenue") and got.get("revenue"):
-            out, ccy = got, ns_ccy                        # namespace with revenue wins
+            out, ccy, win = got, ns_ccy, (ns, cmap)       # namespace with revenue wins
     if not out:
         out = {name: {} for name in CONCEPTS}
+    nowd = compute_now(*win, ccy) if win else {}          # TTM flows + fresh instants
 
     if ccy and ccy != "USD":                              # convert monetary series to USD
         rate = fx_spot(ccy)
@@ -239,13 +366,15 @@ def fetch_financials(cik):
             for name, series in out.items():
                 if name != "shares":
                     out[name] = {fy: v * rate for fy, v in series.items()}
+            nowd = {n: (v * rate, thru, basis) for n, (v, thru, basis) in nowd.items()}
         else:
             out = {name: ({} if name != "shares" else s) for name, s in out.items()}
+            nowd = {}
 
     shares_now = current_shares(facts)
     if not out.get("shares") and shares_now:              # keep a stub history for downstream
         out["shares"] = {int(time.strftime("%Y")): shares_now}
-    return out, shares_now, ccy or "USD"
+    return out, shares_now, ccy or "USD", nowd
 
 
 def fetch_price(ticker):
@@ -258,12 +387,16 @@ def init_db(con):
     con.executescript("""
     DROP TABLE IF EXISTS companies;               -- rebuilt fully each run (schema evolves)
     DROP TABLE IF EXISTS financials;              -- values are USD-converted; no stale mixes
+    DROP TABLE IF EXISTS financials_now;          -- TTM flows + freshest instants (Plan 5)
     CREATE TABLE companies(
         ticker TEXT PRIMARY KEY, name TEXT, cik TEXT, sector TEXT,
         price REAL, currency TEXT, shares_out REAL, fin_currency TEXT, updated TEXT);
     CREATE TABLE financials(
         ticker TEXT, fiscal_year INTEGER, concept TEXT, value REAL,
         PRIMARY KEY (ticker, fiscal_year, concept));
+    CREATE TABLE financials_now(
+        ticker TEXT, concept TEXT, value REAL, thru TEXT, basis TEXT,
+        PRIMARY KEY (ticker, concept));
     """)
 
 
@@ -317,7 +450,7 @@ def main():
             print(f"[{i:3}/{n}] {ticker:6} duplicate share class — skipped"); continue
         seen_ciks.add(cik)
         try:
-            fins, shares_now, fin_ccy = fetch_financials(cik); time.sleep(0.25)  # polite to EDGAR
+            fins, shares_now, fin_ccy, nowd = fetch_financials(cik); time.sleep(0.25)  # polite to EDGAR
         except Exception as e:
             print(f"[{i:3}/{n}] {ticker:6} EDGAR FAILED {type(e).__name__}"); continue
         try:
@@ -330,6 +463,8 @@ def main():
         rows = [(ticker, fy, c, float(v))
                 for c, s in fins.items() for fy, v in s.items() if v is not None]
         con.executemany("INSERT OR REPLACE INTO financials VALUES (?,?,?,?)", rows)
+        con.executemany("INSERT OR REPLACE INTO financials_now VALUES (?,?,?,?,?)",
+                        [(ticker, c, v, thru, basis) for c, (v, thru, basis) in nowd.items()])
         con.commit()
 
         have = [c for c, s in fins.items() if s]

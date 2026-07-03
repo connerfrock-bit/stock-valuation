@@ -171,3 +171,57 @@ The v2 basket is the live test from here forward.
 **What would make this meaningful:** refreshes. Each run of REFRESH DATA.cmd adds a
 basket; after ~one quarter the first real forward numbers exist; after ~a year the
 hit rate starts to mean something. Consider a weekly scheduled refresh.
+
+---
+
+## Plan 5 — TTM fundamentals (2026-07-02) ✅
+
+**Goal:** valuations were running on annual filings up to ~15 months stale. Pull the
+10-Qs already sitting in the same EDGAR companyfacts JSON (no extra network) and value
+off trailing-twelve-month flows + the freshest quarterly balance sheet.
+
+**Ingest — the TTM stitcher** (`ingest_v1.py`, 10 new tests):
+- `TTM = FY + post-FY chain − prior-year mirror`. Handles YTD reporters (one 9-month
+  point) and QTD-chain reporters; prefers YTD over QTD at the same end date; chain links
+  and year-mirrors tolerate ±5–10 days (52/53-week fiscal calendars). Any missing mirror
+  → honest `fy` fallback, never a guess. US 10-Q/10-K only (foreign 6-K interims → FY).
+- Balance-sheet concepts take the freshest quarterly instant instead.
+- New `financials_now` table: 1,977 rows — 944 TTM flows, 88 fy-fallbacks, 945 instants.
+  Revenue: 89/93 names on true TTM, thru-dates median 2026-03-31, newest 2026-05-29
+  (the annual-only view was up to 15 months older).
+
+**Model v2.1** (`value.py`): every "now" input upgraded — rev_now/ebit_now/ni_now/cfo_now/
+dna/dividends/interest (TTM), borrowings/leases/cash/equity + Altman-Z balance-sheet
+inputs (fresh instants), fcf_last = TTM FCF, EPV maintenance capex = TTM capex. Annual
+series remain the history (margins, CAGR, ROE, quality, trends). Accrual flag now
+compares NI and CFO on the same TTM basis. Staleness = no filing covering the last ~9
+months. Contract gains `finThru` (data-as-of date per company). Coverage 94 → 96
+(TTM basis rescued LITE and SNDK).
+
+**The audit that mattered** — MU showed +562% mid, too big to trust. Pulled raw EDGAR
+durations: the stitch is exact (37.4B FY + 79.0B YTD − 26.1B mirror = 90.3B), and MU's
+quarterly revenue really went 9.3B → 41.5B/q into the 2026 memory supercycle — the
+annual view was valuing pre-boom numbers 9 months stale. META −36% is the fresh
+quarterly balance sheet carrying the new AI-capex debt the annual bridge missed. All
+big movers explained by mechanism, none by bug.
+
+**Pre-existing annual-pipeline bug found and fixed:** `pick_annual` accepted partial-year
+durations filed with fp=FY — MPWR's "FY2025 revenue" was a Q4-only point (0.64B vs the
+real 2.79B), corrupting its margins/CAGR/quality. Added a 350–380-day span guard
+(instants unaffected). On the re-ingest, **the Plan-1 coverage guard fired its first
+real alert** (gross_profit 64 → 59 tickers) — verified all five drops were correctly
+rejected partial-year garbage (impact limited to one Piotroski signal that has a
+fallback pair). The safety net caught the side effect of its own fix, as designed.
+
+**Final isolated diff (v2 → v2.1, same data, same rf):** median |Δmid| 5.5%.
+Movers: MU +559% (supercycle), MPWR +358% (annual-corruption fix), STX +69%, WDC +63%,
+CEG +55%, FANG +49% — cyclicals whose TTM inflected. 54 tests total, all green.
+
+**Known trade-off (logged for Plan 6):** TTM cures staleness but capitalizes cyclical
+peaks — the warranted engine now multiplies MU's peak EBIT. Counterweights in place:
+normalized-margin DCF base, EPV floor on 5-yr average margins, the cyclical flag, the
+28× anchor cap. A future refinement: normalized EBIT for the warranted engine on
+cyclical-flagged names.
+
+**Deferred:** PIT/backtest stays on annual vintages (quarterly PIT = a Plan 6 decision;
+the backtest's quarterly rebalance on annual data remains internally consistent).

@@ -178,7 +178,14 @@ Honesty rules: never a single fair value without its range · agreement always b
       5/5; 6 tests (44 total). Inception 2026-07-02: v1/v1.1/v2 baskets, 18 names each.
       The v2 basket is the live test — the one number the in-sample caveat can't touch.
       See WORKLOG.md.
-- [ ] Plan 5: TTM fundamentals from 10-Qs (staleness fix)
+- [x] **Plan 5: TTM fundamentals** ✅ — TTM stitcher (FY + post-FY chain − prior-year
+      mirror; YTD + QTD reporters; fy-fallback when unmirrorable) + freshest quarterly
+      instants → `financials_now` (944 TTM / 945 instants); model v2.1 values every "now"
+      input fresh (median thru 2026-03 vs annual up to 15mo stale); coverage 94→96.
+      MU +559% audited against raw EDGAR — real memory-supercycle inflection, not a bug.
+      Found+fixed pre-existing `pick_annual` bug (partial-year fp=FY points; MPWR FY25
+      rev was Q4-only) — the Plan-1 coverage guard fired its first real alert on the
+      side effect. 54 tests. See WORKLOG.md.
 - [ ] Plan 6: momentum (12-1) + L7 sector-neutral V+Q+M cross-section — the research sprint
 - [ ] Plan 7: robustness — Wikipedia parse caching/diff-guard, FRED DGS10 history for the
       backtest rf, de-scope FastAPI, un-hardcode Nasdaq constants

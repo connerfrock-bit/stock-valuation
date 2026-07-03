@@ -30,6 +30,9 @@ MIN_N100_MCAP = 15e9          # smallest plausible Nasdaq-100 member — below t
 # ---------------- pass 1: inputs ----------------
 def collect(con, rf, erp, tax_fallback, betas):
     cur_year = datetime.date.today().year
+    today = datetime.date.today()
+    has_now = bool(con.execute(
+        "SELECT name FROM sqlite_master WHERE name='financials_now'").fetchone())
     rows, excluded = [], []
     for (t,) in con.execute("SELECT ticker FROM companies ORDER BY ticker"):
         name, price, f = load_company(con, t)
@@ -46,43 +49,57 @@ def collect(con, rf, erp, tax_fallback, betas):
         if not rev or not cfo_s or not cap_s:
             excluded.append((t, "missing core financials (revenue/CFO/capex)")); continue
 
+        # Plan 5: TTM flows + freshest quarterly instants for every "now" input; the
+        # ANNUAL series remain the history (margins, CAGR, ROE, quality, trends).
+        nowd = ({c: (v, thru, basis) for c, v, thru, basis in con.execute(
+                 "SELECT concept, value, thru, basis FROM financials_now WHERE ticker=?",
+                 (t,))} if has_now else {})
+        def nv(c, fb=None):
+            return nowd[c][0] if c in nowd else fb
+
         # per-year FCF (SBC expensed) and FCF margins over the overlap window
         yrs = sorted(set(rev) & set(cfo_s) & set(cap_s))[-5:]
         fcf_by_year = {y: cfo_s[y] - cap_s[y] - sbc_s.get(y, 0.0) for y in yrs}
         margins = [fcf_by_year[y] / rev[y] for y in yrs if rev[y]]
         fcf_margin = sum(margins) / len(margins) if margins else None
-        rev_now = latest(rev)
+        rev_now = nv("revenue", latest(rev))
         fcf_norm = fcf_margin * rev_now if fcf_margin is not None else None
         fcf_last = fcf_by_year[yrs[-1]] if yrs else None
+        cfo_ttm, cap_ttm = nv("cfo"), nv("capex")
+        if cfo_ttm is not None and cap_ttm is not None:
+            fcf_last = cfo_ttm - cap_ttm - (nv("sbc") or 0.0)
 
         ebit_s = f.get("ebit", {})
-        ebit_now = latest(ebit_s)
+        ebit_now = nv("ebit", latest(ebit_s))
         om = avg_margin(ebit_s, rev, years=5)
         ni_s, eq_s = f.get("net_income", {}), f.get("equity", {})
         # Plan 2: valuation debt = ALL borrowings (long + previously-missing short/current).
         # Operating leases go in debt_risk only — every engine discounts post-rent flows
         # (CFO and EBIT are after lease expense), so leases in the EV bridge double-count.
-        borrowings = ((latest(f.get("long_debt", {})) or 0.0)
-                      + (latest(f.get("short_debt", {})) or 0.0))
-        leases = latest(f.get("op_leases", {})) or 0.0
+        # Plan 5: instants come from the freshest quarterly balance sheet when available.
+        def inst(c):
+            v = nv(c)
+            return v if v is not None else latest(f.get(c, {}))
+        borrowings = (inst("long_debt") or 0.0) + (inst("short_debt") or 0.0)
+        leases = inst("op_leases") or 0.0
         debt = borrowings
         debt_risk = borrowings + (leases if CFG["include_op_leases"] else 0.0)
-        cash = latest(f.get("cash", {})) or 0.0
-        dna = latest(f.get("dep_amort", {}))
-        div = latest(f.get("dividends", {})) or 0.0
+        cash = inst("cash") or 0.0
+        dna = nv("dep_amort", latest(f.get("dep_amort", {})))
+        div = nv("dividends", latest(f.get("dividends", {}))) or 0.0
         beta = betas.get(t, CFG["beta_default"])
         mcap = price * shares
         g_trail = cagr(rev)                                # honest trailing growth (uncapped)
         g1 = min(max(g_trail or 0.0, CFG["initial_growth_floor"]), CFG["initial_growth_cap"])
         re_ = cost_of_equity(rf, beta, erp)
-        rd = cost_of_debt(latest(f.get("interest_exp", {})), borrowings, rf,
-                          CFG["cost_of_debt_spread"], CFG["cost_of_debt_cap"])
+        rd = cost_of_debt(nv("interest_exp", latest(f.get("interest_exp", {}))), borrowings,
+                          rf, CFG["cost_of_debt_spread"], CFG["cost_of_debt_cap"])
         tax_r = effective_tax(f.get("tax_exp", {}), f.get("pretax", {}),
                               floor=CFG["tax_floor"], cap=CFG["tax_cap"],
                               fallback=tax_fallback)
         wacc = wacc_of(mcap, max(debt, 0.0), re_, rd, tax_r)
 
-        equity_now = latest(eq_s)
+        equity_now = inst("equity")
         inv_cap = (equity_now or 0.0) + debt - cash
         roic = (ebit_now * (1 - tax_r) / inv_cap
                 if (ebit_now is not None and inv_cap > 0) else None)
@@ -93,26 +110,42 @@ def collect(con, rf, erp, tax_fallback, betas):
             beta=beta, re_=re_, wacc=wacc, rev=rev, rev_now=rev_now,
             fcf_norm=fcf_norm, fcf_last=fcf_last, fcf_margin=fcf_margin,
             ebit_now=ebit_now, om=om, ni_s=ni_s, eq_s=eq_s, debt=debt, cash=cash,
-            debt_risk=debt_risk, rd=rd, tax_r=tax_r, capex_now=latest(cap_s),
+            debt_risk=debt_risk, rd=rd, tax_r=tax_r, capex_now=nv("capex", latest(cap_s)),
             dna=dna, div=div, g_trail=g_trail, g1=g1, roic=roic,
-            last_fy=max(rev), stale=max(rev) < cur_year - 1,
-            ni_now=latest(ni_s), equity_now=equity_now, cfo_s=cfo_s, f=f,
+            last_fy=max(rev), stale=_is_stale(nowd, rev, today, cur_year),
+            fin_thru=nowd.get("revenue", (None, None, None))[1],
+            ni_now=nv("net_income", latest(ni_s)), cfo_now=nv("cfo", latest(cfo_s)),
+            equity_now=equity_now, cfo_s=cfo_s, f=f, nowd=nowd,
         ))
     return rows, excluded
 
 
+def _is_stale(nowd, rev, today, cur_year):
+    """Stale = no filing covering the last ~9 months (TTM thru date when we have one,
+       else the old annual-year rule)."""
+    thru = nowd.get("revenue", (None, None, None))[1]
+    if thru:
+        return datetime.date.fromisoformat(thru) < today - datetime.timedelta(days=270)
+    return max(rev) < cur_year - 1
+
+
 # ---------------- safety metrics (signal-quality sprint) ----------------
 def altman_z(r):
-    """Original Altman Z. None when a core component is unavailable — never guessed."""
-    f = r["f"]
-    ta = latest(f.get("assets", {}))
+    """Original Altman Z. None when a core component is unavailable — never guessed.
+       Balance-sheet inputs use the freshest quarterly instants (Plan 5) so Z isn't a
+       mix of fresh EBIT/mcap and a year-old balance sheet."""
+    f, nowd = r["f"], r.get("nowd", {})
+    def cur(c):
+        e = nowd.get(c)
+        return e[0] if e is not None else latest(f.get(c, {}))
+    ta = cur("assets")
     if not ta or ta <= 0:
         return None
-    tl = latest(f.get("liabilities", {}))
+    tl = cur("liabilities")
     if tl is None and r["equity_now"] is not None:
         tl = ta - r["equity_now"]
-    ac, lc = latest(f.get("assets_current", {})), latest(f.get("liab_current", {}))
-    re_ = latest(f.get("retained", {}))
+    ac, lc = cur("assets_current"), cur("liab_current")
+    re_ = cur("retained")
     if None in (tl, ac, lc, re_, r["ebit_now"]) or tl <= 0:
         return None
     wc = ac - lc
@@ -254,7 +287,7 @@ def trap_flags(r, z=None, fscore=None):
         flags.append("High leverage")
     if r["equity_now"] is not None and r["equity_now"] < 0:
         flags.append("Negative book value")
-    ni, cfo = r["ni_now"], latest(r["cfo_s"])
+    ni, cfo = r["ni_now"], r["cfo_now"]                   # same (TTM) basis on both sides
     if ni and cfo and ni > cfo * 1.2:
         flags.append("High accruals")
     if z is not None and z < 1.81:
@@ -274,7 +307,7 @@ def trap_flags(r, z=None, fscore=None):
 
 
 # ---------------- snapshot history (append-only) ----------------
-MODEL_VERSION = "v2"          # frozen model tag — bump whenever scoring/engine logic changes
+MODEL_VERSION = "v2.1"        # frozen model tag — bump whenever scoring/engine logic changes
 # v1   — original inputs (long-term debt only, flat Rd = rf+1%, statutory 21% tax)
 # v1.1 — Plan 2: + short debt in borrowings · leases in risk debt · Rd from interest
 #        expense · effective tax from filings · maintenance capex wired into EPV
@@ -282,6 +315,9 @@ MODEL_VERSION = "v2"          # frozen model tag — bump whenever scoring/engin
 #        RIM .35 / Warranted .30 · deterministic DCF (MC removed) · 0.85^n flag decay
 #        (Cyclical revenue informational) · growth out of quality · Altman-Z gated off
 #        for Financials/Real Estate. Reverse-DCF gap blend REJECTED (regime-fragile).
+# v2.1 — Plan 5: every "now" input is TTM (flows) or freshest quarterly instant
+#        (balance sheet) from financials_now; annual series remain the history.
+#        Staleness = no filing covering the last ~9 months.
 
 def append_snapshot(out, universe, run_id):
     """Append this run's full ranked output to `snapshots` — never overwritten.
@@ -374,7 +410,7 @@ def main():
         rec = {
             "ticker": r["t"], "name": r["name"], "sector": r["sector"],
             "sectorShort": SHORT.get(r["sector"], r["sector"][:4]),
-            "finCurrency": r["fin_ccy"],
+            "finCurrency": r["fin_ccy"], "finThru": r["fin_thru"],
             "price": round(r["price"], 2), "mcapB": round(r["mcap"] / 1e9, 1),
             "quality": q, "growth5y": None if r["g_trail"] is None else round(r["g_trail"], 4),
             "divYield": round(r["div"] / r["mcap"], 4) if r["mcap"] else None,
