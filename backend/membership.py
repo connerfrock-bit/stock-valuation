@@ -86,7 +86,7 @@ def sp500_current(tables):
     return best
 
 
-def quarter_ends(start_year=2015, end=None):
+def quarter_ends(start_year=2012, end=None):        # Plan B: 2015 → 2012 (XBRL floor ~2009)
     end = end or date.today()
     return [date(y, m, dd) for y in range(start_year, end.year + 1)
             for m, dd in [(3, 31), (6, 30), (9, 30), (12, 31)] if date(y, m, dd) < end]

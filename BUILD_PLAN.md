@@ -214,6 +214,11 @@ Honesty rules: never a single fair value without its range · agreement always b
       covered / 20 honestly excluded; Nasdaq: 96.** Found+fixed at scale: EDGAR-throttle retry,
       bank net-income (`ProfitLoss`) + broker-revenue tags, GICS-over-ICB sectors, sanity
       share-derivation. 4 workflows (understand/design/review). 44 tests. See WORKLOG.md.
-- [ ] Plan B: extend S&P backtest to ~2012-13 (XBRL floor is 2009)
+- [x] **Plan B: extend backtest to 2012** ✅ — both universes 2012-2026 (57q); added a
+      **pre2012-15 OOS window** (predates the v2w design). **VERDICT: v2w does NOT robustly
+      generalize** — it underperforms v1 on 2012-2015 in BOTH universes; its edge is a
+      post-2016 fit. Honest read now v1≈v2w, no durable edge. Kept v2w (reverting = fitting
+      the ~54%-coverage early window). Survivorship grows to ~54% pre-2016 (quantified +
+      caveated); betas fall back pre-2013. 4th published humbling result. See WORKLOG.md.
 - [ ] Plan C: momentum overlay research (monthly, out-of-sample)
 - [ ] Plan D: NYSE large+mid $2B+ (archetype router extends; SIC→sector map; size buckets)

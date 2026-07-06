@@ -391,3 +391,56 @@ asset-light insurers use a 6% fcfy float-guard (a data-sanity clamp, not a fitte
 boundary). Backtest still uses its own engine stack (no archetype gate) — the live/backtest
 divergence is pre-existing and documented; adding the router to the S&P backtest is a
 future refinement that would require re-validating the v2w adoption.
+
+## Plan B — Extend the S&P backtest to ~2012 (2026-07-06) — IN PROGRESS
+
+**Goal:** the backtest starts 2016; the XBRL floor is ~2009 and our PIT store already holds
+vintages from 2009-10, prices from 2011-08, rf from 2006. Extend the start to 2012 to
+(a) re-validate v2w over 14 years instead of 10, and (b) — the real prize — test v2w on
+**2012-2015, a window that predates the model's design** (v2w was motivated by 2016-2026
+per-method stats), so it is genuinely out-of-sample. Honest cost: survivorship grows the
+further back we reach (delisted names Yahoo/EDGAR no longer serve) — quantify per year.
+
+**Pre-flight (data already reaches back):** Wikipedia S&P change log parses 402 changes
+1976→2026 (walk-back to 2012 well-supported); PIT filed 2009-10→2026-07 (620 names);
+prices 2011-08→2026-07 (535 names ≤2012-06); rf 2006-08→2026-07. Only the membership
+SNAPSHOTS stop at 2015 (quarter_ends start_year=2015). Known softener: rolling betas need
+25+ months of price history, so 2012-2013 signals fall back to β≈1.0 until history accrues.
+
+**Executed:** membership.py quarter_ends 2015→2012 (regenerated both universes: sp500 58
+snapshots / 771 distinct / 271 past members, ndx 58 / 220 / 120); pit.py + prices.py
+incremental (survivorship residue surfaced: 162 pre-2016 sp500 past members are delisted
+with no findable CIK, 147 missing prices — the honest cost of reaching back); backtest.py
+START 2016→2012 + a new **pre2012-15 validation window** (predates the v2w design = OOS).
+
+**RESULTS (excess CAGR vs equal-weight bench · hit rate):**
+
+| window | NDX v1 | NDX v2w | SPX v1 | SPX v2w |
+|---|---|---|---|---|
+| full 2012-26      | −3.73/53% | −1.74/49% | +0.09/51% | +0.03/56% |
+| **pre2012-15 (OOS)** | **−2.55/53%** | **−3.98/53%** | **−0.59/47%** | **−1.36/47%** |
+| fit2016-21        | −6.84/48% | −2.47/39% | −0.23/39% | −1.39/39% |
+| holdout2022-26    | −0.54/59% | +1.53/59% | +1.07/71% | +3.16/88% |
+
+Full-sample CAGR: NDX 15.7% vs 17.4% bench · SPX 13.7% vs 13.7% bench (57 quarters).
+
+**VERDICT — v2w does NOT robustly generalize; v1≈v2w is the honest read.** On 2012-2015,
+the one window that genuinely predates the v2w design, **v2w UNDERPERFORMS v1 in BOTH
+universes** (NDX −3.98 vs −2.55, SPX −1.36 vs −0.59). v2w's advantage is entirely a
+post-2016 phenomenon — exactly the period whose per-method stats motivated its design.
+On the full 14 years v2w edges v1 on NDX (−1.74 vs −3.73) and ties on SPX, but neither
+shows a durable edge (both flat-to-negative). This TEMPERS the Plan-3 adoption: v2w is not
+a proven improvement, just a post-2016-regime fit.
+
+**Kept v2w as ADOPTED (no revert).** Reverting to fit the 2012-2015 window would itself be
+curve-fitting — and that window is the LEAST trustworthy: pre-2016 coverage is only ~54%
+(vs ~90% recently), so the missing delisted losers flatter every variant and the
+variant-to-variant differences there are noise-dominated. v2w still wins the full sample
+(NDX) and carries the theoretically-sound Plan-3 changes (flag decay, growth-out-of-quality,
+Altman gating) beyond the weights. But the framing is now honest: v1≈v2w, no clear winner,
+no proven alpha — the forward ledger remains the only clean test.
+
+**Published honestly:** backtest.json extended to 2012 with the pre2012-15 validation row
+and 3 new/updated caveats (survivorship grows to ~54% pre-2016; the KEY FINDING that v2w
+underperforms OOS; betas fall back to ~1.0 in 2012-2013 as Yahoo price history starts
+2011-08). Dashboard + share render them. This is the project's 4th published humbling result.

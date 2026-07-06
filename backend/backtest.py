@@ -18,7 +18,7 @@ except Exception:
     pass
 
 ERP, TAX = 0.05, 0.21
-START = "2016-03-31"
+START = "2012-03-31"        # Plan B: 2016 → 2012 (2012-2015 predates the v2w design = OOS)
 
 
 # ---------------- data access ----------------
@@ -463,9 +463,12 @@ def main(universe="ndx"):
             if a.get(m0) and a.get(m1):
                 fwd[(D, r["t"])] = a[m1] / a[m0] - 1
 
-    # ---- split validation: every scoring variant on fit / holdout / full windows ----
+    # ---- split validation: every scoring variant per window ----
+    # pre2012-15 is the honest prize: it PREDATES the v2w design (v2w was motivated by
+    # 2016-2026 per-method stats), so it is genuinely out-of-sample, unlike the "holdout".
     windows = [("full", quarters[0], quarters[-1]),
-               ("fit2016-21", quarters[0], "2021-12-31"),
+               ("pre2012-15", quarters[0], "2015-12-31"),
+               ("fit2016-21", "2016-01-01", "2021-12-31"),
                ("holdout2022-26", "2022-01-01", quarters[-1])]
     validation = {}
     for vn, var in VARIANTS.items():
@@ -506,6 +509,8 @@ def main(universe="ndx"):
                        "quarters": agg["n"]})
 
     avg_cov = sum(c["signals"] / c["members"] for c in coverage) / len(coverage)
+    early = [c for c in coverage if c["d"] < "2016-01-01"]
+    early_cov = (sum(c["signals"] / c["members"] for c in early) / len(early)) if early else None
     n_missing = sum(1 for s in status.values() if s != "ok")
     payload = {
         "meta": {
@@ -518,10 +523,18 @@ def main(universe="ndx"):
             "caveats": [
                 "Fundamentals are point-in-time (vintages by SEC `filed` date) — no restatement look-ahead.",
                 f"Average signal coverage {avg_cov:.0%} of members; delisted names without price/EDGAR data are missing (residual survivorship bias, direction unknown).",
-                f"Scoring variant '{ADOPTED}' — see `validation` for every variant on fit (2016-21) / holdout (2022-26) windows.",
-                "Altman-Z and Piotroski excluded from the historical signal; DCF deterministic.",
-                "ERP constant at 5.0%; risk-free = FRED DGS10 / ^TNX monthly history, feed-gap months carried forward from the last observation (2024-06→2026-06 hole ≈ 4.3%, not the old 2.5% constant); sector for departed names unknown (global multiple anchor).",
-                "Honesty note: the v2w reweighting was motivated by full-sample per-method stats (Phase 7/8), so the 'holdout' is not fully out-of-sample — the real test is the forward ledger.",
+                (f"Survivorship grows the further back we reach: pre-2016 coverage is only "
+                 f"~{early_cov:.0%} (vs ~90% recently) — the missing names are disproportionately "
+                 f"delisted losers, which FLATTERS all variants, so the 2012-2015 window is the "
+                 f"least trustworthy despite being out-of-sample.") if early_cov else
+                 "Signal coverage varies by year.",
+                (f"Scoring variant '{ADOPTED}'. `validation` reports every variant on four windows. "
+                 f"KEY FINDING (Plan B): on 2012-2015 — which PREDATES the v2w design and is genuinely "
+                 f"out-of-sample — v2w UNDERPERFORMS the original v1 weights in both universes. v2w's "
+                 f"edge is a post-2016 phenomenon, not a robust improvement; treat v1≈v2w as the honest read."),
+                "Altman-Z and Piotroski excluded from the historical signal; DCF deterministic. Betas fall back to ~1.0 in 2012-2013 (Yahoo price history starts 2011-08, so <25 months for the rolling regression).",
+                "ERP constant at 5.0%; risk-free = FRED DGS10 / ^TNX monthly history, feed-gap months carried forward from the last observation; sector for departed names unknown (global multiple anchor).",
+                "Honesty note: neither v1 nor v2w shows a durable edge over 14 years (both ~flat-to-negative full-sample); no proven alpha. The forward ledger, not this backtest, is the real out-of-sample test.",
             ],
         },
         "coverage": coverage, "curve": curve, "stats": st, "perMethod": pm,
