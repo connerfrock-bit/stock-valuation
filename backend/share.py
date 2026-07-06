@@ -48,9 +48,15 @@ def main():
             bts[key] = json.loads(p.read_text(encoding="utf-8"))
     lp = BASE / "data" / "ledger.json"
     ledger = json.loads(lp.read_text(encoding="utf-8")) if lp.exists() else None
+    moms = {}
+    for key, fn in [("ndx", "momentum.json"), ("sp500", "momentum_sp500.json")]:
+        p = BASE / "data" / fn
+        if p.exists():
+            moms[key] = json.loads(p.read_text(encoding="utf-8"))
     inject = ("<script>window.__FV_DATA__=" + script_safe(json.dumps(data))
               + ";window.__FV_BT__=" + script_safe(json.dumps(bts))
-              + ";window.__FV_LEDGER__=" + script_safe(json.dumps(ledger)) + "</script>")
+              + ";window.__FV_LEDGER__=" + script_safe(json.dumps(ledger))
+              + ";window.__FV_MOM__=" + script_safe(json.dumps(moms)) + "</script>")
     html = html.replace("<script type=\"module\">", inject + "\n<script type=\"module\">", 1)
 
     OUT.write_text(html, encoding="utf-8")

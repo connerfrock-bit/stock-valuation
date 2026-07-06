@@ -15,6 +15,30 @@ from common import (CFG, UNIVERSES, ACTIVE, resolve_universe, DB_PATH, fetch_ris
 from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim,
                      warranted_fit, warranted_value, triangulate)
 
+
+def load_live_momentum(tickers):
+    """Per-name 12-1 momentum from price_monthly (Plan C — the one factor that showed a
+       real edge). CALENDAR-based (adj[L-1]/adj[L-12], skipping the latest partial month L)
+       so gaps / recent relistings (e.g. SanDisk) correctly yield None instead of a bogus
+       multi-year ratio. Returns {ticker: mom}."""
+    from momentum import mom_12_1
+    tset = set(tickers)
+    px = {}
+    con = sqlite3.connect(DB_PATH)
+    for t, m, a in con.execute("SELECT ticker, month, adjclose FROM price_monthly"):
+        if t in tset and a:
+            px.setdefault(t, {})[m] = a
+    con.close()
+    latest = max((m for a in px.values() for m in a), default=None)
+    if not latest:
+        return {}
+    out = {}
+    for t, a in px.items():
+        v = mom_12_1(a, latest)                        # adj[latest-1] / adj[latest-12] - 1
+        if v is not None:
+            out[t] = v
+    return out
+
 try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
@@ -450,6 +474,12 @@ def main(universe_id=ACTIVE):
     rows, excluded = collect(con, rf, erp, tax, betas, uid)
     con.close()
 
+    # Plan C: per-name 12-1 momentum + within-universe percentile (a DISPLAYED factor —
+    # the backtest showed momentum is real on this growth universe but it is NOT blended
+    # into the fair-value composite; see momentum.py / Methodology).
+    mom = load_live_momentum([r["t"] for r in rows])
+    mom_sorted = sorted(v for v in mom.values() if v is not None)
+
     # cross-sectional context. Warranted anchor is fit on 'standard' names ONLY — banks/
     # REITs have no meaningful EV/EBIT and would pollute the sector-median regression.
     quality_scores(rows)
@@ -536,6 +566,9 @@ def main(universe_id=ACTIVE):
             "finCurrency": r["fin_ccy"], "finThru": r["fin_thru"],
             "price": round(r["price"], 2), "mcapB": round(r["mcap"] / 1e9, 1),
             "quality": q, "growth5y": None if r["g_trail"] is None else round(r["g_trail"], 4),
+            "mom12": None if mom.get(r["t"]) is None else round(mom[r["t"]], 4),
+            "momPct": (round(100 * pct_rank(mom_sorted, mom[r["t"]]))
+                       if mom.get(r["t"]) is not None else None),
             "divYield": round(r["div"] / r["mcap"], 4) if r["mcap"] else None,
             "negBook": bool(r["equity_now"] is not None and r["equity_now"] < 0),
             "low": round(tri["low"], 2), "mid": round(tri["mid"], 2),

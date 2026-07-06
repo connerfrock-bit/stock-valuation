@@ -444,3 +444,56 @@ no proven alpha — the forward ledger remains the only clean test.
 and 3 new/updated caveats (survivorship grows to ~54% pre-2016; the KEY FINDING that v2w
 underperforms OOS; betas fall back to ~1.0 in 2012-2013 as Yahoo price history starts
 2011-08). Dashboard + share render them. This is the project's 4th published humbling result.
+
+## Plan C — Momentum overlay study (2026-07-06) — IN PROGRESS
+
+**Goal:** momentum is the ONLY green number the lab ever produced (Plan 6: standalone 12-1
+topped the per-method table, NDX +2.03%/q, but the fixed-weight z-blend v3/v3m FAILED split
+validation). The lead was: quarterly rebalance is too blunt for momentum; test it MONTHLY,
+standalone + as an overlay/filter, with a crash-protection regime filter, on the extended
+2012-2026 data with the pre2012-15 OOS window. Momentum is price-only (no PIT/engines), so
+a dedicated monthly backtest is cleaner than retrofitting the quarterly harness.
+
+**Built:** `momentum.py` — 12-1 momentum, monthly rebalance, top-quintile, equal-weight,
+vs equal-weight benchmark, on the survivorship-aware membership + price_monthly. Variants:
+gross, net 10bp/side, net 25bp/side, and a market-trend crash filter (MOM+trend). Four
+windows incl. pre2012-15 (OOS) and 2022-2026 (highest coverage ~87% = least survivorship).
+6 tests. Also wired a LIVE per-name 12-1 momentum + within-universe percentile into
+output.json (from price_monthly, calendar-based so relistings yield None not a bogus ratio).
+
+**RESULTS (excess CAGR vs equal-weight bench, NET of 10bp/side · hit rate):**
+
+| window | NDX | SPX |
+|---|---|---|
+| full 2012-26        | **+5.61pp/53%** | +1.17pp/52% |
+| **pre2012-15 (OOS)**| **+6.08pp/58%** | +3.23pp/56% |
+| 2016-2021           | +3.25pp/50% | **−3.46pp/43%** |
+| 2022-2026 (hi-cov)  | **+8.22pp/54%** | +5.68pp/59% |
+
+Turnover only ~25%/month (winners persist). At a conservative 25bp/side, NDX full is still
++4.53pp/yr. The MOM+trend crash filter did NOT help (long-only momentum isn't the classic
+crash victim) — dropped it from the headline.
+
+**VERDICT — POSITIVE (the project's FIRST demonstrated edge), on the growth universe.**
+On the Nasdaq-100, momentum is real and robust: net-of-cost positive in ALL FOUR windows,
+including the 2012-2015 window that PREDATES all our signal design (true OOS, +6.08pp) and
+the 2022-2026 window that has the LEAST survivorship (+8.22pp — the strongest evidence it
+is not a survivorship artifact; a survivorship-driven result would concentrate in the
+low-coverage early years, not the clean recent ones). On the S&P 500 momentum is weak and
+regime-dependent (+1.2pp full but −3.5pp in 2016-2021) — it pays in the trendier growth
+universe, not the broad market. This is consistent with the entire academic literature:
+momentum is the most robust anomaly, and it lives in trending universes.
+
+**What we did with it — displayed factor, NOT blended.** Per-name 12-1 momentum + percentile
+now render on the board and a Methodology "Momentum factor" panel presents the study honestly.
+It is deliberately NOT folded into the fair-value composite (Plan 6 proved dilution destroys
+it; the live model stays v2.2, value-based). Momentum and value are orthogonal strategies —
+surfaced side by side, not averaged.
+
+**Caveats (foregrounded):** momentum is well-known/crowded (no proprietary edge); −20% to
+−33% drawdowns are real; early-year survivorship still flatters it (mitigated but not
+eliminated by the strong hi-coverage-window result); costs beyond spread (market impact,
+borrow) not modelled; the live per-name score reads price_monthly, which the incremental
+prices.py does not advance for existing names — it is fresh now but a betas-piggybacked
+monthly refresh is the robust follow-on. Net: a real edge, honestly bounded — not a
+free lunch, and not blended into the honest fair-value screen.

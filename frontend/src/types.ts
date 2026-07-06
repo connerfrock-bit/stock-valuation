@@ -26,6 +26,8 @@ export interface Company {
   mcapB: number;
   quality: number;
   growth5y: number | null;
+  mom12?: number | null;
+  momPct?: number | null;
   divYield: number | null;
   negBook: boolean;
   low: number;

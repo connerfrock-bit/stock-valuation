@@ -220,5 +220,11 @@ Honesty rules: never a single fair value without its range · agreement always b
       post-2016 fit. Honest read now v1≈v2w, no durable edge. Kept v2w (reverting = fitting
       the ~54%-coverage early window). Survivorship grows to ~54% pre-2016 (quantified +
       caveated); betas fall back pre-2013. 4th published humbling result. See WORKLOG.md.
-- [ ] Plan C: momentum overlay research (monthly, out-of-sample)
+- [x] **Plan C: momentum study** ✅ — VERDICT: **POSITIVE (the project's first demonstrated
+      edge)**, on the growth universe. `momentum.py`: 12-1, monthly, top-quintile, net-of-cost,
+      4 windows. NDX momentum is net-positive in ALL four windows incl. OOS pre2012-15 (+6.1pp)
+      and the low-survivorship 2022-26 (+8.2pp); ~25%/mo turnover. S&P weak/regime-dependent
+      (+1.2pp full, −3.5pp 2016-21). Live per-name 12-1 momentum + percentile on the board +
+      a Methodology study panel. Deliberately NOT blended into the value composite (Plan 6
+      proved dilution kills it) — displayed as an orthogonal factor. 70 tests. See WORKLOG.md.
 - [ ] Plan D: NYSE large+mid $2B+ (archetype router extends; SIC→sector map; size buckets)

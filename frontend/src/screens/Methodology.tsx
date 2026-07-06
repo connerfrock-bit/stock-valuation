@@ -28,6 +28,13 @@ interface Ledger {
     hitRate: number | null; avgExcess: number | null }>;
 }
 
+interface MomStat { excess: number; hitRate: number; stratCAGR: number; benchCAGR: number;
+  stratSharpe: number; stratMaxDD: number; avgTurnover: number }
+interface Momentum {
+  meta: { universe: string; signal: string; start: string; end: string };
+  variants: Record<string, Record<string, MomStat>>;
+}
+
 function EquityCurve({ bt }: { bt: Backtest }) {
   const W = 560, H = 220, pl = 40, pr = 12, pt = 14, pb = 24;
   const pts = bt.curve;
@@ -111,18 +118,25 @@ const UNIVERSES: [string, string, string][] = [
 export function Methodology({ meta }: { meta: Meta }) {
   const [bts, setBts] = useState<Record<string, Backtest | null>>({});
   const [ledger, setLedger] = useState<Ledger | null>(null);
+  const [moms, setMoms] = useState<Record<string, Momentum | null>>({});
   const [uni, setUni] = useState('ndx');
   useEffect(() => {
-    const w = window as unknown as { __FV_BT__?: Record<string, Backtest>; __FV_LEDGER__?: Ledger | null };
+    const w = window as unknown as { __FV_BT__?: Record<string, Backtest>;
+      __FV_LEDGER__?: Ledger | null; __FV_MOM__?: Record<string, Momentum> };
     if (w.__FV_BT__) {                                // single-file share build
       setBts(w.__FV_BT__);
       setLedger(w.__FV_LEDGER__ ?? null);
+      setMoms(w.__FV_MOM__ ?? {});
       return;
     }
     for (const [k, f] of UNIVERSES) {
       fetch(`${import.meta.env.BASE_URL}${f}`)
         .then(r => (r.ok ? r.json() : null))
         .then(d => setBts(p => ({ ...p, [k]: d })))
+        .catch(() => {});
+      fetch(`${import.meta.env.BASE_URL}momentum${k === 'sp500' ? '_sp500' : ''}.json`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => setMoms(p => ({ ...p, [k]: d })))
         .catch(() => {});
     }
     fetch(`${import.meta.env.BASE_URL}ledger.json`)
@@ -131,6 +145,7 @@ export function Methodology({ meta }: { meta: Meta }) {
       .catch(() => {});
   }, []);
   const bt = bts[uni] ?? null;
+  const mom = moms[uni] ?? null;
 
   const assumptions = [
     { label: 'Risk-free (10Y)', value: (meta.riskFree * 100).toFixed(2) + '%', src: meta.riskFreeSource },
@@ -347,6 +362,65 @@ export function Methodology({ meta }: { meta: Meta }) {
             </table>
             <div style={{ padding: '10px 20px', fontSize: 10.5, color: C.dim, lineHeight: 1.7, borderTop: `1px solid ${C.border}` }}>
               {ledger.meta.caveats.join(' · ')}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* momentum factor study — the one signal with a real (net-of-cost, OOS) edge */}
+      {mom && (() => {
+        const net = mom.variants['MOM (net 10bp)'] ?? {};
+        const wins = ['full 2012-26', 'pre2012-15 (OOS)', '2016-2021', '2022-2026 (hi-cov)'];
+        const fp = (v: number | undefined) => (v === undefined ? '—' : `${v >= 0 ? '+' : ''}${(v * 100).toFixed(1)}pp`);
+        const strong = uni === 'ndx';
+        return (
+          <div style={{ ...card, marginBottom: 18, overflow: 'hidden' }}>
+            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: C.sec }}>Momentum factor — the one signal with a real edge</span>
+              <span style={{ fontSize: 10.5, color: C.dim }}>12-1 price momentum · monthly rebalance · top quintile · net of 10bp/side cost · excess vs equal-weight</span>
+            </div>
+            <div style={{ padding: '12px 20px', fontSize: 11.5, lineHeight: 1.6, color: C.dim3, borderBottom: `1px solid ${C.border}` }}>
+              {strong ? (
+                <>On the <b style={{ color: C.sec }}>Nasdaq-100</b>, momentum is the first factor to show a durable edge —
+                  positive in <b style={{ color: C.green }}>all four windows</b> including the 2012-2015 window that
+                  predates any of our signal design (genuinely out-of-sample) and the high-coverage 2022-2026 window
+                  (least survivorship). Turnover is only ~25%/mo, so it survives realistic costs.</>
+              ) : (
+                <>On the <b style={{ color: C.sec }}>S&P 500</b>, momentum is <b style={{ color: C.amber }}>weak and
+                  regime-dependent</b> — modestly positive full-sample and out-of-sample, but it <b style={{ color: C.red }}>lost
+                  in 2016-2021</b>. Momentum pays in the trendier growth universe, not the broad market.</>
+              )}
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ color: C.dim, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                  <th style={{ textAlign: 'left', padding: '8px 20px', fontWeight: 500 }}>Window</th>
+                  <th style={{ textAlign: 'right', padding: '8px 10px', fontWeight: 500 }}>Excess/yr</th>
+                  <th style={{ textAlign: 'right', padding: '8px 10px', fontWeight: 500 }}>Hit</th>
+                  <th style={{ textAlign: 'right', padding: '8px 10px', fontWeight: 500 }}>Sharpe</th>
+                  <th style={{ textAlign: 'right', padding: '8px 20px', fontWeight: 500 }}>MaxDD</th>
+                </tr>
+              </thead>
+              <tbody>
+                {wins.map(w => {
+                  const s = net[w];
+                  return (
+                    <tr key={w} style={{ borderTop: `1px solid ${C.rowBorder}` }}>
+                      <td style={{ padding: '9px 20px', color: w.includes('OOS') ? C.sec : C.mid, fontWeight: w.includes('OOS') ? 600 : 400 }}>{w}</td>
+                      <td style={{ padding: '9px 10px', textAlign: 'right', fontFamily: MONO, fontWeight: 600, color: (s?.excess ?? 0) >= 0 ? C.green : C.red }}>{fp(s?.excess)}</td>
+                      <td style={{ padding: '9px 10px', textAlign: 'right', fontFamily: MONO, color: C.mid }}>{s ? `${(s.hitRate * 100).toFixed(0)}%` : '—'}</td>
+                      <td style={{ padding: '9px 10px', textAlign: 'right', fontFamily: MONO, color: C.mid }}>{s ? s.stratSharpe : '—'}</td>
+                      <td style={{ padding: '9px 20px', textAlign: 'right', fontFamily: MONO, color: C.red }}>{s ? `${(s.stratMaxDD * 100).toFixed(0)}%` : '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div style={{ padding: '10px 20px', fontSize: 10.5, color: C.dim, lineHeight: 1.7, borderTop: `1px solid ${C.border}` }}>
+              Momentum is shown as a <b>displayed factor</b> (per-name percentile on the board) — it is deliberately NOT
+              blended into the fair-value composite (Plan 6 showed dilution destroys it). Caveats: momentum is well-known
+              and crowded; −20% to −33% drawdowns are real; early-year survivorship still flatters it (mitigated by the
+              strong 2022-2026 result); costs beyond spread (impact) not modelled.
             </div>
           </div>
         );

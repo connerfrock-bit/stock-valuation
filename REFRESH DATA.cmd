@@ -31,9 +31,14 @@ python value.py all
 if errorlevel 1 goto :fail
 
 echo.
-echo [5/5] Updating the forward paper-trading ledgers...
+echo [5/6] Updating the forward paper-trading ledgers...
 python ledger.py all
 if errorlevel 1 goto :fail
+
+echo.
+echo [6/6] Refreshing the momentum factor study...
+python momentum.py
+python momentum.py sp500
 
 echo.
 echo ============================================================
