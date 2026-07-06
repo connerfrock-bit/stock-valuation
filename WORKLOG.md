@@ -307,3 +307,87 @@ design care, not hygiene-sprint leftovers.
 
 **State at close: 54 tests green · model v2.1 · 12 runs in snapshot history · ledger
 armed · all Phase-9 plans complete.**
+
+---
+
+# Phase 10 — Universe expansion (CEO roadmap: A → B → C → D)
+
+Roadmap set 2026-07-03 after the "are the methods reliable / how far can we expand"
+review. Staged by value-per-effort: **A** S&P 500 live screener (methods work best there;
+nearly free — universe already un-hardcoded) · **B** extend S&P backtest to ~2012-13
+(cheap truth, XBRL floor is 2009) · **C** momentum overlay research (the only green
+signal we ever found) · **D** NYSE large+mid $2B+ (real work: archetype router, SIC
+mapping, size buckets). Declined: micro-caps + pre-2009 backtest (free-data quality
+makes honest numbers impossible; that's the paid-data gate, not an engineering gate).
+
+## Plan A — S&P 500 live screener (2026-07-03) — IN PROGRESS
+
+**Goal:** run the S&P 500 as a second LIVE screener alongside Nasdaq-100 (dashboard
+toggle, mirroring the existing backtest toggle). The one non-negotiable: a financial-
+archetype router so banks/insurers/REITs get RIM-only + honest N/A, never garbage
+DCF/EV-EBITDA fair values. Method: ultracode workflows — Understand (seam map) → Design
+(judge panel on data model + router) → implement inline → adversarial Review.
+
+**Understand (workflow, 4 parallel readers):** mapped every seam — no universe column +
+ingest DROPs (data-loss hazard); snapshots colliding PK; sp500 parser/GICS reusable;
+DCF/EPV/Warranted run unconditionally (garbage for banks).
+
+**Design (2 judge panels):** (a) superset + `universe_membership` junction — ingest the
+UNION once into universe-agnostic tables (betas/sanity untouched), filter per universe,
+snapshots/run_stats PKs gain universe, NYSE = one more config block. (b) pure
+`archetype_of(GICS)` + static `ARCHETYPE_GATES` forcing DCF/EPV/Warranted/revDCF→None for
+financials/REITs before triangulate — one seam gates the engine AND flips applicable AND
+needs no weight override; no sub-classification (we lack FFO/NIM).
+
+**Implemented (backend):** [[universe]] config; S&P parser + build_union (GICS overrides
+Nasdaq ICB); union ingest + junction; archetype router in value.py; per-universe artifacts
++ universes.json manifest; snapshots/run_stats PK migrations; model v2.2; 10 archetype tests.
+**Frontend:** activated the universe dropdown (universes.json → swap output_<id>.json); clean build.
+
+**Bugs the router surfaced at universe scale (all fixed, re-ingesting):**
+1. **EDGAR throttling** silently dropped 187/517 names (no retry) → exponential-backoff
+   retry in http_json + resume mode that re-fetches low-coverage names (GS ingested with
+   1 concept during a throttle window; naive resume had skipped it).
+2. **Banks tag annual net income as `ProfitLoss`**, not `NetIncomeLoss` (PNC/GS have ZERO
+   annual NetIncomeLoss points) → added ProfitLoss + to-common fallbacks. The L1c/L3
+   bank-XBRL divergence the blueprint predicted for expansion.
+3. **PayPal mislabeled Industrials** by Nasdaq ICB (GICS: Financials) → build_union lets
+   the GICS source win for overlap names.
+4. **Asset-light financials** (Visa/MA/Moody's/exchanges) fail RIM's book gate but are FCF
+   businesses, not banks → principled exception (reuses rim_ok + positive FCF, no new
+   threshold): a Financials name where RIM is inapplicable on book but FCF is clean → valued
+   as standard.
+
+**Adversarial Review (workflow, 4 hunters + verifiers):** the hunt surfaced one genuine
+**blocker** — AMP (Ameriprise) had been asset-light→FCF-routed and produced a $1,528 DCF
+at 3× price, conf 5. Ameriprise is a float-funded annuity/asset-manager whose "clean FCF"
+is inflated by separate-account flows. Fix: a **float-guard** on the asset-light exception —
+only FCF-route a financial whose normalized FCF yield ≤ 6% (above that = float/lending
+distortion; AMP 13%, Amex 7%). Clean separation: AMP/AXP → RIM-gated/excluded; the 8 real
+fee/network names (V/MA/MCO/AON/MSCI/BX/ARES/HOOD, fcfy ≤ 4.2%) keep FCF valuation. Also
+nulled the EV/FCF display metrics (fcfy, ev/ebitda, nd/ebitda) for RIM-gated financials —
+a "19% FCF yield" on a bank is misleading even as a display column. The other ~24 hunted
+findings were REFUTED by design intent (reviewers flagging correctly-RIM-gated banks or
+honestly-excluded REITs as "should be priced"). Verify phase hit the session token limit;
+triaged the raw findings manually.
+
+**FINAL STATE (model v2.2):**
+- **Nasdaq-100: 96 covered** (PYPL now correctly Financials→RIM-only; median |Δmid| vs
+  v2.1 just 0.5% — standard names byte-stable). **S&P 500: 479 covered / 20 excluded.**
+- Router working: banks/insurers → RIM-only (JPM/GS/BAC, conf 2, no garbage DCF);
+  asset-light fee/network → FCF (V −3% · MA +11% · MCO −29%, sane); REITs → RIM if
+  book-clean else honestly excluded; the ~75% standard universe unchanged.
+- 20 S&P exclusions all honest: 6 tower/data-center/storage REITs (need FFO/NAV, negative
+  book), 8 custom-capex-extension names (NEE/DTE/PSX — utilities/energy tagging tail),
+  2 Wikipedia spinoff placeholders (FDXF/HONA), AMP/AXP (float-distorted), IBKR, AXON.
+- Verified no financial has >80% upside and no RIM-gated name shows EV/FCF metrics.
+- Dashboard toggle live (universes.json manifest → output_<id>.json); clean TS build;
+  share build 432 KB. 34 tests green (10 new archetype).
+
+**Known limitations (documented, not blocking):** utility/energy custom-capex-extension
+names (~6) honestly excluded; PYPL and fintechs-with-book get conservative RIM (the safe
+choice — an FCF-clean rule would mis-route real regional banks to garbage DCF, verified);
+asset-light insurers use a 6% fcfy float-guard (a data-sanity clamp, not a fitted class
+boundary). Backtest still uses its own engine stack (no archetype gate) — the live/backtest
+divergence is pre-existing and documented; adding the router to the S&P backtest is a
+future refinement that would require re-validating the v2w adoption.

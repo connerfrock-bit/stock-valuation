@@ -2,14 +2,17 @@
 title Fair Value - data refresh
 cd /d "C:\Users\conne\Desktop\stock valuation project\backend"
 echo ============================================================
-echo  Fair Value - full data refresh (takes roughly 8-10 minutes)
+echo  Fair Value - full data refresh (union of Nasdaq-100 + S&P 500, ~25 min)
 echo  1) EDGAR financials + prices   2) share-count cross-check
-echo  3) betas    4) valuation engines    5) forward ledger
+echo  3) betas    4) valuation engines (both universes)   5) forward ledgers
 echo ============================================================
 echo.
 
-echo [1/5] Ingesting EDGAR financials + prices (~5 min)...
+echo [1/5] Ingesting EDGAR financials + prices for the union (~15 min)...
 python ingest_v1.py
+if errorlevel 1 goto :fail
+echo   (backfilling any names EDGAR throttled...)
+python ingest_v1.py --resume
 if errorlevel 1 goto :fail
 
 echo.
@@ -18,18 +21,18 @@ python sanity.py
 if errorlevel 1 goto :fail
 
 echo.
-echo [3/5] Computing betas (~2 min)...
+echo [3/5] Computing betas (~8 min)...
 python betas.py
 if errorlevel 1 goto :fail
 
 echo.
-echo [4/5] Running valuation engines...
-python value.py
+echo [4/5] Running valuation engines for every universe...
+python value.py all
 if errorlevel 1 goto :fail
 
 echo.
-echo [5/5] Updating the forward paper-trading ledger...
-python ledger.py
+echo [5/5] Updating the forward paper-trading ledgers...
+python ledger.py all
 if errorlevel 1 goto :fail
 
 echo.

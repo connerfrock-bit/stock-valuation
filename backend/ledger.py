@@ -15,7 +15,7 @@ stdlib only.   python ledger.py     (run after value.py)
 """
 import json, sqlite3, sys
 from datetime import date, datetime
-from common import DB_PATH
+from common import DB_PATH, UNIVERSES, ACTIVE, resolve_universe
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -88,12 +88,20 @@ def build_ledger(runs):
     }
 
 
-def main():
+def main(universe_id=ACTIVE):
+    ucfg = resolve_universe(universe_id)
+    uid, uname = ucfg["id"], ucfg["name"]
     con = sqlite3.connect(DB_PATH)
     runs = {}
-    try:
-        for rd, model, t, price, score in con.execute(
-                "SELECT run_date, model, ticker, price, score FROM snapshots"):
+    try:                                                  # Plan A: one universe's baskets only
+        has_uni = "universe" in [r[1] for r in con.execute("PRAGMA table_info(snapshots)")]
+        if has_uni:
+            q = ("SELECT run_date, model, ticker, price, score FROM snapshots "
+                 "WHERE universe=?")
+            cur = con.execute(q, (uname,))
+        else:
+            cur = con.execute("SELECT run_date, model, ticker, price, score FROM snapshots")
+        for rd, model, t, price, score in cur:
             runs.setdefault((rd, model), {})[t] = (price, score)
     except sqlite3.OperationalError:
         print("No snapshots table yet — run value.py first.")
@@ -101,14 +109,19 @@ def main():
     con.close()
     payload = build_ledger(runs)
     if not payload:
-        print("No snapshots yet — run value.py first.")
+        print(f"No {uname} snapshots yet — run value.py {uid} first.")
         return
+    payload["meta"]["universe"] = uname
+    payload["meta"]["universeId"] = uid
 
-    out = DB_PATH.parent / "ledger.json"
-    out.write_text(json.dumps(payload, indent=1), encoding="utf-8")
-    fe = DB_PATH.parent.parent.parent / "frontend" / "public"
-    if fe.is_dir():
-        (fe / "ledger.json").write_text(json.dumps(payload), encoding="utf-8")
+    default = (uid == ACTIVE)
+    fnames = [f"ledger_{uid}.json"] + (["ledger.json"] if default else [])
+    for d in [DB_PATH.parent, DB_PATH.parent.parent.parent / "frontend" / "public"]:
+        if d.is_dir():
+            for fn in fnames:
+                (d / fn).write_text(json.dumps(payload, indent=1 if d == DB_PATH.parent else None),
+                                    encoding="utf-8")
+    out = DB_PATH.parent / fnames[0]
 
     print(f"{'DATE':12}{'MODEL':7}{'AGE':>5}{'COV':>8}{'BASKET':>9}{'BENCH':>9}{'EXCESS':>9}")
     print("-" * 59)
@@ -120,7 +133,7 @@ def main():
         print(f"[{m}] {s['baskets']} basket(s) · oldest {s['oldestDays']}d · "
               + (f"aged avg excess {s['avgExcess']*100:+.1f}% · hit {s['hitRate']*100:.0f}%"
                  if s["aged"] else "no aged baskets yet — forward returns accrue from here"))
-    print(f"Wrote {out} (+ synced to frontend)")
+    print(f"[{uname}] Wrote {out} (+ synced to frontend)")
 
 
 def baskets_tail(baskets, n):
@@ -128,4 +141,8 @@ def baskets_tail(baskets, n):
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "all":
+        for _uid in UNIVERSES:
+            main(_uid)
+    else:
+        main(sys.argv[1] if len(sys.argv) > 1 else ACTIVE)

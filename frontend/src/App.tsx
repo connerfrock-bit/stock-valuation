@@ -6,7 +6,7 @@ import { Overview } from './screens/Overview';
 import { Screener } from './screens/Screener';
 import { DeepDive } from './screens/DeepDive';
 import { Methodology } from './screens/Methodology';
-import type { Company, Filters, Payload, Screen, SortKey } from './types';
+import type { Company, Filters, Payload, Screen, SortKey, UniverseInfo } from './types';
 import { DEFAULT_FILTERS } from './types';
 
 const WATCH_KEY = 'fairvalue.watchlist';
@@ -26,22 +26,37 @@ export default function App() {
   const [watch, setWatch] = useState<Record<string, boolean>>(() => {
     try { return JSON.parse(localStorage.getItem(WATCH_KEY) ?? '{}'); } catch { return {}; }
   });
+  const [universes, setUniverses] = useState<UniverseInfo[]>([]);
+  const [universe, setUniverse] = useState<string>('');   // '' until manifest resolves
+  const [uniOpen, setUniOpen] = useState(false);
+  const embedded = (window as unknown as { __FV_DATA__?: Payload }).__FV_DATA__;
 
   useEffect(() => {
-    const embedded = (window as unknown as { __FV_DATA__?: Payload }).__FV_DATA__;
-    if (embedded) {                                   // single-file share build
+    if (embedded) {                                   // single-file share build: one universe, no toggle
       setData(embedded);
       if (embedded.companies.length) setSelected(embedded.companies[0].ticker);
       return;
     }
-    fetch(`${import.meta.env.BASE_URL}output.json`)
+    fetch(`${import.meta.env.BASE_URL}universes.json`)
+      .then(r => (r.ok ? r.json() : []))
+      .then((list: UniverseInfo[]) => {
+        setUniverses(list);
+        setUniverse((list.find(u => u.default) ?? list[0])?.id ?? 'ndx');
+      })
+      .catch(() => setUniverse('ndx'));                // pre-manifest builds → bare output.json
+  }, [embedded]);
+
+  useEffect(() => {
+    if (embedded || !universe) return;
+    const file = universes.length ? `output_${universe}.json` : 'output.json';
+    fetch(`${import.meta.env.BASE_URL}${file}`)
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then((p: Payload) => {
         setData(p);
-        if (p.companies.length) setSelected(p.companies[0].ticker);
+        setSelected(p.companies.length ? p.companies[0].ticker : null);
       })
       .catch(e => setError(String(e)));
-  }, []);
+  }, [embedded, universe, universes.length]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -227,14 +242,38 @@ export default function App() {
 
           <div style={{ flex: 1 }} />
 
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 7, height: 30, padding: '0 11px',
-            border: `1px solid ${C.borderHi}`, borderRadius: 7, fontSize: 11.5, color: C.sec, cursor: 'default',
-          }} title="Live-screener universe (assumptions.toml)">
-            <span style={{ fontWeight: 600 }}>{data.meta.universe.toUpperCase()}</span>
-            <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={C.dim} strokeWidth={3}>
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
+          <div style={{ position: 'relative' }}>
+            <div onClick={() => !embedded && universes.length > 1 && setUniOpen(o => !o)} style={{
+              display: 'flex', alignItems: 'center', gap: 7, height: 30, padding: '0 11px',
+              border: `1px solid ${uniOpen ? C.blue : C.borderHi}`, borderRadius: 7, fontSize: 11.5,
+              color: C.sec, cursor: (!embedded && universes.length > 1) ? 'pointer' : 'default',
+            }} title="Live-screener universe">
+              <span style={{ fontWeight: 600 }}>{data.meta.universe.toUpperCase()}</span>
+              {!embedded && universes.length > 1 && (
+                <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={C.dim} strokeWidth={3}
+                  style={{ transform: uniOpen ? 'rotate(180deg)' : 'none' }}>
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              )}
+            </div>
+            {uniOpen && (
+              <div style={{
+                position: 'absolute', top: 36, right: 0, minWidth: 172, background: '#11151d',
+                border: `1px solid ${C.borderHi}`, borderRadius: 8,
+                boxShadow: '0 12px 32px rgba(0,0,0,.55)', overflow: 'hidden', zIndex: 50,
+              }}>
+                {universes.map(u => (
+                  <div key={u.id} onClick={() => { setUniverse(u.id); setUniOpen(false); }} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                    padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #161b24',
+                    background: u.id === universe ? 'rgba(68,147,248,0.10)' : 'transparent',
+                  }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: u.id === universe ? '#fff' : C.mid }}>{u.name}</span>
+                    <span style={{ fontFamily: MONO, fontSize: 10, color: C.dim }}>{u.covered ?? '—'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.25 }}>
             <span style={{ fontSize: 9, letterSpacing: '.08em', color: C.dim2, textTransform: 'uppercase' }}>Data as of</span>

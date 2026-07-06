@@ -10,7 +10,8 @@ It will be refactored into the fairvalue/ package (ingest/ store/ ...) in a late
 """
 import json, sqlite3, time, urllib.request, urllib.error
 from pathlib import Path
-from universe import get_universe
+from universe import get_universe, build_union
+from common import UNIVERSES
 
 CONTACT   = "FairValue research conner.frock@gmail.com"   # SEC requires a descriptive UA
 SEC_UA    = {"User-Agent": CONTACT}
@@ -25,8 +26,12 @@ TICKERS_CACHE = DATA_DIR / "company_tickers.json"
 CONCEPTS = {
     "revenue":     ["RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues",
                     "SalesRevenueNet", "RevenueFromContractWithCustomerIncludingAssessedTax",
-                    "RegulatedAndUnregulatedOperatingRevenue"],   # utilities (XEL, etc.)
-    "net_income":  ["NetIncomeLoss"],
+                    "RegulatedAndUnregulatedOperatingRevenue",    # utilities (XEL, etc.)
+                    "RevenuesNetOfInterestExpense"],              # broker-dealers (GS, MS)
+    # banks/insurers often carry NO annual-duration NetIncomeLoss point — the full-year
+    # bottom line lands under ProfitLoss (total incl. NCI) or the to-common variant.
+    "net_income":  ["NetIncomeLoss", "ProfitLoss",
+                    "NetIncomeLossAvailableToCommonStockholdersBasic"],
     "ebit":        ["OperatingIncomeLoss",
                     # last resort: pretax income (ADP-style filers report no operating subtotal)
                     "IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest"],
@@ -34,7 +39,9 @@ CONCEPTS = {
                     "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"],
     "capex":       ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets",
                     "PaymentsToAcquireOtherPropertyPlantAndEquipment",        # ADP, EA
-                    "PaymentsToExploreAndDevelopOilAndGasProperties"],        # FANG (development capex)
+                    "PaymentsToExploreAndDevelopOilAndGasProperties",         # FANG (development capex)
+                    "PaymentsForCapitalImprovements",                         # SNA + some industrials
+                    "PaymentsToAcquireOilAndGasProperty"],                    # energy variant
     "dep_amort":   ["DepreciationDepletionAndAmortization", "DepreciationAndAmortization",
                     "DepreciationAmortizationAndAccretionNet", "Depreciation"],
     "sbc":         ["ShareBasedCompensation", "AllocatedShareBasedCompensationExpense"],
@@ -109,10 +116,23 @@ def _days(start, end):
     return (date.fromisoformat(end) - date.fromisoformat(start)).days
 
 
-def http_json(url, headers, timeout=25):
-    req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read())
+def http_json(url, headers, timeout=25, retries=4):
+    """GET JSON with exponential backoff on throttling/transient errors. At universe
+       scale (~500 names) EDGAR intermittently 429s a contiguous burst — without a
+       retry those names silently vanished from the screener (Plan A found this)."""
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 503, 502, 504) and attempt < retries - 1:
+                time.sleep(1.5 * (2 ** attempt)); continue
+            raise
+        except (urllib.error.URLError, TimeoutError):
+            if attempt < retries - 1:
+                time.sleep(1.5 * (2 ** attempt)); continue
+            raise
 
 
 def load_ticker_map():
@@ -354,8 +374,11 @@ def fetch_financials(cik):
             continue
         ns_ccy = choose_currency(ns, cmap["revenue"])
         got = {name: pick_annual(ns, tags, ns_ccy) for name, tags in cmap.items()}
-        if not out.get("revenue") and got.get("revenue"):
-            out, ccy, win = got, ns_ccy, (ns, cmap)       # namespace with revenue wins
+        # Accept the namespace on revenue OR net income — brokers/banks (GS, MS) report no
+        # revenue under our tags, and gating on revenue alone lost their equity/NI entirely.
+        if not (out.get("revenue") or out.get("net_income")) and \
+                (got.get("revenue") or got.get("net_income")):
+            out, ccy, win = got, ns_ccy, (ns, cmap)
     if not out:
         out = {name: {} for name in CONCEPTS}
     nowd = compute_now(*win, ccy) if win else {}          # TTM flows + fresh instants
@@ -397,27 +420,44 @@ def init_db(con):
     CREATE TABLE financials_now(
         ticker TEXT, concept TEXT, value REAL, thru TEXT, basis TEXT,
         PRIMARY KEY (ticker, concept));
+    -- Plan A: which CURRENT live universe(s) each ingested ticker belongs to. The
+    -- companies/financials tables hold the UNION (one row per distinct CIK); this
+    -- junction is how value.py/ledger.py score each universe separately. (Distinct from
+    -- the backtest's survivorship-walked membership{_sp500} quarterly snapshot tables.)
+    CREATE TABLE IF NOT EXISTS universe_membership(
+        universe TEXT, ticker TEXT, PRIMARY KEY (universe, ticker));
     """)
 
 
-def coverage_check(con, now, warn_drop=0.05):
+def coverage_check(con, now, warn_drop=0.05, universe="ALL"):
     """Record per-concept ticker coverage in `run_stats` (append-only, survives the
        companies/financials rebuild) and compare against the previous run. A silent
-       XBRL tag change shows up here as a coverage drop — loudly, not invisibly."""
+       XBRL tag change shows up here as a coverage drop — loudly, not invisibly.
+       Plan A: keyed by (run_date, universe, concept); the union ingest logs as 'ALL'."""
+    cols = [r[1] for r in con.execute("PRAGMA table_info(run_stats)")]
+    if cols and "universe" not in cols:                   # one-time migration to universe PK
+        con.executescript("""
+            ALTER TABLE run_stats RENAME TO run_stats_v1;
+            CREATE TABLE run_stats(run_date TEXT, universe TEXT, concept TEXT, tickers INTEGER,
+                PRIMARY KEY (run_date, universe, concept));
+            INSERT INTO run_stats SELECT run_date, 'ALL', concept, tickers FROM run_stats_v1;
+            DROP TABLE run_stats_v1;""")
     con.execute("CREATE TABLE IF NOT EXISTS run_stats("
-                "run_date TEXT, concept TEXT, tickers INTEGER, "
-                "PRIMARY KEY (run_date, concept))")
-    prev_run = con.execute("SELECT MAX(run_date) FROM run_stats").fetchone()[0]
+                "run_date TEXT, universe TEXT, concept TEXT, tickers INTEGER, "
+                "PRIMARY KEY (run_date, universe, concept))")
+    prev_run = con.execute("SELECT MAX(run_date) FROM run_stats WHERE universe=?",
+                           (universe,)).fetchone()[0]
     cur = dict(con.execute(
         "SELECT concept, COUNT(DISTINCT ticker) FROM financials GROUP BY concept"))
-    con.executemany("INSERT OR REPLACE INTO run_stats VALUES (?,?,?)",
-                    [(now, c, n) for c, n in cur.items()])
+    con.executemany("INSERT OR REPLACE INTO run_stats VALUES (?,?,?,?)",
+                    [(now, universe, c, n) for c, n in cur.items()])
     con.commit()
     if not prev_run or prev_run == now:
         print("Coverage baseline recorded (first tracked run).")
         return
     prev = dict(con.execute(
-        "SELECT concept, tickers FROM run_stats WHERE run_date=?", (prev_run,)))
+        "SELECT concept, tickers FROM run_stats WHERE run_date=? AND universe=?",
+        (prev_run, universe)))
     drops = [(c, p, cur.get(c, 0)) for c, p in sorted(prev.items())
              if cur.get(c, 0) < p * (1 - warn_drop)]
     if drops:
@@ -430,22 +470,42 @@ def coverage_check(con, now, warn_drop=0.05):
         print(f"Coverage check vs {prev_run}: all {len(cur)} concepts within {warn_drop:.0%}.")
 
 
-def main():
+def main(universe_ids=None, resume=False):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     cikmap = load_ticker_map()
     con = sqlite3.connect(DB_PATH)
-    init_db(con)
+    if not resume:
+        init_db(con)                                      # full rebuild (schema may evolve)
+    else:
+        con.execute("CREATE TABLE IF NOT EXISTS universe_membership("
+                    "universe TEXT, ticker TEXT, PRIMARY KEY (universe, ticker))")
     now = time.strftime("%Y-%m-%d %H:%M:%S")
 
-    universe, usrc = get_universe()
+    # Plan A: ingest the UNION of all configured live universes ONCE. Each distinct CIK
+    # is fetched a single time; the junction below records which universe(s) it serves.
+    universe_ids = universe_ids or list(UNIVERSES)
+    universe, membership, srcs = build_union(universe_ids)
     n = len(universe)
-    print(f"Universe: {n} names [{usrc}]\n")
-    ok = full = 0
+    print(f"Union universe: {n} distinct names · sources {srcs}"
+          + (" · RESUME (backfill missing only)\n" if resume else "\n"))
+    ingested = {}                                         # ticker actually ingested -> its universes
     seen_ciks = set()                                     # dedupe share classes (GOOGL/GOOG)
+    if resume:                                            # keep well-covered names; re-fetch the rest
+        cov = dict(con.execute("SELECT ticker, COUNT(DISTINCT concept) FROM financials "
+                               "GROUP BY ticker"))
+        have = {t for t, n in cov.items() if n >= 15}     # low-coverage names get re-fetched
+        for tk in have:
+            ingested[tk] = membership.get(tk, set())
+            c = cikmap.get(tk)
+            if c:
+                seen_ciks.add(c)
+    ok = full = 0
     for i, (ticker, name, sector) in enumerate(universe, 1):
         cik = cikmap.get(ticker)
         if not cik:
             print(f"[{i:3}/{n}] {ticker:6} no CIK (foreign / non-filer?)"); continue
+        if resume and ticker in ingested:
+            continue                                      # already have it — skip the fetch
         if cik in seen_ciks:
             print(f"[{i:3}/{n}] {ticker:6} duplicate share class — skipped"); continue
         seen_ciks.add(cik)
@@ -466,6 +526,7 @@ def main():
         con.executemany("INSERT OR REPLACE INTO financials_now VALUES (?,?,?,?,?)",
                         [(ticker, c, v, thru, basis) for c, (v, thru, basis) in nowd.items()])
         con.commit()
+        ingested[ticker] = membership.get(ticker, set())
 
         have = [c for c, s in fins.items() if s]
         rev = fins["revenue"]; last_fy = max(rev) if rev else None
@@ -477,11 +538,22 @@ def main():
         print(f"[{i:3}/{n}] {ticker:6} {pr:>8} mcap {mc:>8} FY{last_fy or '----'} "
               f"rev {rv:>8} cov {len(have):2}/{len(CONCEPTS)}{cflag}")
 
+    # Plan A: rebuild the current-membership junction from what we ACTUALLY ingested
+    # (a name that failed EDGAR/price is not claimed as a live member).
+    con.execute("DELETE FROM universe_membership")
+    con.executemany("INSERT OR REPLACE INTO universe_membership VALUES (?,?)",
+                    [(u, t) for t, us in ingested.items() for u in us])
+    con.commit()
+    per_uni = {u: sum(1 for us in ingested.values() if u in us) for u in universe_ids}
+
     total = con.execute("SELECT COUNT(*) FROM financials").fetchone()[0]
     print(f"\nIngested {ok}/{n} companies ({full} with ≥15/{len(CONCEPTS)} coverage); {total} datapoints → {DB_PATH}")
+    print(f"Live membership: " + " · ".join(f"{u}={c}" for u, c in per_uni.items()))
     coverage_check(con, now)
     con.close()
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    args = [a for a in sys.argv[1:] if a != "--resume"]
+    main(args or None, resume="--resume" in sys.argv)

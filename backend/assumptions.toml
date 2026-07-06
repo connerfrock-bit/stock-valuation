@@ -2,6 +2,9 @@
 # Version-controlled config, NOT constants buried in code. Read via stdlib tomllib.
 # Resolution order (later overrides earlier): global -> archetype -> per-company (with source+date).
 
+# Which universe the bare artifacts (output.json / ledger.json) default to (Plan A).
+active_universe = "ndx"
+
 [global]
 equity_risk_premium  = 0.050    # Damodaran implied ERP (single most consequential input)
 beta_default         = 1.00     # PLACEHOLDER until Blume-adjusted regression / Damodaran industry betas (Phase 3)
@@ -25,6 +28,16 @@ min_wacc_minus_g     = 0.015    # clamp/skip when WACC - g is below this (TV exp
 # risk_free is pulled LIVE from FRED DGS10 — never hardcoded. Fallback only if the fetch fails.
 risk_free_fallback   = 0.043
 
-[universe]                      # Plan 7: the live-screener universe, no longer hardcoded
+# Live-screener universes (Plan A). Ingest builds the UNION of all of these once; each
+# is scored/published separately. Add NYSE later as one more [[universe]] block (Plan D).
+[[universe]]
+id       = "ndx"
 name     = "Nasdaq-100"
-min_mcap = 15e9                 # smallest plausible member — below this, suspect share count
+source   = "ndx"                # universe.py get_universe()
+min_mcap  = 15e9                # smallest plausible member — below this, suspect share count
+
+[[universe]]
+id       = "sp500"
+name     = "S&P 500"
+source   = "sp500"              # universe.py sp500 constituents (Wikipedia)
+min_mcap  = 3e9                 # S&P 500 floor is lower than the Nasdaq-100

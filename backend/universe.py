@@ -112,8 +112,98 @@ def get_universe():
     return FALLBACK, "built-in fallback"
 
 
+# ---------------- S&P 500 constituents (Plan A live universe) ----------------
+GICS = {"Information Technology", "Communication Services", "Consumer Discretionary",
+        "Consumer Staples", "Health Care", "Financials", "Industrials", "Energy",
+        "Utilities", "Materials", "Real Estate"}
+SP500_CACHE = CACHE.parent / "universe_cache_sp500.json"
+
+
+def sp500_from_wikipedia():
+    """[(ticker, name, GICS-sector)] from the live S&P 500 components table.
+       Columns: Symbol · Security · GICS Sector · … — identified by a GICS sector cell."""
+    html = http_text("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies", timeout=25)
+    p = _Tables(); p.feed(html)
+    best = []
+    for tbl in p.tables:
+        out = []
+        for r in [r for r in tbl if r]:
+            cells = [c.strip() for c in r]
+            ti = next((i for i, c in enumerate(cells[:2])
+                       if re.fullmatch(r"[A-Z][A-Z.\-]{0,5}", c)), None)
+            sec = next((c for c in cells if c in GICS), None)
+            if ti is None or not sec:
+                continue
+            tick = cells[ti]
+            # Security (company name) is the column immediately after the Symbol column
+            name = cells[ti + 1] if ti + 1 < len(cells) and cells[ti + 1] != sec else tick
+            out.append((tick.replace(".", "-"), name, sec))
+        if len(out) > len(best):
+            best = out
+    return best
+
+
+def sp500_constituents():
+    """Live S&P 500 with a cache fallback + churn guard (mirrors get_universe honesty)."""
+    cached = None
+    if SP500_CACHE.exists():
+        try:
+            cached = json.loads(SP500_CACHE.read_text(encoding="utf-8"))
+        except Exception:
+            cached = None
+    u = []
+    try:
+        u = sp500_from_wikipedia()
+    except Exception as e:
+        print(f"  ! S&P 500 fetch failed ({e!r})")
+    if len(u) >= 450:
+        if cached:
+            churn = {t for t, _, _ in cached["names"]} ^ {t for t, _, _ in u}
+            if len(churn) > max(20, len(cached["names"]) // 10):
+                print(f"  ⚠ S&P 500 churn vs cache {cached['date']}: {len(churn)} names — verify parse")
+        SP500_CACHE.write_text(json.dumps({"date": time.strftime("%Y-%m-%d"), "names": u}),
+                               encoding="utf-8")
+        return u, "Wikipedia (live)"
+    if cached and len(cached.get("names", [])) >= 450:
+        return [tuple(x) for x in cached["names"]], f"cache ({cached['date']})"
+    raise SystemExit("S&P 500 constituents unavailable (no live parse, no cache)")
+
+
+def load_constituents(uid):
+    """Dispatch by universe id -> ([(ticker, name, sector)], source)."""
+    if uid == "ndx":
+        return get_universe()
+    if uid == "sp500":
+        return sp500_constituents()
+    raise SystemExit(f"unknown universe id {uid!r}")
+
+
+# Universes whose sector column is authoritative GICS (vs the Nasdaq page's coarse ICB
+# mapping, which mislabels e.g. PayPal as Industrials). GICS wins for overlap names.
+GICS_SOURCES = {"sp500"}
+
+
+def build_union(uids):
+    """Merge several universes into one ingest list, deduped by ticker, recording each
+       ticker's set of universes. -> (rows [(ticker,name,sector)], membership {ticker:set(uid)}, srcs).
+       First universe to name a ticker wins name; GICS sources override ICB-mapped sectors."""
+    rows, membership, srcs, sec_src = {}, {}, {}, {}
+    for uid in uids:
+        lst, src = load_constituents(uid)
+        srcs[uid] = f"{len(lst)} [{src}]"
+        for tk, nm, sec in lst:
+            if tk not in rows:
+                rows[tk] = (tk, nm, sec); sec_src[tk] = uid
+            elif uid in GICS_SOURCES and sec_src.get(tk) not in GICS_SOURCES:
+                rows[tk] = (rows[tk][0], rows[tk][1], sec); sec_src[tk] = uid   # GICS wins
+            membership.setdefault(tk, set()).add(uid)
+    return list(rows.values()), membership, srcs
+
+
 if __name__ == "__main__":
     u, src = get_universe()
-    print(f"Universe: {len(u)} names  [{src}]\n")
-    for tk, nm, sc in u:
-        print(f"  {tk:6} {sc:24} {nm}")
+    print(f"Nasdaq-100: {len(u)} names  [{src}]")
+    s, ssrc = sp500_constituents()
+    print(f"S&P 500:    {len(s)} names  [{ssrc}]")
+    rows, mem, srcs = build_union(["ndx", "sp500"])
+    print(f"Union:      {len(rows)} distinct  · sources {srcs}")

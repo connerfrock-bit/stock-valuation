@@ -11,7 +11,18 @@ BASE       = Path(__file__).resolve().parent
 DB_PATH    = BASE / "data" / "fairvalue.db"
 _TOML      = tomllib.load(open(BASE / "assumptions.toml", "rb"))
 CFG        = _TOML["global"]
-UCFG       = _TOML.get("universe", {"name": "Universe", "min_mcap": 0.0})
+
+# Live-screener universes (Plan A). [[universe]] array keyed by id; ACTIVE is the default
+# for the bare output.json/ledger.json artifacts.
+UNIVERSES  = {u["id"]: u for u in _TOML.get("universe", [])} or \
+             {"ndx": {"id": "ndx", "name": "Nasdaq-100", "source": "ndx", "min_mcap": 15e9}}
+ACTIVE     = _TOML.get("active_universe", next(iter(UNIVERSES)))
+
+def resolve_universe(uid):
+    """Universe config by id -> {id, name, source, min_mcap}. Unknown id falls back to ACTIVE."""
+    return UNIVERSES.get(uid, UNIVERSES[ACTIVE])
+
+UCFG       = resolve_universe(ACTIVE)                 # back-compat: the active universe's config
 BROWSER_UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
 

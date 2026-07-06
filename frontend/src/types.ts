@@ -60,8 +60,16 @@ export interface Meta {
   erp: number;
   terminalG: number;
   universe: string;
+  universeId?: string;
   covered: number;
   excluded: { ticker: string; why: string }[];
+}
+
+export interface UniverseInfo {
+  id: string;
+  name: string;
+  covered: number | null;
+  default: boolean;
 }
 
 export interface Payload {

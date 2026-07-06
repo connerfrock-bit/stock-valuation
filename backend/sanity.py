@@ -53,14 +53,14 @@ def main():
                 "ticker TEXT PRIMARY KEY, check_name TEXT, status TEXT, detail TEXT)")
     con.execute("DELETE FROM data_quality")
     rows = con.execute("SELECT ticker, price, shares_out FROM companies "
-                       "WHERE price IS NOT NULL AND shares_out IS NOT NULL").fetchall()
+                       "WHERE price IS NOT NULL").fetchall()   # incl. NULL shares → derive from Yahoo
     try:
         ext = yahoo_quotes([t for t, _, _ in rows])
     except Exception as e:
         print(f"External check unavailable ({e!r}) — skipping, internal guards still apply.")
         return
 
-    ok = drift = bad = miss = 0
+    ok = drift = bad = miss = derived = 0
     print(f"{'TICK':6}{'ours':>10}{'yahoo':>10}{'diff':>8}  action")
     print("-" * 46)
     for t, price, shares in rows:
@@ -69,6 +69,15 @@ def main():
             miss += 1
             con.execute("INSERT OR REPLACE INTO data_quality VALUES (?,?,?,?)",
                         (t, "mcap_xcheck", "no_ext", "")); continue
+        if not shares:                                        # no share count at all → derive it
+            new_shares = emcap / price if price else None
+            if new_shares:
+                con.execute("UPDATE companies SET shares_out=? WHERE ticker=?", (new_shares, t))
+                derived += 1
+                print(f"{t:6}{'—':>10}{emcap/1e9:>9.1f}B{'':>8}  shares derived → {new_shares/1e9:.2f}B")
+                con.execute("INSERT OR REPLACE INTO data_quality VALUES (?,?,?,?)",
+                            (t, "mcap_xcheck", "derived", ""));
+            continue
         ours = price * shares
         diff = ours / emcap - 1
         if abs(diff) <= 0.05:
@@ -89,7 +98,8 @@ def main():
         con.execute("INSERT OR REPLACE INTO data_quality VALUES (?,?,?,?)",
                     (t, "mcap_xcheck", status, f"{diff:+.3f}"))
     con.commit(); con.close()
-    print(f"\n{ok} ok (≤5%) · {drift} drift (5–15%) · {bad} patched (>15%) · {miss} no external quote")
+    print(f"\n{ok} ok (≤5%) · {drift} drift (5–15%) · {bad} patched (>15%) · "
+          f"{derived} shares derived · {miss} no external quote")
 
 
 if __name__ == "__main__":

@@ -204,3 +204,16 @@ Honesty rules: never a single fair value without its range · agreement always b
       Milestone C (FastAPI) formally cancelled. Warranted OLS reviewed and kept
       (data-dependent, not zombie). Loss-maker revDCF deferred to a future feature plan.
       See WORKLOG.md. **Phase 9 complete: 54 tests · model v2.1 · ledger armed.**
+
+## Phase 10 — Universe expansion (CEO roadmap A→D)
+- [x] **Plan A: S&P 500 live screener** ✅ (model v2.2) — superset ingest + `universe_membership`
+      junction (both universes coexist; NYSE later = one config block); **L5 archetype router**:
+      banks/insurers → RIM-only (no garbage DCF/EV), asset-light fee/network (Visa/MA/Moody's/
+      exchanges) → FCF with a 6% fcfy float-guard, REITs → RIM-if-book-clean else honestly
+      excluded, ~75% standard universe unchanged. Dashboard universe toggle live. **S&P: 479
+      covered / 20 honestly excluded; Nasdaq: 96.** Found+fixed at scale: EDGAR-throttle retry,
+      bank net-income (`ProfitLoss`) + broker-revenue tags, GICS-over-ICB sectors, sanity
+      share-derivation. 4 workflows (understand/design/review). 44 tests. See WORKLOG.md.
+- [ ] Plan B: extend S&P backtest to ~2012-13 (XBRL floor is 2009)
+- [ ] Plan C: momentum overlay research (monthly, out-of-sample)
+- [ ] Plan D: NYSE large+mid $2B+ (archetype router extends; SIC→sector map; size buckets)
