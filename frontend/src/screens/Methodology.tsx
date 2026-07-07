@@ -170,7 +170,7 @@ export function Methodology({ meta }: { meta: Meta }) {
       </div>
 
       {/* backtest — real results (honest even when negative) or empty state */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 18, marginBottom: 18 }}>
+      <div className="mt-main">
         <div style={{ ...card, padding: '18px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 10, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -263,7 +263,7 @@ export function Methodology({ meta }: { meta: Meta }) {
       </div>
 
       {bt && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, marginBottom: 18 }}>
+        <div className="mt-half">
           <div style={{ ...card, overflow: 'hidden' }}>
             <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, fontSize: 13, fontWeight: 600, color: C.sec }}>
               Per-method reliability <span style={{ fontSize: 10, color: C.dim, fontWeight: 400 }}>top quintile vs benchmark, quarterly</span>
@@ -433,7 +433,7 @@ export function Methodology({ meta }: { meta: Meta }) {
           <div style={{ fontSize: 14, fontWeight: 600 }}>How each engine values a company</div>
           <div style={{ fontSize: 11, color: C.dim }}>L6 · run only where applicable</div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div className="mt-engines">
           {ENGINES.map(fm => (
             <div key={fm.name} style={{ ...card, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>

@@ -64,5 +64,18 @@ input[type=range]:focus-visible {
   background: rgba(68,147,248,0.13); border-color: rgba(68,147,248,0.45); color: #e6e9ef;
 }
 
+/* Layout grids that must collapse at 200% zoom / narrow desktop.
+   Inline styles can't express media queries; these classes can. */
+.dd-grid {
+  display: grid; grid-template-columns: minmax(0,1fr) 360px;
+  gap: 18px; align-items: start;
+}
+.mt-main { display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 18px; margin-bottom: 18px; }
+.mt-half { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+.mt-engines { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 1080px) {
+  .dd-grid, .mt-main, .mt-half, .mt-engines { grid-template-columns: minmax(0,1fr); }
+}
+
 a { color: #4493f8; text-decoration: none; }
 a:hover { text-decoration: underline; }

@@ -97,8 +97,8 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
     <div style={{ paddingBottom: 40 }}>
       {/* header */}
       <div style={{
-        display: 'flex', alignItems: 'center', gap: 16, padding: '16px 24px',
-        borderBottom: `1px solid ${C.border}`, background: C.chrome,
+        display: 'flex', alignItems: 'center', gap: 16, rowGap: 8, flexWrap: 'wrap',
+        padding: '16px 24px', borderBottom: `1px solid ${C.border}`, background: C.chrome,
         position: 'sticky', top: 0, zIndex: 10,
       }}>
         <h1 style={{ display: 'flex', alignItems: 'baseline', gap: 11, margin: 0, fontWeight: 400 }}>
@@ -129,7 +129,7 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
         </button>
       </div>
 
-      <div style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: '1fr 360px', gap: 18, alignItems: 'start' }}>
+      <div className="dd-grid" style={{ padding: '20px 24px' }}>
         {/* LEFT column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
           {/* hero */}

@@ -182,6 +182,10 @@ export default function App() {
   }
   if (!data) return <Center><span style={{ color: C.dim, fontFamily: MONO }}>loading universe…</span></Center>;
 
+  const asOfMs = Date.parse(data.meta.asOf.replace('·', ''));
+  const staleH = Number.isNaN(asOfMs) ? null : Math.floor((Date.now() - asOfMs) / 3.6e6);
+  const stale = staleH !== null && staleH >= 24;
+
   const sel = companies.find(c => c.ticker === selected) ?? companies[0];
   const peers = sel
     ? companies.filter(p => p.sector === sel.sector && p.ticker !== sel.ticker)
@@ -212,8 +216,9 @@ export default function App() {
       }}>
         {/* ===== top bar ===== */}
         <header style={{
-          height: 52, flex: '0 0 52px', display: 'flex', alignItems: 'center', gap: 18,
-          padding: '0 18px', borderBottom: `1px solid ${C.border}`, background: C.chrome, zIndex: 30,
+          minHeight: 52, flex: '0 0 auto', display: 'flex', alignItems: 'center',
+          gap: 18, rowGap: 4, flexWrap: 'wrap', padding: '4px 18px',
+          borderBottom: `1px solid ${C.border}`, background: C.chrome, zIndex: 30,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, flex: '0 0 auto' }}>
             <div style={{
@@ -231,7 +236,7 @@ export default function App() {
           </div>
 
           {/* search */}
-          <div style={{ position: 'relative', flex: '1 1 auto', maxWidth: 440 }}>
+          <div style={{ position: 'relative', flex: '1 1 160px', minWidth: 160, maxWidth: 440 }}>
             <div style={{
               display: 'flex', alignItems: 'center', gap: 8, height: 32, padding: '0 11px',
               background: '#11151d', border: `1px solid ${searchFocus ? C.blue : C.border}`, borderRadius: 7,
@@ -324,7 +329,7 @@ export default function App() {
               </div>
             )}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.25 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.25, whiteSpace: 'nowrap' }}>
             <span style={{ fontSize: 10, letterSpacing: '.08em', color: C.dim2, textTransform: 'uppercase' }}>Data as of</span>
             <span style={{ fontFamily: MONO, fontSize: 11, color: C.mid }}>{data.meta.asOf}</span>
           </div>
@@ -339,6 +344,16 @@ export default function App() {
             </svg>
           </button>
         </header>
+
+        {stale && (
+          <div role="status" style={{
+            padding: '7px 18px', fontSize: 11.5, color: '#e8c98a',
+            background: '#33291a', borderBottom: `1px solid ${C.amber}`,
+          }}>
+            <b>Stale data</b> — last refresh {data.meta.asOf} ({staleH}h ago).
+            Prices and rankings may be out of date; run REFRESH DATA.cmd.
+          </div>
+        )}
 
         {/* ===== body ===== */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>

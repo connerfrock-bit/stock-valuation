@@ -31,7 +31,7 @@ export function Overview({ all, filtered, filters, setFilters, allSectors, openD
   return (
     <div style={{ minHeight: '100%' }}>
       <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 1,
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 1,
         background: C.border, borderBottom: `1px solid ${C.border}`,
       }}>
         {kpis.map(k => (
