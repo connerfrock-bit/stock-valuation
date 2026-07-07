@@ -11,7 +11,7 @@ stdlib only.  Run after ingest_v1.py and betas.py:   python value.py
 import datetime, json, sqlite3, statistics, sys
 from common import (CFG, UNIVERSES, ACTIVE, resolve_universe, DB_PATH, fetch_risk_free,
                     load_company, latest, cagr, avg_margin, avg_roe, effective_tax,
-                    cost_of_debt, money, pct)
+                    roe_stability, equity_to_assets, cost_of_debt, money, pct)
 from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim,
                      warranted_fit, warranted_value, triangulate, CENTRAL_WEIGHTS)
 
@@ -340,25 +340,51 @@ def pct_rank(sorted_vals, v):
 def quality_scores(rows):
     # growth removed from quality (Plan 3): quality = profitability/stability/leverage;
     # growth is the value/growth axis scored elsewhere — mixing entangled the two.
+    # v2.3: quality is archetype-aware. Standard names keep the five original dims
+    # but the pools no longer ingest RIM-gated names (whose om/roic/fcfm/lowlev are
+    # NII ratios and deposit "leverage" — garbage that polluted every percentile).
+    # Financials/REITs get the same three IDEAS in bank terms, ranked among covered
+    # financial peers: ROE level (profitability), ROE stability (stability),
+    # equity/assets (leverage as capital cushion, not net-debt/EBITDA).
+    std = [r for r in rows if r["eff_arch"] == "standard"]
+    fin = [r for r in rows if r["eff_arch"] != "standard"]
+
     dims = {
-        "om":        [r["om"] for r in rows if r["om"] is not None],
-        "roe":       [avg_roe(r["ni_s"], r["eq_s"]) for r in rows],
-        "roic":      [r["roic"] for r in rows if r["roic"] is not None],
-        "fcfm":      [r["fcf_margin"] for r in rows if r["fcf_margin"] is not None],
-        "lowlev":    [-(r["debt_risk"] - r["cash"]) / r["ebit_now"] for r in rows
+        "om":        [r["om"] for r in std if r["om"] is not None],
+        "roe":       [r["roe_avg"] for r in std],
+        "roic":      [r["roic"] for r in std if r["roic"] is not None],
+        "fcfm":      [r["fcf_margin"] for r in std if r["fcf_margin"] is not None],
+        "lowlev":    [-(r["debt_risk"] - r["cash"]) / r["ebit_now"] for r in std
                       if r["ebit_now"] and r["ebit_now"] > 0],
     }
     S = {k: sorted(v for v in vals if v is not None) for k, vals in dims.items()}
-    for r in rows:
-        roe = avg_roe(r["ni_s"], r["eq_s"])
+    for r in std:
         lev = (-(r["debt_risk"] - r["cash"]) / r["ebit_now"]
                if r["ebit_now"] and r["ebit_now"] > 0 else None)
-        ps = [pct_rank(S["om"], r["om"]), pct_rank(S["roe"], roe),
+        ps = [pct_rank(S["om"], r["om"]), pct_rank(S["roe"], r["roe_avg"]),
               pct_rank(S["roic"], r["roic"]),
               pct_rank(S["fcfm"], r["fcf_margin"]),
               pct_rank(S["lowlev"], lev)]
         ps = [p for p in ps if p is not None]
         r["quality"] = round(100 * sum(ps) / len(ps)) if ps else None
+
+    for r in fin:
+        r["roe_std"] = roe_stability(r["ni_s"], r["eq_s"])
+        r["eq_assets"] = equity_to_assets(r["eq_s"], r["f"].get("assets", {}))
+    if len(fin) >= 5:
+        F = {"roe":  sorted(r["roe_avg"] for r in fin if r["roe_avg"] is not None),
+             "stab": sorted(-r["roe_std"] for r in fin if r["roe_std"] is not None),
+             "cap":  sorted(r["eq_assets"] for r in fin if r["eq_assets"] is not None)}
+        for r in fin:
+            ps = [pct_rank(F["roe"], r["roe_avg"]),
+                  pct_rank(F["stab"], -r["roe_std"] if r["roe_std"] is not None else None),
+                  pct_rank(F["cap"], r["eq_assets"])]
+            ps = [p for p in ps if p is not None]
+            r["quality"] = round(100 * sum(ps) / len(ps)) if ps else None
+    else:
+        # too few financial peers to rank honestly — neutral, never a fake number
+        for r in fin:
+            r["quality"] = None
 
 
 def trap_flags(r, z=None, fscore=None, min_mcap=0.0):
@@ -396,7 +422,10 @@ def trap_flags(r, z=None, fscore=None, min_mcap=0.0):
 
 
 # ---------------- snapshot history (append-only) ----------------
-MODEL_VERSION = "v2.2"        # frozen model tag — bump whenever scoring/engine logic changes
+MODEL_VERSION = "v2.3"        # frozen model tag — bump whenever scoring/engine logic changes
+# v2.3 — archetype-aware quality (bank dims: ROE level/stability, equity/assets,
+#        ranked among financial peers; standard pools cleaned of gated garbage);
+#        Piotroski n/a for financials/REITs (same validity gate as Altman-Z)
 # v1   — original inputs (long-term debt only, flat Rd = rf+1%, statutory 21% tax)
 # v1.1 — Plan 2: + short debt in borrowings · leases in risk debt · Rd from interest
 #        expense · effective tax from filings · maintenance capex wired into EPV
@@ -539,6 +568,21 @@ def main(universe_id=ACTIVE):
     mom = load_live_momentum([r["t"] for r in rows])
     mom_sorted = sorted(v for v in mom.values() if v is not None)
 
+    # L5 routing decided ONCE, before scoring: quality groups by eff_arch and the
+    # engine loop consumes the same stashed decision (one seam, no drift).
+    for r in rows:
+        book_ps = r["equity_now"] / r["shares"] if (r["equity_now"] and r["shares"]) else None
+        roe = avg_roe(r["ni_s"], r["eq_s"])
+        r["book_ps"], r["roe_avg"] = book_ps, roe
+        r["rim_ok"] = bool(book_ps and book_ps > 0 and roe is not None
+                           and book_ps / r["price"] >= 0.15 and roe <= 0.40)
+        base_fcf = r["fcf_norm"] if (r["fcf_norm"] or 0) > 0 else r["fcf_last"]
+        r["eff_arch"] = ("standard"
+                         if (r["arch"] == "financial" and not r["rim_ok"]
+                             and base_fcf is not None and base_fcf > 0
+                             and r["mcap"] and base_fcf / r["mcap"] <= 0.06)
+                         else r["arch"])
+
     # cross-sectional context. Warranted anchor is fit on 'standard' names ONLY — banks/
     # REITs have no meaningful EV/EBIT and would pollute the sector-median regression.
     quality_scores(rows)
@@ -566,10 +610,7 @@ def main(universe_id=ACTIVE):
         dcf_ps = dcf(base_fcf, r["wacc"], term_g, ndebt, r["shares"], r["g1"], H, S1)
         epv_ps = epv((r["om"] or 0) * (r["rev_now"] or 0), r["tax_r"], r["wacc"], r["cash"],
                      r["debt"], r["shares"], r["dna"], r["capex_now"])
-        book_ps = r["equity_now"] / r["shares"] if (r["equity_now"] and r["shares"]) else None
-        roe = avg_roe(r["ni_s"], r["eq_s"])
-        rim_ok = (book_ps and book_ps > 0 and roe is not None
-                  and book_ps / r["price"] >= 0.15 and roe <= 0.40)
+        book_ps, roe, rim_ok = r["book_ps"], r["roe_avg"], r["rim_ok"]
         rim_ps = rim(book_ps, roe, r["re_"], H) if rim_ok else None
         warr_ps = warranted_value(wfit, r["sector"], r["g1"], r["om"] or 0.0,
                                   r["ebit_now"], r["cash"], r["debt"], r["shares"])
@@ -586,16 +627,18 @@ def main(universe_id=ACTIVE):
         # signals the FCF base is inflated by insurance float / lending receivable flows
         # (Ameriprise fcfy 13%, Amex 7%) — distrust it, keep those RIM-gated. This data-sanity
         # clamp is in the same family as the 28× anchor cap and the tax/Rd clamps.
-        eff_arch = arch
-        if (arch == "financial" and not rim_ok and base_fcf is not None and base_fcf > 0
-                and r["mcap"] and base_fcf / r["mcap"] <= 0.06):
-            eff_arch = "standard"; fcf_routed += 1
+        eff_arch = r["eff_arch"]                          # decided once, pre-scoring
+        if arch == "financial" and eff_arch == "standard":
+            fcf_routed += 1
         gates = ARCHETYPE_GATES[eff_arch]
         dcf_ps, epv_ps, warr_ps, impl, op = apply_archetype_gates(
             eff_arch, dcf_ps, epv_ps, warr_ps, impl, op)
 
         z = altman_z(r) if eff_arch == "standard" else None
-        fscore, fn = piotroski(r)
+        # Piotroski shares Altman's validity problem for balance-sheet businesses
+        # (current-ratio/leverage/margin signals are meaningless for banks) — n/a,
+        # so JPM can never again wear a "Piotroski 2/9" trap flag it didn't earn
+        fscore, fn = piotroski(r) if eff_arch == "standard" else (None, 0)
         tri = triangulate({"DCF": dcf_ps, "RIM": rim_ps, "Warranted": warr_ps},
                           epv_ps, r["price"])
         flags = trap_flags(r, z, fscore, min_mcap)
@@ -647,6 +690,12 @@ def main(universe_id=ACTIVE):
             # both meaningless; same honesty rule as fcfy/evebitda/nde above.
             "om": round(r["om"], 4) if (eff_arch == "standard" and r["om"] is not None) else None,
             "roic": round(r["roic"], 4) if (eff_arch == "standard" and r["roic"] is not None) else None,
+            "archetype": eff_arch,
+            "roe": round(roe, 4) if (eff_arch != "standard" and roe is not None) else None,
+            "roeStd": round(r["roe_std"], 4)
+                      if (eff_arch != "standard" and r.get("roe_std") is not None) else None,
+            "eqAssets": round(r["eq_assets"], 4)
+                        if (eff_arch != "standard" and r.get("eq_assets") is not None) else None,
             "altmanZ": None if z is None else round(z, 2),
             "piotroski": fscore, "piotroskiN": fn,
             "nde": round((r["debt_risk"] - r["cash"]) / ebitda, 2)

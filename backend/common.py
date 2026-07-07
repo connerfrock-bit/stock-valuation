@@ -84,6 +84,24 @@ def avg_roe(ni, equity, years=5):
     rs = [ni[y] / equity[y] for y in yrs if equity[y] > 0]
     return sum(rs) / len(rs) if rs else None
 
+def roe_stability(ni, equity, years=6, min_obs=3):
+    """Stdev of annual ROE over the last `years` overlapping FYs (equity > 0 only).
+       Lower = steadier bank/insurer earnings power; None below `min_obs` observations."""
+    yrs = sorted(set(ni) & set(equity))[-years:]
+    rs = [ni[y] / equity[y] for y in yrs if equity[y] > 0]
+    if len(rs) < min_obs:
+        return None
+    m = sum(rs) / len(rs)
+    return (sum((x - m) ** 2 for x in rs) / len(rs)) ** 0.5
+
+def equity_to_assets(equity, assets, years=3):
+    """Mean equity/assets over the last `years` overlapping FYs — the capital cushion.
+       The honest leverage measure for balance-sheet businesses (banks/insurers/REITs),
+       where net-debt/EBITDA is meaningless."""
+    yrs = sorted(set(equity) & set(assets))[-years:]
+    rs = [equity[y] / assets[y] for y in yrs if assets[y] > 0]
+    return sum(rs) / len(rs) if rs else None
+
 def effective_tax(tax_s, pretax_s, years=3, floor=0.10, cap=0.35, fallback=0.21):
     """Mean effective tax rate over recent overlapping years, clamped to [floor, cap].
        Years with non-positive pretax income or a net tax benefit are skipped (a loss
