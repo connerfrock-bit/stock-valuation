@@ -578,3 +578,35 @@ sector-relative — real sector percentiles are a backend feature; Deep-Dive "wh
 bear-case line is boilerplate (only two variants) — either template real drivers or cut;
 card titles as h2s; dot-level keyboard access on the scatter (Screener is the documented
 keyboard path). Share build rebuilt post-audit.
+
+---
+
+## L3 proposals implemented (2026-07-07, afternoon)
+
+All four audit proposals green-lit and landed, one commit each:
+
+1. **Shares-outstanding trend** (`c461f24`) — value.py emits `trends.sharesM` (same
+   annual series Piotroski #7 reads); Deep-Dive gains the fifth sparkline from the
+   handoff with inverted delta color (falling count = buybacks = green). Optional in
+   the type contract: pre-refresh payloads render n/a.
+2. **Real percentile ratio bars** (`9faf3e6`) — ROIC / op-margin / growth bars now rank
+   within covered sector peers (>=5 names, else whole universe, basis labeled under the
+   panel, exact percentile on hover). Kills the roic/0.3-style fixed scalings that
+   painted a 26% margin red. Frontend-only: the universe is already client-side.
+3. **Evidence-based bear/bull case** (`91d0877`) — the canned two-variant sentence in
+   "Why does the market disagree?" replaced with drivers the pipeline measured:
+   reverse-DCF gap (respecting bound operators), momentum percentile, quality tier,
+   agreement. Honest fallback when nothing measured explains the gap. Verified live:
+   AAPL bull case cites 23% implied vs 9% trailing + 69th-pct momentum + Q82.
+4. **Hash routing** (`e51c0b8`) — `#/deep/GILD` deep links, Back/Forward, refresh keeps
+   place; first sync replaceState (file:// fallback for the share build); invalid
+   hash/ticker falls back gracefully. Verified: deep-link -> screener -> Back -> MSFT.
+
+**Incident, resolved:** a user-initiated REFRESH DATA.cmd (ingest_v1.py, started 12:44)
+drops+rebuilds companies/financials first — my `value.py all` (run for sharesM) raced
+the half-rebuilt DB and overwrote the tracked outputs with 34-39-name partials, and
+backend/data/output.json (share source) likewise. Restored all outputs from git/public
+(Jul 06, 96 names); share rebuilt at 96. Four partial snapshots (34/38/39 names,
+13:14-13:19) remain in the append-only history by design — ignore them when diffing.
+The running refresh will regenerate everything, now including sharesM, when it
+completes. Lesson encoded here: don't run value.py while an ingest is mid-flight.
