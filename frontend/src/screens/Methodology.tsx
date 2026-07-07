@@ -88,7 +88,7 @@ const ENGINES: Engine[] = [
     name: 'RIM — Residual Income', discount: 'Re', bestFor: 'banks · financials',
     answers: 'Book equity plus the present value of returns earned above the cost of equity.',
     formula: ['Value = B₀ + Σ PV[ (ROEₜ − Re)·Bₜ₋₁ ]', 'ROE fades toward Re · persistence ω = 0.62'],
-    gotcha: 'Marked N/A when book value ≤ 0 or buyback-distorted (most of this universe) — never forced to emit a number.',
+    gotcha: 'Marked N/A when book value ≤ 0 or buyback-distorted (most of this universe) — never forced to emit a number. Measured sensitivity (v2.3, 90 S&P financials): ±100bp of Re moves the mid only ∓2.2% — the ω-fade dominates, so values are book-anchored and deliberately conservative for franchise banks that sustain high ROE. Read financial-sector "overvalued" as an expectations meter, not a short signal.',
   },
   {
     name: 'EPV — Earnings Power', discount: 'WACC',

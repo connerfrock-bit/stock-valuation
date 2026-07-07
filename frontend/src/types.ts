@@ -45,6 +45,10 @@ export interface Company {
   fcfy: number | null;
   om: number | null;
   roic: number | null;
+  archetype?: 'standard' | 'financial' | 'reit'; // L5 route — emitted since v2.3
+  roe?: number | null;      // financial/reit only: 5y avg ROE
+  roeStd?: number | null;   // financial/reit only: ROE stdev (lower = steadier)
+  eqAssets?: number | null; // financial/reit only: equity/assets capital cushion
   altmanZ: number | null;
   piotroski: number | null;
   piotroskiN: number;

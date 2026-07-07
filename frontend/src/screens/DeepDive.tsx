@@ -108,7 +108,16 @@ export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: 
     };
   })();
 
-  const leverage = [
+  // Balance-sheet businesses get balance-sheet metrics: Altman-Z, Piotroski,
+  // ND/EBITDA and FCF yield are all invalid for banks/insurers/REITs (v2.3
+  // gates them at the source), so the strip swaps to the honest set.
+  const isFin = c.archetype === 'financial' || c.archetype === 'reit';
+  const leverage = isFin ? [
+    { label: 'Equity / assets', value: na(c.eqAssets, v => (v * 100).toFixed(1) + '%'), color: (c.eqAssets ?? 1) < 0.04 ? C.amber : C.hi },
+    { label: 'ROE (5y avg)', value: na(c.roe, v => (v * 100).toFixed(1) + '%'), color: C.hi },
+    { label: 'ROE stability', value: na(c.roeStd, v => '±' + (v * 100).toFixed(1) + 'pp'), color: C.hi },
+    { label: 'Div yield', value: na(c.divYield, v => (v * 100).toFixed(1) + '%'), color: C.hi },
+  ] : [
     { label: 'Net debt / EBITDA', value: na(c.nde, v => v.toFixed(1) + 'x'), color: (c.nde ?? 0) > 2 ? C.amber : C.hi },
     { label: 'Altman-Z', value: na(c.altmanZ, v => v.toFixed(1)), color: c.altmanZ === null ? C.dim : c.altmanZ < 1.81 ? C.red : c.altmanZ < 3 ? C.amber : C.green },
     { label: 'Piotroski-F', value: c.piotroski === null ? `n/a (${c.piotroskiN} signals)` : `${c.piotroski}/9`, color: c.piotroski === null ? C.dim : c.piotroski >= 7 ? C.green : c.piotroski >= 4 ? C.amber : C.red },
@@ -124,15 +133,22 @@ export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: 
   const poolLabel = sectorPool.length >= 5
     ? `${sectorPool.length} covered ${c.sectorShort} names`
     : `${all.length} covered names (sector too small to rank)`;
-  const pctile = (get: (x: Company) => number | null): number | null => {
+  const pctile = (get: (x: Company) => number | null, lowerBetter = false): number | null => {
     const v = get(c);
     if (v === null) return null;
     const vals = pool.map(get).filter((x): x is number => x !== null);
     if (vals.length < 5) return null;
-    return vals.filter(x => x <= v).length / vals.length;
+    return lowerBetter
+      ? vals.filter(x => x >= v).length / vals.length
+      : vals.filter(x => x <= v).length / vals.length;
   };
 
-  const ratios = [
+  const ratios = isFin ? [
+    { label: 'ROE (5y avg)', value: na(c.roe, v => (v * 100).toFixed(1) + '%'), pct: pctile(x => x.roe ?? null) },
+    { label: 'ROE stability', value: na(c.roeStd, v => '±' + (v * 100).toFixed(1) + 'pp'), pct: pctile(x => x.roeStd ?? null, true) },
+    { label: 'Equity / assets', value: na(c.eqAssets, v => (v * 100).toFixed(1) + '%'), pct: pctile(x => x.eqAssets ?? null) },
+    { label: 'Quality rank', value: `${c.quality}/100`, pct: c.quality / 100 },
+  ] : [
     { label: 'ROIC', value: na(c.roic, v => Math.round(v * 100) + '%'), pct: pctile(x => x.roic) },
     { label: 'Op margin (5y avg)', value: na(c.om, v => Math.round(v * 100) + '%'), pct: pctile(x => x.om) },
     { label: 'Rev growth (5y)', value: na(c.growth5y, v => fmtPct(v, 0)), pct: pctile(x => x.growth5y) },
