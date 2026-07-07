@@ -312,7 +312,7 @@ def trend_series(f):
     yrs = sorted(f.get("revenue", {}))[-8:]
     rev, ebit = f.get("revenue", {}), f.get("ebit", {})
     cfo, cap, sbc = f.get("cfo", {}), f.get("capex", {}), f.get("sbc", {})
-    eq = f.get("equity", {})
+    eq, sh = f.get("equity", {}), f.get("shares", {})
     def ser(fn):
         out = []
         for y in yrs:
@@ -326,6 +326,7 @@ def trend_series(f):
         "fcfB": ser(lambda y: (cfo[y] - cap[y] - sbc.get(y, 0.0)) / 1e9
                     if (y in cfo and y in cap) else None),
         "equityB": ser(lambda y: eq[y] / 1e9 if y in eq else None),
+        "sharesM": ser(lambda y: sh[y] / 1e6 if y in sh else None),
     }
 
 

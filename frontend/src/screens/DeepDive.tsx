@@ -86,11 +86,13 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
   };
   // One informational color for all trend lines: green/purple/teal here leaked
   // semantic and sector meanings (UI_SPEC §2 fixes both); the delta % already
-  // carries the up/down signal.
-  const trendDefs: { label: string; series: (number | null)[] }[] = [
+  // carries the up/down signal. Shares outstanding is the dilution watch
+  // (UI_SPEC §C) — falling share count is the good direction.
+  const trendDefs: { label: string; series: (number | null)[]; goodWhenDown?: boolean }[] = [
     { label: 'Revenue ($B)', series: t.revenueB },
     { label: 'Operating margin', series: t.opMargin },
     { label: 'Free cash flow ($B)', series: t.fcfB },
+    { label: 'Shares out (M)', series: t.sharesM ?? [], goodWhenDown: true },
     { label: 'Book equity ($B)', series: t.equityB },
   ];
 
@@ -332,11 +334,13 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
               {trendDefs.map(td => {
                 const d = delta(td.series);
+                const good = d !== null && (td.goodWhenDown ? d <= 0 : d > 0);
                 return (
                   <div key={td.label}>
                     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
                       <span style={{ fontSize: 11.5, color: C.mid }}>{td.label}</span>
-                      <span style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 600, color: d === null ? C.dim : d > 0 ? C.green : C.red }}>
+                      <span style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 600, color: d === null ? C.dim : good ? C.green : C.red }}
+                        title={td.goodWhenDown ? 'Falling share count = buybacks (good); rising = dilution' : undefined}>
                         {d === null ? 'n/a' : fmtPct(d, 0)}
                       </span>
                     </div>

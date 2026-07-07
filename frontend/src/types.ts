@@ -14,6 +14,7 @@ export interface Trends {
   opMargin: (number | null)[];
   fcfB: (number | null)[];
   equityB: (number | null)[];
+  sharesM?: (number | null)[]; // absent in pre-2026-07-07 payloads
 }
 
 export interface Company {
