@@ -634,3 +634,40 @@ REFRESH completed 17:52 — full 96/482 coverage, first sharesM payloads; the pa
 - **Ops**: BUILD_PLAN phase roadmap (gates before universe growth); weekly
   scheduled refresh Sundays 09:00 via `/auto` flag, logged to backend/data/refresh.log.
 - Share rebuilt from the audited frontend + fresh data. Backend suite 70/70.
+
+---
+
+## Phase 1.1 — financials archetype: banks scored as banks (2026-07-07, v2.3)
+
+**The problem:** 90 covered financials/REITs (SPX) carried quality scores built from
+NII-ratio "operating margins" (HBAN 172%), deposit-book "leverage," and meaningless
+FCF margins — and those garbage values sat in every standard name's percentile pool
+too. JPM wore a false "Piotroski 2/9" trap flag (current-ratio/leverage signals are
+undefined for banks — the same validity problem Altman-Z already gated).
+
+**The fix (v2.3):** L5 routing hoisted above scoring (decided once, stashed on the
+row, consumed by quality AND the engine loop — no drift seam). Quality is now
+archetype-aware: financials/REITs rank on ROE level, ROE stability (population stdev,
+≤6 FY, ≥3 obs), and equity/assets (3-FY mean capital cushion) among covered financial
+peers; pools under 5 emit None, never a fake rank. Standard names keep the original
+five dims with cleaned pools (median |Δquality| = 2pts across 380 movers; the big
+moves are financials getting first honest scores: APO −46, SCHW −39, MET −37, VTR +51).
+Piotroski n/a for fin/reit. Payload gains archetype/roe/roeStd/eqAssets; Deep-Dive
+shows the bank panel (ROE, stability inverted-percentile, equity/assets) and swaps the
+strip to equity/assets · ROE · stability · div yield.
+
+**Gate (passed):** JPM 15.4% ROE / ±2.3pp / 8.4% eq-assets · BAC 10.0%/9.0% ·
+GS 12.4% volatile / 7.1% dealer-thin · USB/PNC regional ~11.5%/9-10% · PGR 22.5%
+/±11.4pp/23.9% — all match public reality. V/MA/PYPL stay standard-routed (Q91/94/n-a).
+
+**RIM Re-sensitivity (measured, 90 names):** ±100bp of Re moves the mid only ∓2.2%,
+uniformly — the ω=0.62 fade dominates and values are book-anchored. Consequence
+stated on the RIM Methodology card: financial-sector "overvalued" is an expectations
+meter, not a short signal (JPM at 2.4× book can never screen cheap under a 5y
+excess-return fade). ω deliberately untouched — no model change without time-split
+validation (standing rule).
+
+**Logged, not fixed here:** CSGP (CoStar) is GICS Real Estate → routed reit → RIM on
+book for what is really a data/software business; seeded as the first Phase-1.3
+override-table entry. REIT quality uses the interim bank dims until FFO/NAV lands
+(Phase 1.2). Tests 70 → 78 green; share rebuilt.

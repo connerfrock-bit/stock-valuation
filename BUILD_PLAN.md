@@ -246,13 +246,17 @@ Honesty rules: never a single fair value without its range · agreement always b
 - [x] Weekly scheduled refresh (`REFRESH DATA.cmd /auto`, Sundays 09:00, logged)
 
 ### Phase 1 — model correctness on covered data (S&P 500 is the lab)
-- [ ] Financials archetype: real bank quality dims (efficiency, NII trend, leverage
-      done right); RIM Re-sensitivity validated across the ~73 SPX financials.
-      Gate: 5 spot-checked banks look sane; no more gated-n/a quality dims.
+- [x] **Financials archetype** ✅ (v2.3, 2026-07-07) — bank quality = ROE level/stability +
+      equity/assets, ranked among 90 covered financial peers; standard pools cleaned of
+      gated garbage; Piotroski n/a for fin/reit (JPM's false flag gone). Gate PASSED:
+      JPM/BAC/GS/USB/PNC/PGR match known reality. RIM Re-sensitivity measured: ±100bp Re
+      → ∓2.2% mid (ω-fade dominates; book-anchored — documented on the RIM card, ω
+      untouched). Discovered: CSGP misrouted reit (GICS) → override-table candidate below.
 - [ ] REIT archetype: FFO/NAV valuation (new tags: D&A add-back, gains) replacing
       RIM-on-book; retire the REIT_RIM_FLAG. Gate: mids in plausible cap-rate range.
 - [ ] Warranted multiple: split TECH (semis/software/hardware via SIC + override
-      table). Gate: ≥8 names per anchor bucket.
+      table). Gate: ≥8 names per anchor bucket. Override table seed: CSGP (CoStar —
+      GICS Real Estate but a data/software business; currently RIM-on-book as a reit).
 - [ ] Point-in-time index membership for the SPX backtest; re-run; publish the
       measured survivorship effect in Methodology caveats whichever way it cuts.
 - [ ] DECISION GATE: if the survivorship-clean value composite still shows no edge,
