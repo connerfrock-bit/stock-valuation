@@ -11,11 +11,22 @@ import { DEFAULT_FILTERS } from './types';
 
 const WATCH_KEY = 'fairvalue.watchlist';
 
+// #/screener, #/deep/GILD, … — screen + ticker live in the URL so refresh,
+// back/forward, and deep links all work (also on file:// share builds).
+const SCREENS: Screen[] = ['overview', 'screener', 'deep', 'methodology'];
+function parseHash(): { screen: Screen; ticker: string | null } {
+  const [scr, tick] = window.location.hash.replace(/^#\/?/, '').split('/');
+  return SCREENS.includes(scr as Screen)
+    ? { screen: scr as Screen, ticker: tick ? decodeURIComponent(tick).toUpperCase() : null }
+    : { screen: 'overview', ticker: null };
+}
+
 export default function App() {
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [screen, setScreen] = useState<Screen>('overview');
-  const [selected, setSelected] = useState<string | null>(null);
+  const [screen, setScreen] = useState<Screen>(() => parseHash().screen);
+  const [selected, setSelected] = useState<string | null>(() => parseHash().ticker);
+  const firstHashSync = useRef(true);
   const [filters, setFilters] = useState<Filters>({ ...DEFAULT_FILTERS });
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
@@ -36,7 +47,8 @@ export default function App() {
   useEffect(() => {
     if (embedded) {                                   // single-file share build: one universe, no toggle
       setData(embedded);
-      if (embedded.companies.length) setSelected(embedded.companies[0].ticker);
+      setSelected(prev => (prev && embedded.companies.some(c => c.ticker === prev))
+        ? prev : (embedded.companies[0]?.ticker ?? null));
       return;
     }
     fetch(`${import.meta.env.BASE_URL}universes.json`)
@@ -55,10 +67,34 @@ export default function App() {
       .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then((p: Payload) => {
         setData(p);
-        setSelected(p.companies.length ? p.companies[0].ticker : null);
+        setSelected(prev => (prev && p.companies.some(c => c.ticker === prev))
+          ? prev : (p.companies[0]?.ticker ?? null));
       })
       .catch(e => setError(String(e)));
   }, [embedded, universe, universes.length]);
+
+  useEffect(() => {
+    const onHash = () => {
+      const h = parseHash();
+      setScreen(h.screen);
+      if (h.screen === 'deep' && h.ticker) setSelected(h.ticker);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  useEffect(() => {
+    const want = screen === 'deep' && selected
+      ? `#/deep/${encodeURIComponent(selected)}` : `#/${screen}`;
+    if (window.location.hash === want) { firstHashSync.current = false; return; }
+    if (firstHashSync.current) {
+      // don't bury the entry point under a redirect (file:// may refuse replaceState)
+      try { history.replaceState(null, '', want); } catch { window.location.hash = want; }
+      firstHashSync.current = false;
+    } else {
+      window.location.hash = want;            // one history entry per navigation → Back works
+    }
+  }, [screen, selected]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
