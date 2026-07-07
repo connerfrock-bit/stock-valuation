@@ -413,7 +413,7 @@ export default function App() {
                 watch={watch} toggleWatch={toggleWatch} selected={selected} openDeep={openDeep} />
             )}
             {screen === 'deep' && sel && (
-              <DeepDive c={sel} meta={data.meta} peers={peers}
+              <DeepDive c={sel} meta={data.meta} peers={peers} all={companies}
                 watch={watch} toggleWatch={toggleWatch} openDeep={openDeep} />
             )}
             {screen === 'methodology' && <Methodology meta={data.meta} />}

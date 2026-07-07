@@ -30,10 +30,11 @@ const card: React.CSSProperties = {
   background: C.panel, border: `1px solid ${C.border}`, borderRadius: 11,
 };
 
-export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
+export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: {
   c: Company;
   meta: Meta;
   peers: Company[];
+  all: Company[];
   watch: Record<string, boolean>;
   toggleWatch: (t: string) => void;
   openDeep: (t: string) => void;
@@ -72,10 +73,27 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
     { label: 'FCF yield', value: na(c.fcfy, v => (v * 100).toFixed(1) + '%'), color: C.hi },
   ];
 
+  // Ratio bars are TRUE percentiles within covered sector peers (or the whole
+  // covered universe when the sector is too thin to rank against) — the old
+  // fixed denominators (roic/0.3, om/0.6) painted a 26% margin red while
+  // presenting as sector-relative. UI_SPEC §3.5 promises the real thing.
+  const sectorPool = all.filter(p => p.sector === c.sector);
+  const pool = sectorPool.length >= 5 ? sectorPool : all;
+  const poolLabel = sectorPool.length >= 5
+    ? `${sectorPool.length} covered ${c.sectorShort} names`
+    : `${all.length} covered names (sector too small to rank)`;
+  const pctile = (get: (x: Company) => number | null): number | null => {
+    const v = get(c);
+    if (v === null) return null;
+    const vals = pool.map(get).filter((x): x is number => x !== null);
+    if (vals.length < 5) return null;
+    return vals.filter(x => x <= v).length / vals.length;
+  };
+
   const ratios = [
-    { label: 'ROIC', value: na(c.roic, v => Math.round(v * 100) + '%'), pct: (c.roic ?? 0) / 0.3 },
-    { label: 'Op margin (5y avg)', value: na(c.om, v => Math.round(v * 100) + '%'), pct: (c.om ?? 0) / 0.6 },
-    { label: 'Rev growth (5y)', value: na(c.growth5y, v => fmtPct(v, 0)), pct: Math.max(0, (c.growth5y ?? 0) / 0.5) },
+    { label: 'ROIC', value: na(c.roic, v => Math.round(v * 100) + '%'), pct: pctile(x => x.roic) },
+    { label: 'Op margin (5y avg)', value: na(c.om, v => Math.round(v * 100) + '%'), pct: pctile(x => x.om) },
+    { label: 'Rev growth (5y)', value: na(c.growth5y, v => fmtPct(v, 0)), pct: pctile(x => x.growth5y) },
     { label: 'Quality rank', value: `${c.quality}/100`, pct: c.quality / 100 },
   ];
 
@@ -260,15 +278,22 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
               </div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-              {ratios.map(rt => (
-                <div key={rt.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12 }}>
-                  <span style={{ color: C.dim3 }}>{rt.label}</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontFamily: MONO, fontWeight: 600, color: qColor(Math.max(0, Math.min(1, rt.pct)) * 100) }}>{rt.value}</span>
-                    <RatioBar pct={rt.pct} color={qColor(Math.max(0, Math.min(1, rt.pct)) * 100)} />
-                  </span>
-                </div>
-              ))}
+              {ratios.map(rt => {
+                const col = rt.pct === null ? C.dim : qColor(Math.max(0, Math.min(1, rt.pct)) * 100);
+                return (
+                  <div key={rt.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12 }}>
+                    <span style={{ color: C.dim3 }}>{rt.label}</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                      title={rt.pct === null ? undefined : `${Math.round(rt.pct * 100)}th percentile`}>
+                      <span style={{ fontFamily: MONO, fontWeight: 600, color: col }}>{rt.value}</span>
+                      <RatioBar pct={rt.pct ?? 0} color={col} />
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 10, color: C.dim, marginTop: 11, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
+              Bars: percentile within {poolLabel}.
             </div>
           </div>
 
