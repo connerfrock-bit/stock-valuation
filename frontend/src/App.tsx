@@ -22,7 +22,9 @@ export default function App() {
   const [showMultiples, setShowMultiples] = useState(false);
   const [search, setSearch] = useState('');
   const [searchFocus, setSearchFocus] = useState(false);
+  const [searchIdx, setSearchIdx] = useState(-1);
   const searchRef = useRef<HTMLInputElement>(null);
+  const uniRef = useRef<HTMLDivElement>(null);
   const [watch, setWatch] = useState<Record<string, boolean>>(() => {
     try { return JSON.parse(localStorage.getItem(WATCH_KEY) ?? '{}'); } catch { return {}; }
   });
@@ -69,6 +71,20 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  useEffect(() => {
+    if (!uniOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (uniRef.current && !uniRef.current.contains(e.target as Node)) setUniOpen(false);
+    };
+    const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setUniOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onEsc);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onEsc);
+    };
+  }, [uniOpen]);
+
   const toggleWatch = (t: string) => {
     setWatch(w => {
       const next = { ...w, [t]: !w[t] };
@@ -77,11 +93,35 @@ export default function App() {
     });
   };
 
+  const q = search.trim().toLowerCase();
+  const matches = q
+    ? (data?.companies ?? []).filter(c =>
+        c.ticker.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)).slice(0, 7)
+    : [];
+
   const openDeep = (t: string) => {
     setSelected(t);
     setScreen('deep');
     setSearch('');
     setSearchFocus(false);
+    setSearchIdx(-1);
+  };
+
+  const onSearchKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSearchIdx(i => Math.min(i + 1, matches.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSearchIdx(i => Math.max(i - 1, -1));
+    } else if (e.key === 'Enter') {
+      const m = matches[searchIdx] ?? matches[0];
+      if (m) openDeep(m.ticker);
+    } else if (e.key === 'Escape') {
+      setSearch('');
+      setSearchIdx(-1);
+      searchRef.current?.blur();
+    }
   };
 
   const setSort = (k: SortKey) => {
@@ -130,12 +170,6 @@ export default function App() {
     });
   }, [filtered, sortKey, sortDir]);
 
-  const q = search.trim().toLowerCase();
-  const matches = q
-    ? companies.filter(c =>
-        c.ticker.toLowerCase().includes(q) || c.name.toLowerCase().includes(q)).slice(0, 7)
-    : [];
-
   if (error) {
     return (
       <Center>
@@ -157,15 +191,16 @@ export default function App() {
   const navItem = (s: Screen, label: string, icon: React.ReactNode, right?: React.ReactNode) => {
     const active = screen === s;
     return (
-      <div onClick={() => setScreen(s)} style={{
-        display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',
-        borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: active ? 600 : 500,
-        marginBottom: 2, color: active ? '#fff' : C.mid,
-        background: active ? 'rgba(68,147,248,0.13)' : 'transparent',
-        borderLeft: active ? `2px solid ${C.blue}` : '2px solid transparent',
-      }}>
+      <button onClick={() => setScreen(s)} className="navitem" aria-current={active ? 'page' : undefined}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', width: '100%',
+          borderRadius: 8, fontSize: 13, fontWeight: active ? 600 : 500,
+          marginBottom: 2, color: active ? '#fff' : C.mid,
+          background: active ? 'rgba(68,147,248,0.13)' : undefined,
+          borderLeft: active ? `2px solid ${C.blue}` : '2px solid transparent',
+        }}>
         {icon}<span style={{ flex: 1 }}>{label}</span>{right}
-      </div>
+      </button>
     );
   };
 
@@ -176,7 +211,7 @@ export default function App() {
         background: C.bg, color: C.hi,
       }}>
         {/* ===== top bar ===== */}
-        <div style={{
+        <header style={{
           height: 52, flex: '0 0 52px', display: 'flex', alignItems: 'center', gap: 18,
           padding: '0 18px', borderBottom: `1px solid ${C.border}`, background: C.chrome, zIndex: 30,
         }}>
@@ -205,10 +240,14 @@ export default function App() {
                 <circle cx={11} cy={11} r={7} /><line x1={21} y1={21} x2={16.5} y2={16.5} />
               </svg>
               <input ref={searchRef} value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={e => { setSearch(e.target.value); setSearchIdx(-1); }}
                 onFocus={() => setSearchFocus(true)}
                 onBlur={() => setTimeout(() => setSearchFocus(false), 150)}
+                onKeyDown={onSearchKey}
                 placeholder="Search ticker or company…"
+                role="combobox" aria-expanded={searchFocus && q.length > 0}
+                aria-controls="ticker-results" aria-autocomplete="list"
+                aria-activedescendant={searchIdx >= 0 && matches[searchIdx] ? `opt-${matches[searchIdx].ticker}` : undefined}
                 style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: C.hi, fontSize: 12.5 }} />
               <span style={{
                 fontFamily: MONO, fontSize: 10, color: C.dim2,
@@ -216,16 +255,21 @@ export default function App() {
               }}>/</span>
             </div>
             {searchFocus && q.length > 0 && (
-              <div style={{
+              <div id="ticker-results" role="listbox" aria-label="Matching tickers" style={{
                 position: 'absolute', top: 38, left: 0, right: 0, background: '#11151d',
                 border: `1px solid ${C.borderHi}`, borderRadius: 8,
                 boxShadow: '0 12px 32px rgba(0,0,0,.55)', overflow: 'hidden', zIndex: 50,
               }}>
-                {matches.map(m => (
-                  <div key={m.ticker} onMouseDown={() => openDeep(m.ticker)} style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
-                    cursor: 'pointer', borderBottom: '1px solid #161b24',
-                  }}>
+                {matches.map((m, i) => (
+                  <div key={m.ticker} id={`opt-${m.ticker}`} role="option"
+                    aria-selected={i === searchIdx}
+                    onMouseDown={() => openDeep(m.ticker)}
+                    onMouseEnter={() => setSearchIdx(i)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                      cursor: 'pointer', borderBottom: '1px solid #161b24',
+                      background: i === searchIdx ? 'rgba(68,147,248,0.10)' : 'transparent',
+                    }}>
                     <span style={{ fontFamily: MONO, fontWeight: 600, fontSize: 12, width: 54 }}>{m.ticker}</span>
                     <span style={{
                       flex: 1, fontSize: 12, color: C.mid, overflow: 'hidden',
@@ -243,35 +287,39 @@ export default function App() {
 
           <div style={{ flex: 1 }} />
 
-          <div style={{ position: 'relative' }}>
-            <div onClick={() => !embedded && universes.length > 1 && setUniOpen(o => !o)} style={{
-              display: 'flex', alignItems: 'center', gap: 7, height: 30, padding: '0 11px',
-              border: `1px solid ${uniOpen ? C.blue : C.borderHi}`, borderRadius: 7, fontSize: 11.5,
-              color: C.sec, cursor: (!embedded && universes.length > 1) ? 'pointer' : 'default',
-            }} title="Live-screener universe">
+          <div ref={uniRef} style={{ position: 'relative' }}>
+            <button onClick={() => !embedded && universes.length > 1 && setUniOpen(o => !o)}
+              aria-haspopup="menu" aria-expanded={uniOpen}
+              disabled={embedded !== undefined || universes.length <= 1}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7, height: 30, padding: '0 11px',
+                border: `1px solid ${uniOpen ? C.blue : C.borderHi}`, borderRadius: 7, fontSize: 11.5,
+                color: C.sec, cursor: (!embedded && universes.length > 1) ? 'pointer' : 'default',
+              }} title="Live-screener universe">
               <span style={{ fontWeight: 600 }}>{data.meta.universe.toUpperCase()}</span>
               {!embedded && universes.length > 1 && (
                 <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={C.dim} strokeWidth={3}
-                  style={{ transform: uniOpen ? 'rotate(180deg)' : 'none' }}>
+                  style={{ transform: uniOpen ? 'rotate(180deg)' : 'none' }} aria-hidden>
                   <polyline points="6 9 12 15 18 9" />
                 </svg>
               )}
-            </div>
+            </button>
             {uniOpen && (
-              <div style={{
+              <div role="menu" aria-label="Universe" style={{
                 position: 'absolute', top: 36, right: 0, minWidth: 172, background: '#11151d',
                 border: `1px solid ${C.borderHi}`, borderRadius: 8,
                 boxShadow: '0 12px 32px rgba(0,0,0,.55)', overflow: 'hidden', zIndex: 50,
               }}>
                 {universes.map(u => (
-                  <div key={u.id} onClick={() => { setUniverse(u.id); setUniOpen(false); }} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
-                    padding: '9px 12px', cursor: 'pointer', borderBottom: '1px solid #161b24',
-                    background: u.id === universe ? 'rgba(68,147,248,0.10)' : 'transparent',
-                  }}>
+                  <button key={u.id} role="menuitemradio" aria-checked={u.id === universe}
+                    onClick={() => { setUniverse(u.id); setUniOpen(false); }} style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+                      width: '100%', padding: '9px 12px', borderBottom: '1px solid #161b24',
+                      background: u.id === universe ? 'rgba(68,147,248,0.10)' : 'transparent',
+                    }}>
                     <span style={{ fontSize: 12, fontWeight: 600, color: u.id === universe ? '#fff' : C.mid }}>{u.name}</span>
                     <span style={{ fontFamily: MONO, fontSize: 10, color: C.dim }}>{u.covered ?? '—'}</span>
-                  </div>
+                  </button>
                 ))}
               </div>
             )}
@@ -280,21 +328,22 @@ export default function App() {
             <span style={{ fontSize: 10, letterSpacing: '.08em', color: C.dim2, textTransform: 'uppercase' }}>Data as of</span>
             <span style={{ fontFamily: MONO, fontSize: 11, color: C.mid }}>{data.meta.asOf}</span>
           </div>
-          <div onClick={() => setScreen('methodology')} title="Assumptions & methodology" style={{
-            width: 30, height: 30, border: `1px solid ${C.borderHi}`, borderRadius: 7,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-          }}>
+          <button onClick={() => setScreen('methodology')} title="Assumptions & methodology"
+            aria-label="Assumptions and methodology" style={{
+              width: 30, height: 30, border: `1px solid ${C.borderHi}`, borderRadius: 7,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
             <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={C.mid} strokeWidth={2}>
               <circle cx={12} cy={12} r={3} />
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>
-          </div>
-        </div>
+          </button>
+        </header>
 
         {/* ===== body ===== */}
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           {/* left nav */}
-          <div style={{
+          <nav aria-label="Screens" style={{
             width: 188, flex: '0 0 188px', borderRight: `1px solid ${C.border}`,
             background: C.chrome, display: 'flex', flexDirection: 'column', padding: '12px 10px',
           }}>
@@ -334,10 +383,10 @@ export default function App() {
                 EDGAR + Yahoo · real filings<br />rf {(data.meta.riskFree * 100).toFixed(2)}% · {data.meta.riskFreeSource.includes('live') ? 'FRED live' : 'fallback'}
               </div>
             </div>
-          </div>
+          </nav>
 
           {/* main */}
-          <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
+          <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
             {screen === 'overview' && (
               <Overview all={companies} filtered={filtered} filters={filters}
                 setFilters={setFilters} allSectors={allSectors} openDeep={openDeep} />
@@ -353,7 +402,7 @@ export default function App() {
                 watch={watch} toggleWatch={toggleWatch} openDeep={openDeep} />
             )}
             {screen === 'methodology' && <Methodology meta={data.meta} />}
-          </div>
+          </main>
         </div>
       </div>
     </TipProvider>

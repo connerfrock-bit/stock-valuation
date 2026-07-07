@@ -162,7 +162,7 @@ export function Methodology({ meta }: { meta: Meta }) {
   return (
     <div style={{ padding: '22px 24px 50px', maxWidth: 1180 }}>
       <div style={{ marginBottom: 18 }}>
-        <div style={{ fontSize: 17, fontWeight: 600 }}>Methodology &amp; Backtest</div>
+        <h1 style={{ fontSize: 17, fontWeight: 600, margin: 0 }}>Methodology &amp; Backtest</h1>
         <div style={{ fontSize: 12, color: C.mid, marginTop: 3 }}>
           Live pipeline: SEC EDGAR (XBRL, as-filed) + market prices → five engines → triangulated range.
           A research aid, not a recommendation.
@@ -176,12 +176,12 @@ export function Methodology({ meta }: { meta: Meta }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: C.sec }}>Backtest equity curve</div>
               {UNIVERSES.filter(([k]) => bts[k]).map(([k, , label]) => (
-                <span key={k} onClick={() => setUni(k)} style={{
-                  fontSize: 10.5, cursor: 'pointer', borderRadius: 5, padding: '3px 9px',
+                <button key={k} onClick={() => setUni(k)} aria-pressed={uni === k} style={{
+                  fontSize: 10.5, borderRadius: 5, padding: '3px 9px',
                   border: `1px solid ${uni === k ? hexA(C.blue, 0.4) : C.borderHi}`,
-                  background: uni === k ? 'rgba(68,147,248,0.15)' : 'transparent',
+                  background: uni === k ? 'rgba(68,147,248,0.15)' : undefined,
                   color: uni === k ? '#fff' : C.mid, fontWeight: 600,
-                }}>{label}</span>
+                }}>{label}</button>
               ))}
             </div>
             {bt && (

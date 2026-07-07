@@ -101,10 +101,10 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
         borderBottom: `1px solid ${C.border}`, background: C.chrome,
         position: 'sticky', top: 0, zIndex: 10,
       }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 11 }}>
+        <h1 style={{ display: 'flex', alignItems: 'baseline', gap: 11, margin: 0, fontWeight: 400 }}>
           <span style={{ fontFamily: MONO, fontWeight: 700, fontSize: 24, letterSpacing: '.01em' }}>{c.ticker}</span>
           <span style={{ fontSize: 14, color: C.sec }}>{c.name}</span>
-        </div>
+        </h1>
         <SectorTag sector={c.sector} label={c.sector} size={10} />
         {c.finCurrency !== 'USD' && (
           <span style={{ fontSize: 10, color: C.dim }}>reports in {c.finCurrency} · FX @ spot</span>
@@ -118,13 +118,15 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
           <div style={{ fontSize: 10, color: C.dim2, textTransform: 'uppercase', letterSpacing: '.06em' }}>Mkt Cap</div>
           <div style={{ fontFamily: MONO, fontSize: 20, fontWeight: 600, color: C.sec }}>{fmtMcapB(c.mcapB)}</div>
         </div>
-        <div onClick={() => toggleWatch(c.ticker)} style={{
-          width: 34, height: 34, border: `1px solid ${C.borderHi}`, borderRadius: 8,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', color: starred ? C.amber : C.mid, fontSize: 16,
-        }}>
+        <button onClick={() => toggleWatch(c.ticker)}
+          aria-pressed={starred} aria-label={`${starred ? 'Remove' : 'Add'} ${c.ticker} ${starred ? 'from' : 'to'} watchlist`}
+          style={{
+            width: 34, height: 34, border: `1px solid ${C.borderHi}`, borderRadius: 8,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: starred ? C.amber : C.mid, fontSize: 16,
+          }}>
           {starred ? '★' : '☆'}
-        </div>
+        </button>
       </div>
 
       <div style={{ padding: '20px 24px', display: 'grid', gridTemplateColumns: '1fr 360px', gap: 18, alignItems: 'start' }}>
@@ -346,17 +348,18 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
             <div style={{ fontSize: 13, fontWeight: 600, color: C.sec, marginBottom: 12 }}>Sector peers</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {peers.map(p => (
-                <div key={p.ticker} onClick={() => openDeep(p.ticker)} style={{
-                  display: 'flex', alignItems: 'center', gap: 10, padding: '6px 4px',
-                  borderRadius: 6, cursor: 'pointer', fontSize: 12,
-                }}>
-                  <span style={{ fontFamily: MONO, fontWeight: 600, width: 54 }}>{p.ticker}</span>
+                <button key={p.ticker} onClick={() => openDeep(p.ticker)} className="hoverrow"
+                  aria-label={`Open ${p.ticker} deep dive`} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '6px 4px',
+                    width: '100%', borderRadius: 6, fontSize: 12,
+                  }}>
+                  <span style={{ fontFamily: MONO, fontWeight: 600, width: 54, textAlign: 'left' }}>{p.ticker}</span>
                   <span style={{ flex: 1, fontFamily: MONO, fontWeight: 600, textAlign: 'right', color: upColor(p.upside) }}>
                     {fmtPct(p.upside)}
                   </span>
                   <span style={{ width: 42, textAlign: 'right', fontFamily: MONO, color: C.dim3 }}>Q{p.quality}</span>
                   <ConfMeter score={p.conf} size={3} />
-                </div>
+                </button>
               ))}
               {peers.length === 0 && <div style={{ fontSize: 11.5, color: C.dim }}>No covered peers in this sector.</div>}
             </div>

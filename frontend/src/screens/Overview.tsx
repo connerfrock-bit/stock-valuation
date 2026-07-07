@@ -48,13 +48,13 @@ export function Overview({ all, filtered, filters, setFilters, allSectors, openD
         <div style={{ flex: 1, padding: '18px 22px', minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 600 }}>Universe map</div>
+              <h1 style={{ fontSize: 15, fontWeight: 600, margin: 0 }}>Universe map</h1>
               <div style={{ fontSize: 11.5, color: C.mid, marginTop: 2 }}>
                 Upside to fair value × quality. Dot size = market cap, color = sector.{' '}
                 <span style={{ color: C.green, fontWeight: 600 }}>Top-right = cheap &amp; good.</span>
               </div>
             </div>
-            <div style={{ fontFamily: MONO, fontSize: 11, color: C.dim }}>
+            <div style={{ fontFamily: MONO, fontSize: 11, color: C.dim }} aria-live="polite">
               {filtered.length} / {all.length} shown
             </div>
           </div>
@@ -75,7 +75,9 @@ function Scatter({ list, openDeep }: { list: Company[]; openDeep: (t: string) =>
   const R = (m: number) => clamp((Math.sqrt(m) / Math.sqrt(3500)) * 30 + 4, 4, 30);
 
   return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', maxHeight: '62vh' }}>
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', maxHeight: '62vh' }}
+      role="img"
+      aria-label={`Scatter of ${list.length} companies: upside to fair value versus quality score. The same companies are listed in the Screener table, which is keyboard accessible.`}>
       {/* money zone */}
       <rect x={X(0.15)} y={pt} width={X(xMax) - X(0.15)} height={Y(70) - pt}
         fill="rgba(63,185,80,0.06)" stroke="rgba(63,185,80,0.25)" strokeDasharray="4 4" rx={6} />
@@ -126,7 +128,8 @@ function Scatter({ list, openDeep }: { list: Company[]; openDeep: (t: string) =>
             }}
             onMouseMove={e => moveTip(e.clientX, e.clientY)}
             onMouseLeave={() => { setHover(null); clearTip(); }}
-            onClick={() => openDeep(c.ticker)} />
+            onClick={() => openDeep(c.ticker)}
+            aria-label={`${c.ticker} · ${fmtPct(c.upside)} upside · quality ${c.quality}`} />
         );
       })}
     </svg>

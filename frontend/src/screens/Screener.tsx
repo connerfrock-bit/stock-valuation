@@ -50,25 +50,25 @@ export function Screener(props: {
   };
 
   const th = (label: string, key: SortKey | null, align: 'left' | 'right' = 'right', extra?: React.CSSProperties, title?: string) => (
-    <th key={label} scope="col" title={title} onClick={key ? () => setSort(key) : undefined} style={{
-      textAlign: align, padding: '10px 12px', fontSize: 10, letterSpacing: '.05em',
-      textTransform: 'uppercase', color: C.dim, fontWeight: 600,
-      cursor: key ? 'pointer' : 'default', borderBottom: `1px solid ${C.border}`,
-      userSelect: 'none', whiteSpace: 'nowrap', background: C.panel, ...extra,
-    }}>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+    <th key={label} scope="col" title={title}
+      aria-sort={key && sortKey === key ? (sortDir === 'desc' ? 'descending' : 'ascending') : undefined}
+      style={{
+        textAlign: align, padding: 0, borderBottom: `1px solid ${C.border}`,
+        whiteSpace: 'nowrap', background: C.panel, ...extra,
+      }}>
+      <button onClick={key ? () => setSort(key) : undefined} disabled={!key} tabIndex={key ? 0 : -1}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4, padding: '10px 12px',
+          fontSize: 10, letterSpacing: '.05em', textTransform: 'uppercase',
+          color: C.dim, fontWeight: 600, cursor: key ? 'pointer' : 'default', userSelect: 'none',
+        }}>
         {label}
         <span style={{ color: C.blue, fontSize: 9 }}>
           {key && sortKey === key ? (sortDir === 'desc' ? '▼' : '▲') : ''}
         </span>
-      </span>
+      </button>
     </th>
   );
-
-  const chip: React.CSSProperties = {
-    fontSize: 11, color: C.mid, cursor: 'pointer',
-    border: `1px solid ${C.borderHi}`, borderRadius: 6, padding: '5px 10px',
-  };
 
   return (
     <div style={{ minHeight: '100%', display: 'flex' }}>
@@ -79,30 +79,37 @@ export function Screener(props: {
           display: 'flex', alignItems: 'center', gap: 10, padding: '11px 18px',
           borderBottom: `1px solid ${C.border}`, flexWrap: 'wrap',
         }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginRight: 4 }}>Screener</div>
-          <div style={{ fontFamily: MONO, fontSize: 11, color: C.dim, marginRight: 6 }}>{rows.length} matches</div>
+          <h1 style={{ fontSize: 14, fontWeight: 600, margin: '0 4px 0 0' }}>Screener</h1>
+          <div style={{ fontFamily: MONO, fontSize: 11, color: C.dim, marginRight: 6 }} aria-live="polite">
+            {rows.length} matches
+          </div>
           <div style={{ display: 'flex', gap: 6 }}>
-            {PRESETS.map(([label, patch]) => (
-              <div key={label} style={chip} onClick={() => setFilters({ ...filters, ...patch })}>{label}</div>
-            ))}
+            {PRESETS.map(([label, patch]) => {
+              const active = Object.entries(patch).every(
+                ([k, v]) => filters[k as keyof Filters] === v);
+              return (
+                <button key={label} className="chipbtn" aria-pressed={active}
+                  onClick={() => setFilters({ ...filters, ...patch })}>{label}</button>
+              );
+            })}
           </div>
           <div style={{ flex: 1 }} />
-          <div style={chip} onClick={() => setShowMultiples(!showMultiples)}>
+          <button className="chipbtn" aria-pressed={showMultiples}
+            onClick={() => setShowMultiples(!showMultiples)}>
             {showMultiples ? 'Hide' : 'Show'} multiples
-          </div>
-          <div style={{
-            ...chip, display: 'flex', alignItems: 'center', gap: 6,
-            ...(rows.length === 0
-              ? { color: C.dim2, cursor: 'default', opacity: 0.6 }
-              : { color: C.sec }),
-          }} onClick={rows.length === 0 ? undefined : exportCsv}
-            title={rows.length === 0 ? 'Nothing to export — no rows match' : undefined}>
-            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          </button>
+          <button className="chipbtn" disabled={rows.length === 0} onClick={exportCsv}
+            title={rows.length === 0 ? 'Nothing to export — no rows match' : undefined}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              ...(rows.length === 0 ? { opacity: 0.55, cursor: 'default' } : { color: C.sec }),
+            }}>
+            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden>
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" /><line x1={12} y1={15} x2={12} y2={3} />
             </svg>
             Export CSV
-          </div>
+          </button>
         </div>
 
         {/* table */}
@@ -129,16 +136,28 @@ export function Screener(props: {
               {rows.map(c => {
                 const starred = !!watch[c.ticker];
                 return (
-                  <tr key={c.ticker} onClick={() => openDeep(c.ticker)} style={{
-                    borderBottom: `1px solid ${C.rowBorder}`, cursor: 'pointer',
-                    background: selected === c.ticker ? 'rgba(68,147,248,0.06)' : 'transparent',
-                  }}>
+                  <tr key={c.ticker} className="rowlink" tabIndex={0}
+                    onClick={() => openDeep(c.ticker)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        if (e.target === e.currentTarget) { e.preventDefault(); openDeep(c.ticker); }
+                      }
+                    }}
+                    aria-label={`${c.ticker} — open deep dive`}
+                    style={{
+                      borderBottom: `1px solid ${C.rowBorder}`,
+                      background: selected === c.ticker ? 'rgba(68,147,248,0.06)' : undefined,
+                    }}>
                     <td style={{ padding: '7px 10px 7px 16px', borderRight: `1px solid ${C.rowBorder}` }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                        <span onClick={e => { e.stopPropagation(); toggleWatch(c.ticker); }}
-                          style={{ color: starred ? C.amber : C.dim, fontSize: 13, lineHeight: 1 }}>
+                        <button onClick={e => { e.stopPropagation(); toggleWatch(c.ticker); }}
+                          aria-pressed={starred} aria-label={`${starred ? 'Remove' : 'Add'} ${c.ticker} ${starred ? 'from' : 'to'} watchlist`}
+                          style={{
+                            color: starred ? C.amber : C.dim, fontSize: 13, lineHeight: 1,
+                            padding: 4, margin: -4,
+                          }}>
                           {starred ? '★' : '☆'}
-                        </span>
+                        </button>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                             <span style={{ fontFamily: MONO, fontWeight: 600, fontSize: 12.5 }}>{c.ticker}</span>

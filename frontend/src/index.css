@@ -46,5 +46,23 @@ input[type=range]:focus-visible {
   outline: 2px solid #4493f8; outline-offset: 4px;
 }
 
+/* Interactive-state classes — inline styles carry the identity, these carry
+   the states inline styles can't express. Active/selected backgrounds stay
+   inline (they win over these hovers by design). */
+.navitem:hover { background: rgba(255,255,255,0.045); }
+.rowlink { cursor: pointer; }
+.rowlink:hover { background: rgba(68,147,248,0.06); }
+.rowlink:focus-visible { outline: 2px solid #4493f8; outline-offset: -2px; }
+.hoverrow:hover { background: rgba(255,255,255,0.045); }
+.chipbtn {
+  border: 1px solid #2a3140; border-radius: 6px; padding: 5px 10px;
+  font-size: 11px; color: #9aa3b2; white-space: nowrap;
+  transition: border-color .12s, color .12s;
+}
+.chipbtn:hover:not(:disabled) { border-color: #414d63; color: #cfd6e2; }
+.chipbtn[aria-pressed="true"] {
+  background: rgba(68,147,248,0.13); border-color: rgba(68,147,248,0.45); color: #e6e9ef;
+}
+
 a { color: #4493f8; text-decoration: none; }
 a:hover { text-decoration: underline; }

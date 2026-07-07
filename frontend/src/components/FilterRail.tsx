@@ -19,7 +19,7 @@ export function FilterRail({ filters, setFilters, allSectors }: {
 
   const seg = (on: boolean) => ({
     flex: 1, textAlign: 'center' as const, fontSize: 11, padding: '5px 0',
-    borderRadius: 5, cursor: 'pointer',
+    borderRadius: 5,
     background: on ? 'rgba(68,147,248,0.15)' : C.panel,
     color: on ? '#fff' : C.mid,
     border: `1px solid ${on ? hexA(C.blue, 0.4) : C.border}`,
@@ -36,14 +36,14 @@ export function FilterRail({ filters, setFilters, allSectors }: {
   );
 
   return (
-    <div style={{
+    <aside aria-label="Filters" style={{
       width: 228, flex: '0 0 228px', borderRight: `1px solid ${C.border}`,
       background: C.rail, padding: 16, overflowY: 'auto',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: C.hi }}>Filters</span>
-        <span onClick={() => setFilters({ ...DEFAULT_FILTERS })}
-          style={{ fontSize: 10.5, color: C.blue, cursor: 'pointer' }}>Reset</span>
+        <button onClick={() => setFilters({ ...DEFAULT_FILTERS })}
+          style={{ fontSize: 10.5, color: C.blue }}>Reset</button>
       </div>
 
       <Section title="Sector">
@@ -51,49 +51,58 @@ export function FilterRail({ filters, setFilters, allSectors }: {
           const on = active.has(sec);
           const col = SECTOR_COLORS[sec] ?? '#9aa3b2';
           return (
-            <div key={sec} onClick={() => toggleSector(sec)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 2px', cursor: 'pointer', opacity: on ? 1 : 0.4 }}>
-              <span style={{
-                width: 11, height: 11, borderRadius: 3,
+            <button key={sec} onClick={() => toggleSector(sec)}
+              role="checkbox" aria-checked={on} className="hoverrow"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '4px 2px',
+                width: '100%', borderRadius: 4, opacity: on ? 1 : 0.4,
+              }}>
+              <span aria-hidden style={{
+                width: 11, height: 11, borderRadius: 3, flex: '0 0 11px',
                 background: on ? col : 'transparent', border: `1.5px solid ${col}`,
               }} />
               <span style={{ fontSize: 11.5, color: on ? C.hi : C.mid, flex: 1 }}>{sec}</span>
-            </div>
+            </button>
           );
         })}
       </Section>
 
       <Section title="Market cap">
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 4 }} role="radiogroup" aria-label="Market cap band">
           {([['all', 'All'], ['mega', 'Mega'], ['large', 'Large'], ['mid', 'Mid']] as const).map(([v, l]) => (
-            <div key={v} onClick={() => patch({ mcap: v })} style={seg(filters.mcap === v)}>{l}</div>
+            <button key={v} onClick={() => patch({ mcap: v })} role="radio"
+              aria-checked={filters.mcap === v} style={seg(filters.mcap === v)}>{l}</button>
           ))}
         </div>
       </Section>
 
       <Section title={`Min quality · ${filters.minQ}`}>
         <input type="range" min={0} max={100} step={5} value={filters.minQ}
+          aria-label="Minimum quality score"
           onChange={e => patch({ minQ: +e.target.value })} />
       </Section>
 
       <Section title="Min agreement">
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 4 }} role="radiogroup" aria-label="Minimum method agreement">
           {[1, 2, 3, 4, 5].map(n => (
-            <div key={n} onClick={() => patch({ minConf: n })}
-              style={{ ...seg(filters.minConf === n), fontFamily: "'JetBrains Mono',monospace" }}>{n}</div>
+            <button key={n} onClick={() => patch({ minConf: n })} role="radio"
+              aria-checked={filters.minConf === n}
+              style={{ ...seg(filters.minConf === n), fontFamily: "'JetBrains Mono',monospace" }}>{n}</button>
           ))}
         </div>
       </Section>
 
       <Section title={`Min upside · ${filters.upside}%`}>
         <input type="range" min={-100} max={50} step={5} value={filters.upside}
+          aria-label="Minimum upside percent"
           onChange={e => patch({ upside: +e.target.value })} />
       </Section>
 
-      <div onClick={() => patch({ hideTraps: !filters.hideTraps })}
-        style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', padding: '4px 2px' }}>
-        <span style={{
-          width: 32, height: 18, borderRadius: 10, position: 'relative',
+      <button onClick={() => patch({ hideTraps: !filters.hideTraps })}
+        role="switch" aria-checked={filters.hideTraps} className="hoverrow"
+        style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 2px', width: '100%', borderRadius: 4 }}>
+        <span aria-hidden style={{
+          width: 32, height: 18, borderRadius: 10, position: 'relative', flex: '0 0 32px',
           background: filters.hideTraps ? C.green : '#222835', transition: 'background .15s',
         }}>
           <span style={{
@@ -102,7 +111,7 @@ export function FilterRail({ filters, setFilters, allSectors }: {
           }} />
         </span>
         <span style={{ fontSize: 11.5, color: C.hi }}>Hide trap-flagged</span>
-      </div>
-    </div>
+      </button>
+    </aside>
   );
 }
