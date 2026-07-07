@@ -598,7 +598,7 @@ All four audit proposals green-lit and landed, one commit each:
    reverse-DCF gap (respecting bound operators), momentum percentile, quality tier,
    agreement. Honest fallback when nothing measured explains the gap. Verified live:
    AAPL bull case cites 23% implied vs 9% trailing + 69th-pct momentum + Q82.
-4. **Hash routing** (`e51c0b8`) — `#/deep/GILD` deep links, Back/Forward, refresh keeps
+4. **Hash routing** (`fd98bfb`) — `#/deep/GILD` deep links, Back/Forward, refresh keeps
    place; first sync replaceState (file:// fallback for the share build); invalid
    hash/ticker falls back gracefully. Verified: deep-link -> screener -> Back -> MSFT.
 
