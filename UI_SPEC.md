@@ -24,8 +24,21 @@
 - 🟢 Green = **undervalued / upside / pass** (price below fair value)
 - 🔴 Red = **overvalued / downside / fail** (price above fair value)
 - 🟡 Amber = **caution** (value-trap flag, low data quality, low confidence)
-- ⚪ Neutral gray = informational / no signal
+- ⚪ Neutral gray = informational / no signal — **this includes "fairly valued" (±4% band)**: a stock at fair value is a no-signal state, not a caution state. (Amended 2026-07-07: the Deep-Dive verdict and Screener upside column rendered the ±4% band amber, which read as a warning.)
+- 🔵 Blue = interactive accent (selection, focus, sort state) **and** the one color for non-signal data lines (sparklines, factor bars). Never a value judgment.
 - Sector colors = a fixed categorical palette (11 GICS-style sectors), used only for sector encoding (scatter, tags) — never reused for value/risk meaning.
+- **Displayed factors (momentum, and any future factor shown but not blended) are neutral/informational** — value in neutral gray, bars in blue. Never a sector hue and never green/red/amber. (Amended 2026-07-07: momentum wore Communication Services' exact purple `#b58cf0` on the Screener and Deep-Dive, beside sector tags in the same hue.)
+
+**Interaction states & keyboard (added 2026-07-07 — the original spec omitted these and the first implementation shipped without them):**
+- Every interactive element is a real `<button>`/`<a>`/`<input>` with a role and an accessible name. Div-with-onClick is not acceptable.
+- Visible `:focus-visible` outline (blue accent, 2px, offset 2px) on everything focusable; table rows use an inset outline.
+- Hover states: rows tint `rgba(68,147,248,0.06)`; chips lighten border + text; nav items tint white at 4.5%.
+- Keyboard: `/` focuses search; search is a combobox (arrows + Enter + Escape); table rows are tabbable and open on Enter/Space; menus close on Escape and outside click.
+- Text contrast ≥ 4.5:1 on its actual background for all label/annotation text (tokens `dim`/`dim2` were raised 2026-07-07 to meet this; do not reintroduce darker grays for text).
+- Minimum text size 10px (9.5px floor for one-word tertiary notes).
+
+**Responsive floor (added 2026-07-07 — triggered by the Deep-Dive at 200% zoom, where the fixed `1fr 360px` grid crushed the hero and `$196.08` overflowed its card):**
+- The app must stay usable at a 720px-wide CSS viewport (= 200% zoom on a 1440 display): top bar wraps, two-column grids collapse to one at ≤1080px, wide tables scroll inside their own container — the page never scrolls horizontally.
 
 **Typography:**
 - UI text: clean sans-serif (Inter / system).
@@ -44,7 +57,7 @@
 ### 3.1 Valuation Range Bar ⭐ (the signature component)
 A horizontal bar that visually answers "what's it worth vs. what it costs."
 - **Track:** spans from min to max of all method estimates (auto-scaled).
-- **Range band:** shaded low→high fair-value band; mid marked.
+- **Range band:** shaded low→high fair-value band; mid marked with a **dim** tick — the price line is the component's only protagonist; the mid tick must not compete with it at equal weight. (Amended 2026-07-07: both were bright white and fought for focus on the Deep-Dive hero.)
 - **Method dots:** one dot per valuation method (DCF, revDCF, RIM, EPV, DDM, multiple, NCAV), positioned at that method's estimate. Tight cluster = agreement; spread = disagreement. Hover dot → method name + value + one-line assumption.
 - **Current price marker:** a vertical line. Its position vs. the band is the whole story — left of band (in green zone) = undervalued; right (red zone) = overvalued.
 - **Label:** "Fair value $42–$68 (mid $55) · Price $51 · +8% to mid".

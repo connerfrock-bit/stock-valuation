@@ -533,3 +533,48 @@ refinement, not a hotfix); (b) the backtest engine stack still lacks the archety
 (c) frontend WEIGHTS duplicates backend CENTRAL_WEIGHTS by hand — exporting weights via
 meta would kill this class of drift; deferred. Also: prior commit messages said "44 tests";
 the true count was 64 (now 70). All 70 green; outputs regenerated; share rebuilt.
+
+---
+
+## Design audit — correctness floor + system enforcement (2026-07-07)
+
+Senior-designer pass over the dashboard: taste baseline derived from BLUEPRINT/UI_SPEC/
+handoff ("a calibrated instrument: one semantic color system doing all the talking,
+honesty visible but not shouting"), then all four screens walked in a real browser at
+1440px and at a 720px CSS viewport (= 200% zoom). Six commits, each isolated and
+revertible; UI_SPEC + handoff README amended where the docs themselves were the problem.
+
+**Floor (fixed unconditionally):**
+1. **Keyboard/AT access was near-zero** — 3 focusable elements in the whole app (search
+   + 2 sliders, and the sliders suppressed their outline). Every control was a div
+   onClick. Now: real buttons with roles everywhere (nav aria-current, sector checkboxes,
+   mcap/agreement radiogroups, hide-traps switch, watch-star aria-pressed, menu items),
+   header/nav/main/aside landmarks, h1 per screen, global :focus-visible, search is a
+   real combobox (arrows/Enter/Escape), table rows tabbable (Enter opens Deep-Dive),
+   universe menu closes on Escape/outside-click. 30+ focusable per screen.
+2. **Contrast** — dim #626b7a (3.6:1) and dim2 #525c6b (2.9:1) failed WCAG AA at the
+   9-10px sizes they labeled; raised to #7d8798/#727c8d (>=4.5:1) preserving hierarchy.
+   Type floor 10px (was 8.5-9.5 in tags/chips/labels).
+3. **200% zoom broke Deep-Dive** ($196.08 overflowed the hero card; top-bar timestamp
+   spilled over the KPI strip). Top bar wraps; dd-grid/mt-* grids collapse <=1080px;
+   KPI strip auto-fits; body never scrolls horizontally.
+4. **Scatter lied at the edges** — fixed [-45%,+55%] domain piled the -80% tail onto the
+   -45% edge. Domain now fits the data (zero line + money zone always in view).
+   Empty-filter state added. Tooltip now clamps vertically (flips above cursor).
+5. Missing specced states added: stale-data banner (>24h), scatter empty state, CSV
+   disabled at 0 rows, row hover (specced in handoff, never built), preset chips now
+   show active state.
+
+**System enforcement (the app violated its own UI_SPEC §2):** fairly-valued (+-4%) was
+amber = caution -> now neutral; momentum wore Communication Services' exact #b58cf0 ->
+neutral value + blue bar; sparklines used green/sector-purple/staples-teal -> one
+informational blue; range-bar mid tick dimmed so the price line is the sole protagonist;
+sort arrows green -> blue (interactive accent); two ghost gradients flattened.
+
+**Deliberately NOT done (L3, needs owner sign-off):** shares-outstanding trend sparkline
+(payload lacks the series — backend value.py change; UI_SPEC C calls it out as the
+dilution watch); ratio-bar denominators (roic/0.3, om/0.6) present fixed scalings as if
+sector-relative — real sector percentiles are a backend feature; Deep-Dive "why cheap"
+bear-case line is boilerplate (only two variants) — either template real drivers or cut;
+card titles as h2s; dot-level keyboard access on the scatter (Screener is the documented
+keyboard path). Share build rebuilt post-audit.

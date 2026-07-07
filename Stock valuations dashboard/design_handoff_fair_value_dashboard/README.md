@@ -40,6 +40,30 @@ fabricated valuation numbers are **placeholders** — replace them with the real
 (EDGAR financials + prices → the engines in `VALUATION_DEFAULTS_SPEC_1.md`). The *shape* of the data
 model below is what the UI binds to.
 
+## Errata — 2026-07-07 design audit (production deviates deliberately)
+A browser audit of the shipped React app corrected the following in this spec. Where this file and
+`UI_SPEC.md` §2 conflict, the semantic-color law in `UI_SPEC.md` wins.
+
+1. **±4% "fairly valued" is neutral gray, not amber** (price line, upside %, verdicts). Amber is
+   caution; this spec's "else amber `#d29922`" price-line rule contradicted the token table's own
+   "meaning is FIXED" clause. Trigger: Deep-Dive verdict + Screener upside column.
+2. **Sort arrows are blue, not green** — sort state is UI chrome, and this file already defines blue
+   as "interactive accent … NOT a value signal". Trigger: Screener header.
+3. **Range Bar mid tick is dim** (`#7d8798`), not `#cfd6e2` — it competed with the price line at
+   equal weight. The price line keeps the halo and verdict color. Trigger: Deep-Dive hero.
+4. **Dim text tokens raised for contrast**: `#626b7a`→`#7d8798`, `#525c6b`→`#727c8d` (the originals
+   measured 3.6:1 / 2.9:1 on `#0a0c10` at 9–10px — WCAG AA fail). Trigger: every screen.
+5. **Momentum (added post-handoff) must not use sector hues** — it shipped in Communication
+   Services' `#b58cf0`. Displayed factors: neutral values, blue bars. Trigger: Screener + Deep-Dive.
+6. **Gradient card backgrounds dropped** (reverse-DCF, L8 callout) — flat panel `#0e1117`; the
+   near-invisible gradients added noise, not seriousness. Trigger: Deep-Dive, Methodology.
+7. **Interaction floor** (not specified here): every control is a real button with visible
+   `:focus-visible`; search is a keyboard combobox; rows are tabbable; menus close on Escape/outside
+   click; grids collapse ≤1080px so 200% zoom works. See `UI_SPEC.md` §2 amendments.
+8. **Scatter x-domain auto-fits the data** instead of the fixed `[-0.45,+0.55]` clamp, which piled
+   deep discounts onto the plot edge and misread them as −45%. Trigger: Overview with live data
+   (median upside −31%, tail to −80%).
+
 ---
 
 ## Global Chrome (persistent on every screen)
