@@ -228,3 +228,61 @@ Honesty rules: never a single fair value without its range · agreement always b
       a Methodology study panel. Deliberately NOT blended into the value composite (Plan 6
       proved dilution kills it) — displayed as an orthogonal factor. 70 tests. See WORKLOG.md.
 - [ ] Plan D: NYSE large+mid $2B+ (archetype router extends; SIC→sector map; size buckets)
+
+---
+
+## Phase plan — post-design-audit roadmap (2026-07-07, supersedes "Plan D" ordering)
+
+> Sequence: finish in flight → make the model right on covered data → rebuild the
+> plumbing for scale → only then widen the universe. Each phase has a go/no-go gate
+> so we never scale a weakness. Full rationale in WORKLOG (design-audit entries).
+
+### Phase 0 — housekeeping (done 2026-07-07)
+- [x] Full refresh verified post-ingest-race (96 NDX / 482 SPX; first sharesM payloads)
+- [x] `meta.weights` emitted by value.py — frontend hand-mirror demoted to fallback
+- [x] `meta.changes` digest (vs last prior-day comparable snapshot) + Overview strip
+- [x] "Value confirmed by tape" preset (upside≥15 · conf≥3 · clean · mom≥50)
+- [x] Screener row windowing >150 rows (S&P-scale); table wrap is the real scroller
+- [x] Weekly scheduled refresh (`REFRESH DATA.cmd /auto`, Sundays 09:00, logged)
+
+### Phase 1 — model correctness on covered data (S&P 500 is the lab)
+- [ ] Financials archetype: real bank quality dims (efficiency, NII trend, leverage
+      done right); RIM Re-sensitivity validated across the ~73 SPX financials.
+      Gate: 5 spot-checked banks look sane; no more gated-n/a quality dims.
+- [ ] REIT archetype: FFO/NAV valuation (new tags: D&A add-back, gains) replacing
+      RIM-on-book; retire the REIT_RIM_FLAG. Gate: mids in plausible cap-rate range.
+- [ ] Warranted multiple: split TECH (semis/software/hardware via SIC + override
+      table). Gate: ≥8 names per anchor bucket.
+- [ ] Point-in-time index membership for the SPX backtest; re-run; publish the
+      measured survivorship effect in Methodology caveats whichever way it cuts.
+- [ ] DECISION GATE: if the survivorship-clean value composite still shows no edge,
+      the product's positioning stays "expectations meter + trap gate + momentum
+      overlay" — written on the Methodology page, not implied.
+
+### Phase 2 — plumbing for scale (before any universe growth)
+- [ ] Bulk EDGAR transport: nightly companyfacts.zip + submissions.zip (one download
+      replaces per-ticker calls — the 2026-07-07 throttled ingest took ~5h for 513
+      names). Tag-mapping + coverage guard unchanged. Gate: full universe <10 min
+      after download.
+- [ ] Bulk prices: Stooq daily files primary, yfinance demoted to spot-check;
+      betas from bulk monthly.
+- [ ] L0 hygiene rules, visible per honesty law: sub-$1, units/warrants/preferreds,
+      SPAC shells — excluded WITH reasons, never silently.
+- [ ] S&P 1500 dry run. Gate: ≥90% coverage; tag-fallback rate measured and shown
+      on a Methodology data-quality panel. This number is the NYSE go/no-go.
+
+### Phase 3 — widen (only after both gates)
+- [ ] S&P 1500 live in the universe picker (mid/small caps = where cross-sectional
+      value evidence is strongest; sector anchors finally get statistical teeth).
+- [ ] Full NYSE as a SCREENING universe only — Methodology states plainly that
+      credible backtesting stops at SPX (no delisted-price history without CRSP).
+      Forward ledger runs per-universe and becomes the broad universe's evidence.
+- [ ] Scatter density at 2,000+ names: canvas rendering or a stated default
+      "investable" filter.
+
+### Standing rules
+- No new valuation engines (seven triangulate; an eighth is procrastination).
+- No model change ships without beating v2.2 in a time-split backtest or the ledger.
+- No silent universe filtering; every exclusion visible with a reason.
+- Docs are law: UI changes either conform to UI_SPEC or amend it citing the trigger.
+- Never run value.py while an ingest is rebuilding the DB (2026-07-07 race).

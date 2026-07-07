@@ -1,5 +1,7 @@
 @echo off
 title Fair Value - data refresh
+rem /auto = headless (scheduled task): skip the pauses so the run can end itself
+if /I "%~1"=="/auto" set FV_AUTO=1
 cd /d "C:\Users\conne\Desktop\stock valuation project\backend"
 echo ============================================================
 echo  Fair Value - full data refresh (union of Nasdaq-100 + S&P 500, ~25 min)
@@ -45,7 +47,7 @@ echo ============================================================
 echo  DONE - dashboard data refreshed.
 echo  Open (or refresh) the dashboard to see the new numbers.
 echo ============================================================
-pause
+if not defined FV_AUTO pause
 exit /b 0
 
 :fail
@@ -55,5 +57,5 @@ echo  A step FAILED - the dashboard keeps its previous data.
 echo  Scroll up for the error. Usually: no internet, or a source
 echo  (EDGAR/Yahoo) temporarily blocking. Re-run in a few minutes.
 echo ############################################################
-pause
+if not defined FV_AUTO pause
 exit /b 1
