@@ -468,7 +468,7 @@ export function Methodology({ meta }: { meta: Meta }) {
           ))}
         </div>
         <div style={{
-          marginTop: 14, background: 'linear-gradient(180deg,#0f1117,#0c0f15)',
+          marginTop: 14, background: C.panel,
           border: `1px solid ${C.border}`, borderRadius: 11, padding: '16px 20px',
           display: 'flex', gap: 20, alignItems: 'center', flexWrap: 'wrap',
         }}>

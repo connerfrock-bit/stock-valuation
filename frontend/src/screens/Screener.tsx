@@ -181,7 +181,7 @@ export function Screener(props: {
                     <td style={{ padding: '7px 12px' }}><ConfMeter score={c.conf} /></td>
                     <td style={{ padding: '7px 12px', width: 96 }}><QualityGauge q={c.quality} /></td>
                     <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: MONO, fontWeight: 600,
-                      color: c.momPct == null ? C.dim : '#b58cf0' }}
+                      color: c.momPct == null ? C.dim : C.sec }}
                       title={c.mom12 == null ? '' : `12-1 return ${fmtPct(c.mom12)}`}>
                       {c.momPct == null ? 'n/a' : c.momPct}
                     </td>

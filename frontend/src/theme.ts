@@ -52,7 +52,9 @@ export function hexA(hex: string, a: number): string {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
-export const upColor = (u: number) => (u > 0.04 ? C.green : u < -0.04 ? C.red : C.amber);
+// Fairly-valued (±4%) is a no-signal state → neutral, per the semantic color
+// law (UI_SPEC §2). Amber is reserved for caution (traps, low confidence).
+export const upColor = (u: number) => (u > 0.04 ? C.green : u < -0.04 ? C.red : C.sec);
 export const qColor = (q: number) => (q >= 70 ? C.green : q >= 48 ? C.amber : C.red);
 export const confColor = (c: number) => (c >= 4 ? C.green : c >= 2 ? C.amber : C.red);
 

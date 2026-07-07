@@ -53,7 +53,7 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
     : `~${Math.round(ig * 100)}%`;
   const revVerdict = ig === null || tg === null ? null
     : ig > tg + 0.04 ? 'optimistic' : ig < Math.max(-0.3, tg - 0.04) ? 'pessimistic' : 'roughly in line';
-  const revColor = revVerdict === 'optimistic' ? C.red : revVerdict === 'pessimistic' ? C.green : C.amber;
+  const revColor = revVerdict === 'optimistic' ? C.red : revVerdict === 'pessimistic' ? C.green : C.sec;
 
   // ----- method weights (mirror of the L8 blend) -----
   const growthApplicable = c.methods.filter(m => m.applicable && m.key !== 'epv');
@@ -84,11 +84,14 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
     const v = s.filter((x): x is number => x !== null);
     return v.length >= 2 && v[0] !== 0 ? v[v.length - 1] / v[0] - 1 : null;
   };
-  const trendDefs: { label: string; series: (number | null)[]; color: string }[] = [
-    { label: 'Revenue ($B)', series: t.revenueB, color: C.blue },
-    { label: 'Operating margin', series: t.opMargin, color: C.green },
-    { label: 'Free cash flow ($B)', series: t.fcfB, color: '#b58cf0' },
-    { label: 'Book equity ($B)', series: t.equityB, color: '#4fc3c9' },
+  // One informational color for all trend lines: green/purple/teal here leaked
+  // semantic and sector meanings (UI_SPEC §2 fixes both); the delta % already
+  // carries the up/down signal.
+  const trendDefs: { label: string; series: (number | null)[] }[] = [
+    { label: 'Revenue ($B)', series: t.revenueB },
+    { label: 'Operating margin', series: t.opMargin },
+    { label: 'Free cash flow ($B)', series: t.fcfB },
+    { label: 'Book equity ($B)', series: t.equityB },
   ];
 
   const edgarUrl = `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${c.cik}&type=10-K&dateb=&owner=include&count=40`;
@@ -143,7 +146,7 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
 
           {/* reverse DCF */}
           <div style={{
-            background: 'linear-gradient(180deg,#0f1117,#0c0f15)',
+            background: C.panel,
             border: `1px solid ${hexA(revColor, 0.3)}`, borderRadius: 11, padding: '18px 22px',
           }}>
             <div style={{ fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', color: C.dim, marginBottom: 10 }}>
@@ -296,10 +299,10 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ height: 7, borderRadius: 4, background: '#161b24', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${c.momPct}%`, background: '#b58cf0', borderRadius: 4 }} />
+                      <div style={{ height: '100%', width: `${c.momPct}%`, background: C.blue, borderRadius: 4 }} />
                     </div>
                   </div>
-                  <span style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: '#b58cf0', lineHeight: 1 }}>
+                  <span style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: C.hi, lineHeight: 1 }}>
                     {c.momPct}
                   </span>
                   <span style={{ fontSize: 10.5, color: C.dim }}>/100</span>
@@ -337,7 +340,7 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
                         {d === null ? 'n/a' : fmtPct(d, 0)}
                       </span>
                     </div>
-                    <Sparkline series={td.series} color={td.color} />
+                    <Sparkline series={td.series} color={C.blue} />
                   </div>
                 );
               })}

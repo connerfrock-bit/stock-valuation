@@ -42,10 +42,11 @@ export function RangeBar({ c, full = false }: { c: Company; full?: boolean }) {
         transform: 'translateY(-50%)', height: barH + 2, borderRadius: 3,
         background: 'rgba(154,163,178,0.30)', border: '1px solid rgba(154,163,178,0.4)',
       }} />
-      {/* mid tick */}
+      {/* mid tick — deliberately dimmer than the price line: the bar's one
+          protagonist is where PRICE sits vs the band */}
       <div style={{
         position: 'absolute', left: `${mP}%`, top: '50%', transform: 'translate(-50%,-50%)',
-        width: 2, height: barH + 8, background: '#cfd6e2', borderRadius: 2,
+        width: 2, height: barH + 8, background: C.dim, borderRadius: 2,
       }} />
       {/* method dots (full variant) */}
       {full && c.methods.filter(m => m.applicable && m.value !== null).map(m => (
