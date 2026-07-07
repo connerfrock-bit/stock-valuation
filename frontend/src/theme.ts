@@ -13,8 +13,11 @@ export const C = {
   hi: '#e6e9ef',
   sec: '#cfd6e2',
   mid: '#9aa3b2',
-  dim: '#626b7a',
-  dim2: '#525c6b',
+  // dim/dim2 lightened from #626b7a/#525c6b (3.6:1 / 2.9:1 on bg — WCAG AA fail
+  // at the 10px label sizes they're used for) to ≥4.5:1 while keeping the
+  // hi > sec > mid > dim3 > dim > dim2 hierarchy readable.
+  dim: '#7d8798',
+  dim2: '#727c8d',
   dim3: '#8a93a3',
   green: '#3fb950',
   red: '#f85149',

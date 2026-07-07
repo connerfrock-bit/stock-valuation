@@ -49,8 +49,8 @@ export function Screener(props: {
     URL.revokeObjectURL(a.href);
   };
 
-  const th = (label: string, key: SortKey | null, align: 'left' | 'right' = 'right', extra?: React.CSSProperties) => (
-    <th key={label} onClick={key ? () => setSort(key) : undefined} style={{
+  const th = (label: string, key: SortKey | null, align: 'left' | 'right' = 'right', extra?: React.CSSProperties, title?: string) => (
+    <th key={label} scope="col" title={title} onClick={key ? () => setSort(key) : undefined} style={{
       textAlign: align, padding: '10px 12px', fontSize: 10, letterSpacing: '.05em',
       textTransform: 'uppercase', color: C.dim, fontWeight: 600,
       cursor: key ? 'pointer' : 'default', borderBottom: `1px solid ${C.border}`,
@@ -58,7 +58,7 @@ export function Screener(props: {
     }}>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
         {label}
-        <span style={{ color: C.green, fontSize: 9 }}>
+        <span style={{ color: C.blue, fontSize: 9 }}>
           {key && sortKey === key ? (sortDir === 'desc' ? '▼' : '▲') : ''}
         </span>
       </span>
@@ -90,7 +90,13 @@ export function Screener(props: {
           <div style={chip} onClick={() => setShowMultiples(!showMultiples)}>
             {showMultiples ? 'Hide' : 'Show'} multiples
           </div>
-          <div style={{ ...chip, color: C.sec, display: 'flex', alignItems: 'center', gap: 6 }} onClick={exportCsv}>
+          <div style={{
+            ...chip, display: 'flex', alignItems: 'center', gap: 6,
+            ...(rows.length === 0
+              ? { color: C.dim2, cursor: 'default', opacity: 0.6 }
+              : { color: C.sec }),
+          }} onClick={rows.length === 0 ? undefined : exportCsv}
+            title={rows.length === 0 ? 'Nothing to export — no rows match' : undefined}>
             <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" /><line x1={12} y1={15} x2={12} y2={3} />
@@ -110,7 +116,8 @@ export function Screener(props: {
                 {th('Upside', 'upside')}
                 {th('Agreement', 'conf', 'left')}
                 {th('Quality', 'quality', 'left')}
-                {th('Mom', 'momPct', 'right')}
+                {th('Mom', 'momPct', 'right', undefined,
+                  '12-1 price-momentum percentile within this universe (displayed factor — not in the fair-value blend)')}
                 {th('Flags', null, 'left')}
                 {showMultiples && th('P/E', 'pe', 'right', { background: C.inset })}
                 {showMultiples && th('EV/EBITDA', null, 'right', { background: C.inset })}
@@ -137,7 +144,7 @@ export function Screener(props: {
                             <span style={{ fontFamily: MONO, fontWeight: 600, fontSize: 12.5 }}>{c.ticker}</span>
                             <SectorTag sector={c.sector} label={c.sectorShort} />
                             {c.finCurrency !== 'USD' && (
-                              <span style={{ fontSize: 8.5, color: C.dim }}>{c.finCurrency}→USD</span>
+                              <span style={{ fontSize: 9.5, color: C.dim }}>{c.finCurrency}→USD</span>
                             )}
                           </div>
                           <div style={{
@@ -157,7 +164,7 @@ export function Screener(props: {
                     <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: MONO, fontWeight: 600,
                       color: c.momPct == null ? C.dim : '#b58cf0' }}
                       title={c.mom12 == null ? '' : `12-1 return ${fmtPct(c.mom12)}`}>
-                      {c.momPct == null ? '—' : c.momPct}
+                      {c.momPct == null ? 'n/a' : c.momPct}
                     </td>
                     <td style={{ padding: '7px 12px' }}><FlagChips flags={c.flags} /></td>
                     {showMultiples && (

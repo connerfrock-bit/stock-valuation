@@ -34,9 +34,13 @@ export function TipProvider({ children }: { children: ReactNode }) {
 
 function FloatingTip({ tip }: { tip: TipData }) {
   const w = typeof window !== 'undefined' ? window.innerWidth : 1200;
+  const h = typeof window !== 'undefined' ? window.innerHeight : 800;
+  // flip above the cursor near the bottom edge so the tip never leaves the viewport
+  const estH = 60 + tip.lines.length * 19 + (tip.foot ? 34 : 0);
+  const top = tip.y + 16 + estH > h ? Math.max(8, tip.y - 16 - estH) : tip.y + 16;
   return (
     <div style={{
-      position: 'fixed', left: Math.min(tip.x + 16, w - 260), top: tip.y + 16,
+      position: 'fixed', left: Math.min(tip.x + 16, w - 260), top,
       background: C.chrome, border: `1px solid ${C.borderHi}`, borderRadius: 9,
       padding: '10px 13px', pointerEvents: 'none', zIndex: 9999,
       boxShadow: '0 14px 40px rgba(0,0,0,0.6)', minWidth: 160,

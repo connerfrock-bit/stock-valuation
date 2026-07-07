@@ -89,15 +89,15 @@ export function RangeBar({ c, full = false }: { c: Company; full?: boolean }) {
       {bar}
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, fontFamily: MONO, fontSize: 12 }}>
         <div style={{ color: C.mid }}>
-          <div style={{ fontSize: 9, color: C.dim, letterSpacing: '.05em' }}>LOW</div>
+          <div style={{ fontSize: 10, color: C.dim, letterSpacing: '.05em' }}>LOW</div>
           {fmtPrice(c.low)}
         </div>
         <div style={{ textAlign: 'center', color: '#fff', fontWeight: 600 }}>
-          <div style={{ fontSize: 9, color: C.dim, letterSpacing: '.05em' }}>FAIR (MID)</div>
+          <div style={{ fontSize: 10, color: C.dim, letterSpacing: '.05em' }}>FAIR (MID)</div>
           {fmtPrice(c.mid)}
         </div>
         <div style={{ textAlign: 'right', color: C.mid }}>
-          <div style={{ fontSize: 9, color: C.dim, letterSpacing: '.05em' }}>HIGH</div>
+          <div style={{ fontSize: 10, color: C.dim, letterSpacing: '.05em' }}>HIGH</div>
           {fmtPrice(c.high)}
         </div>
       </div>

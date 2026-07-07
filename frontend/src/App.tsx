@@ -190,7 +190,7 @@ export default function App() {
             </div>
             <div style={{ fontWeight: 700, letterSpacing: '.16em', fontSize: 13 }}>FAIR&nbsp;VALUE</div>
             <div style={{
-              fontFamily: MONO, fontSize: 9.5, letterSpacing: '.1em', color: C.mid,
+              fontFamily: MONO, fontSize: 10, letterSpacing: '.1em', color: C.mid,
               border: `1px solid ${C.borderHi}`, borderRadius: 4, padding: '2px 6px',
             }}>{data.meta.universe.toUpperCase().replace('-', '·')}</div>
           </div>
@@ -211,7 +211,7 @@ export default function App() {
                 placeholder="Search ticker or company…"
                 style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: C.hi, fontSize: 12.5 }} />
               <span style={{
-                fontFamily: MONO, fontSize: 9, color: C.dim2,
+                fontFamily: MONO, fontSize: 10, color: C.dim2,
                 border: `1px solid ${C.borderHi}`, borderRadius: 3, padding: '1px 4px',
               }}>/</span>
             </div>
@@ -277,7 +277,7 @@ export default function App() {
             )}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.25 }}>
-            <span style={{ fontSize: 9, letterSpacing: '.08em', color: C.dim2, textTransform: 'uppercase' }}>Data as of</span>
+            <span style={{ fontSize: 10, letterSpacing: '.08em', color: C.dim2, textTransform: 'uppercase' }}>Data as of</span>
             <span style={{ fontFamily: MONO, fontSize: 11, color: C.mid }}>{data.meta.asOf}</span>
           </div>
           <div onClick={() => setScreen('methodology')} title="Assumptions & methodology" style={{
@@ -299,7 +299,7 @@ export default function App() {
             background: C.chrome, display: 'flex', flexDirection: 'column', padding: '12px 10px',
           }}>
             <div style={{
-              fontSize: 9, letterSpacing: '.14em', color: C.dim2,
+              fontSize: 10, letterSpacing: '.14em', color: C.dim2,
               textTransform: 'uppercase', padding: '6px 10px 8px',
             }}>Navigate</div>
             {navItem('overview', 'Overview',

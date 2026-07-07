@@ -270,7 +270,7 @@ export function Methodology({ meta }: { meta: Meta }) {
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
-                <tr style={{ color: C.dim, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                <tr style={{ color: C.dim, fontSize: 10, textTransform: 'uppercase', letterSpacing: '.05em' }}>
                   <th style={{ textAlign: 'left', padding: '8px 20px', fontWeight: 500 }}>Method</th>
                   <th style={{ textAlign: 'right', padding: '8px 10px', fontWeight: 500 }}>Hit rate</th>
                   <th style={{ textAlign: 'right', padding: '8px 20px', fontWeight: 500 }}>Avg excess / q</th>
@@ -311,7 +311,7 @@ export function Methodology({ meta }: { meta: Meta }) {
             <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: C.sec }}>Forward ledger — the live test</span>
               <span style={{
-                fontFamily: MONO, fontSize: 9, color: C.mid,
+                fontFamily: MONO, fontSize: 10, color: C.mid,
                 border: `1px solid ${C.borderHi}`, borderRadius: 4, padding: '2px 7px',
               }}>model {curModel}</span>
               <span style={{ fontSize: 10.5, color: C.dim }}>
@@ -332,7 +332,7 @@ export function Methodology({ meta }: { meta: Meta }) {
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
-                <tr style={{ color: C.dim, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                <tr style={{ color: C.dim, fontSize: 10, textTransform: 'uppercase', letterSpacing: '.05em' }}>
                   <th style={{ textAlign: 'left', padding: '8px 20px', fontWeight: 500 }}>Frozen</th>
                   <th style={{ textAlign: 'left', padding: '8px 10px', fontWeight: 500 }}>Model</th>
                   <th style={{ textAlign: 'right', padding: '8px 10px', fontWeight: 500 }}>Age</th>
@@ -394,7 +394,7 @@ export function Methodology({ meta }: { meta: Meta }) {
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
               <thead>
-                <tr style={{ color: C.dim, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                <tr style={{ color: C.dim, fontSize: 10, textTransform: 'uppercase', letterSpacing: '.05em' }}>
                   <th style={{ textAlign: 'left', padding: '8px 20px', fontWeight: 500 }}>Window</th>
                   <th style={{ textAlign: 'right', padding: '8px 10px', fontWeight: 500 }}>Excess/yr</th>
                   <th style={{ textAlign: 'right', padding: '8px 10px', fontWeight: 500 }}>Hit</th>
@@ -441,13 +441,13 @@ export function Methodology({ meta }: { meta: Meta }) {
                 <span style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
                   {fm.bestFor && (
                     <span style={{
-                      fontSize: 9, fontWeight: 600, color: '#8d80e6',
+                      fontSize: 10, fontWeight: 600, color: '#8d80e6',
                       background: hexA('#8d80e6', 0.13), border: `1px solid ${hexA('#8d80e6', 0.32)}`,
                       borderRadius: 4, padding: '2px 7px', whiteSpace: 'nowrap',
                     }}>{fm.bestFor}</span>
                   )}
                   <span style={{
-                    fontFamily: MONO, fontSize: 9, color: C.mid,
+                    fontFamily: MONO, fontSize: 10, color: C.mid,
                     border: `1px solid ${C.borderHi}`, borderRadius: 4, padding: '2px 7px', whiteSpace: 'nowrap',
                   }}>@ {fm.discount}</span>
                 </span>

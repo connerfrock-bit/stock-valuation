@@ -1,6 +1,6 @@
 import { hexA, sectorColor } from '../theme';
 
-export function SectorTag({ sector, label, size = 8.5 }:
+export function SectorTag({ sector, label, size = 9.5 }:
   { sector: string; label: string; size?: number }) {
   const col = sectorColor(sector);
   return (

@@ -111,11 +111,11 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
         )}
         <div style={{ flex: 1 }} />
         <div style={{ textAlign: 'right', lineHeight: 1.15 }}>
-          <div style={{ fontSize: 9, color: C.dim2, textTransform: 'uppercase', letterSpacing: '.06em' }}>Price</div>
+          <div style={{ fontSize: 10, color: C.dim2, textTransform: 'uppercase', letterSpacing: '.06em' }}>Price</div>
           <div style={{ fontFamily: MONO, fontSize: 20, fontWeight: 600 }}>{fmtPrice(c.price)}</div>
         </div>
         <div style={{ textAlign: 'right', lineHeight: 1.15 }}>
-          <div style={{ fontSize: 9, color: C.dim2, textTransform: 'uppercase', letterSpacing: '.06em' }}>Mkt Cap</div>
+          <div style={{ fontSize: 10, color: C.dim2, textTransform: 'uppercase', letterSpacing: '.06em' }}>Mkt Cap</div>
           <div style={{ fontFamily: MONO, fontSize: 20, fontWeight: 600, color: C.sec }}>{fmtMcapB(c.mcapB)}</div>
         </div>
         <div onClick={() => toggleWatch(c.ticker)} style={{
@@ -221,7 +221,7 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}`, display: 'flex', gap: 20, flexWrap: 'wrap' }}>
               {leverage.map(lv => (
                 <div key={lv.label}>
-                  <div style={{ fontSize: 9.5, color: C.dim, textTransform: 'uppercase', letterSpacing: '.05em' }}>{lv.label}</div>
+                  <div style={{ fontSize: 10, color: C.dim, textTransform: 'uppercase', letterSpacing: '.05em' }}>{lv.label}</div>
                   <div style={{ fontFamily: MONO, fontSize: 14, fontWeight: 600, color: lv.color, marginTop: 3 }}>{lv.value}</div>
                 </div>
               ))}
