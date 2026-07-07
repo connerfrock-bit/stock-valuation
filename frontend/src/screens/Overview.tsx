@@ -69,10 +69,31 @@ function Scatter({ list, openDeep }: { list: Company[]; openDeep: (t: string) =>
   const { setTip, moveTip, clearTip } = useTip();
   const [hover, setHover] = useState<string | null>(null);
   const W = 1000, H = 540, pl = 58, pr = 24, pt = 26, pb = 46;
-  const xMin = -0.45, xMax = 0.55;
+
+  // Domain fits the data (5% padding, snapped to 5% steps) instead of the old
+  // fixed [-45%, +55%] clamp, which piled every deeper discount onto the edge
+  // and misread as "-45%". Zero line and the >=15% money zone stay in view.
+  const ups = list.map(c => c.upside);
+  const xMin = Math.min(-0.10, Math.floor((Math.min(...ups, 0) - 0.04) * 20) / 20);
+  const xMax = Math.max(0.30, Math.ceil((Math.max(...ups, 0) + 0.04) * 20) / 20);
+  const step = [0.1, 0.2, 0.25, 0.5].find(s => (xMax - xMin) / s <= 7) ?? 0.5;
+  const ticks: number[] = [];
+  for (let t = Math.ceil(xMin / step) * step; t <= xMax + 1e-9; t += step) ticks.push(Math.round(t * 100) / 100);
+
   const X = (u: number) => pl + ((clamp(u, xMin, xMax) - xMin) / (xMax - xMin)) * (W - pl - pr);
   const Y = (q: number) => pt + (1 - clamp(q, 0, 100) / 100) * (H - pt - pb);
   const R = (m: number) => clamp((Math.sqrt(m) / Math.sqrt(3500)) * 30 + 4, 4, 30);
+
+  if (list.length === 0) {
+    return (
+      <div style={{
+        border: `1px dashed ${C.borderHi}`, borderRadius: 9, padding: '70px 20px',
+        textAlign: 'center', color: C.dim, fontSize: 13,
+      }}>
+        No stocks match — loosen filters.
+      </div>
+    );
+  }
 
   return (
     <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', maxHeight: '62vh' }}
@@ -91,7 +112,7 @@ function Scatter({ list, openDeep }: { list: Company[]; openDeep: (t: string) =>
           <text x={pl - 10} y={Y(q) + 4} textAnchor="end" fill={C.dim} fontSize={11} fontFamily={MONO}>{q}</text>
         </g>
       ))}
-      {[-0.4, -0.2, 0, 0.2, 0.4].map(u => (
+      {ticks.map(u => (
         <text key={u} x={X(u)} y={H - pb + 22} textAnchor="middle" fill={C.dim} fontSize={11} fontFamily={MONO}>
           {fmtPct(u, 0)}
         </text>
