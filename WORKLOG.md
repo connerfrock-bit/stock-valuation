@@ -610,3 +610,27 @@ backend/data/output.json (share source) likewise. Restored all outputs from git/
 13:14-13:19) remain in the append-only history by design — ignore them when diffing.
 The running refresh will regenerate everything, now including sharesM, when it
 completes. Lesson encoded here: don't run value.py while an ingest is mid-flight.
+
+---
+
+## CEO batch — meta v2, tape preset, windowing, phase plan (2026-07-07 evening)
+
+Follow-through on the approved action plan, after the ingest race resolved (user's
+REFRESH completed 17:52 — full 96/482 coverage, first sharesM payloads; the partial
+13:xx snapshots stay in history as honest records of runs against a half-built DB).
+
+- **meta v2 (`0d7e460`)**: value.py now emits `weights` (CENTRAL_WEIGHTS, single
+  source of truth — the frontend hand-mirror that drifted once is demoted to
+  fallback) and `changes` — a digest vs the last comparable PRIOR-DAY snapshot
+  (coverage ≥80%, same model; same-day dev reruns never become the baseline).
+  Zone entries/exits, flag adds/clears (INFO_FLAGS excluded), conf jumps ≥2,
+  upside swings ≥15pp, coverage joins/drops. Overview renders it as a strip under
+  the KPIs. First live diff (Jul 06→07): MNST conf 5→3, NBIS +190→+227%, CSX −27→−51%.
+- **Tape preset + windowing (`115a097`)**: minMom filter + "Value confirmed by
+  tape" preset (the only intersection our own studies support). Full-SPX result
+  today: 3 names — GILD, LMT, AMGN. Row windowing >150 rows (~35 rendered of 482,
+  honest scrollbar); found+fixed en route: the table wrap was never the real
+  scroller (root grew under minHeight), so sticky header/toolbar now pin properly.
+- **Ops**: BUILD_PLAN phase roadmap (gates before universe growth); weekly
+  scheduled refresh Sundays 09:00 via `/auto` flag, logged to backend/data/refresh.log.
+- Share rebuilt from the audited frontend + fresh data. Backend suite 70/70.
