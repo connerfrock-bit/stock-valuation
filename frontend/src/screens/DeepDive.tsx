@@ -23,8 +23,9 @@ const FLAG_EXPLAIN: [RegExp, string][] = [
 const explain = (f: string) =>
   FLAG_EXPLAIN.find(([re]) => re.test(f))?.[1] ?? '';
 
-// mirror of engines.py CENTRAL_WEIGHTS (v2 reweight, Plan 3) — keep in sync
-const WEIGHTS: Record<string, number> = { dcf: 0.10, rim: 0.35, warranted: 0.30, ddm: 0.10 };
+// Fallback only — live weights arrive in meta.weights (value.py emits
+// engines.py CENTRAL_WEIGHTS since 2026-07-07; the hand mirror drifted once).
+const FALLBACK_WEIGHTS: Record<string, number> = { dcf: 0.10, rim: 0.35, warranted: 0.30, ddm: 0.10 };
 
 const card: React.CSSProperties = {
   background: C.panel, border: `1px solid ${C.border}`, borderRadius: 11,
@@ -56,7 +57,8 @@ export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: 
     : ig > tg + 0.04 ? 'optimistic' : ig < Math.max(-0.3, tg - 0.04) ? 'pessimistic' : 'roughly in line';
   const revColor = revVerdict === 'optimistic' ? C.red : revVerdict === 'pessimistic' ? C.green : C.sec;
 
-  // ----- method weights (mirror of the L8 blend) -----
+  // ----- method weights (live from meta; fallback for pre-emit payloads) -----
+  const WEIGHTS = meta.weights ?? FALLBACK_WEIGHTS;
   const growthApplicable = c.methods.filter(m => m.applicable && m.key !== 'epv');
   const wsum = growthApplicable.reduce((s, m) => s + (WEIGHTS[m.key] ?? 0.1), 0);
   const weightOf = (key: string, applicable: boolean) =>

@@ -2,18 +2,19 @@ import { C, MONO, hexA, sectorColor, upColor, qColor } from '../theme';
 import { fmtPrice, fmtPct } from '../format';
 import { useTip } from '../components/Tooltip';
 import { FilterRail } from '../components/FilterRail';
-import type { Company, Filters } from '../types';
+import type { Changes, Company, Filters } from '../types';
 import { useState } from 'react';
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
-export function Overview({ all, filtered, filters, setFilters, allSectors, openDeep }: {
+export function Overview({ all, filtered, filters, setFilters, allSectors, openDeep, changes }: {
   all: Company[];
   filtered: Company[];
   filters: Filters;
   setFilters: (f: Filters) => void;
   allSectors: string[];
   openDeep: (t: string) => void;
+  changes: Changes | null;
 }) {
   const undervalued = all.filter(c => c.upside > 0.15).length;
   const qpass = all.filter(c => c.quality >= 70).length;
@@ -43,6 +44,8 @@ export function Overview({ all, filtered, filters, setFilters, allSectors, openD
         ))}
       </div>
 
+      {changes && <ChangeDigest ch={changes} openDeep={openDeep} />}
+
       <div style={{ display: 'flex', alignItems: 'stretch' }}>
         <FilterRail filters={filters} setFilters={setFilters} allSectors={allSectors} />
         <div style={{ flex: 1, padding: '18px 22px', minWidth: 0 }}>
@@ -61,6 +64,92 @@ export function Overview({ all, filtered, filters, setFilters, allSectors, openD
           <Scatter list={filtered} openDeep={openDeep} />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** "What changed" strip — the monitoring layer over the snapshot history.
+    Rendered only when value.py found a comparable prior-day run to diff. */
+function ChangeDigest({ ch, openDeep }: { ch: Changes; openDeep: (t: string) => void }) {
+  const tick = (t: string, color?: string) => (
+    <button key={t} onClick={() => openDeep(t)} className="hoverrow" style={{
+      fontFamily: MONO, fontWeight: 600, fontSize: 11.5, color: color ?? C.sec,
+      padding: '1px 5px', borderRadius: 4,
+    }}>{t}</button>
+  );
+  const groups: { label: string; color: string; body: React.ReactNode }[] = [];
+  if (ch.enteredZone.length) groups.push({
+    label: '▲ entered money zone', color: C.green,
+    body: ch.enteredZone.map(t => tick(t, C.green)),
+  });
+  if (ch.leftZone.length) groups.push({
+    label: '▼ left money zone', color: C.red,
+    body: ch.leftZone.map(t => tick(t, C.red)),
+  });
+  if (ch.flagged.length) groups.push({
+    label: '⚑ new flags', color: C.amber,
+    body: ch.flagged.map(f => (
+      <span key={f.t} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 3 }}>
+        {tick(f.t, C.amber)}
+        <span style={{ fontSize: 10.5, color: C.dim }}>{f.flags.join(', ')}</span>
+      </span>
+    )),
+  });
+  if (ch.cleared.length) groups.push({
+    label: 'flags cleared', color: C.green,
+    body: ch.cleared.map(f => tick(f.t, C.green)),
+  });
+  if (ch.confJumps.length) groups.push({
+    label: 'agreement moved', color: C.sec,
+    body: ch.confJumps.map(j => (
+      <span key={j.t} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 3 }}>
+        {tick(j.t)}
+        <span style={{ fontFamily: MONO, fontSize: 10.5, color: j.to > j.from ? C.green : C.red }}>
+          {j.from}→{j.to}
+        </span>
+      </span>
+    )),
+  });
+  if (ch.bigMoves.length) groups.push({
+    label: 'upside swings ≥15pp', color: C.sec,
+    body: ch.bigMoves.map(m => (
+      <span key={m.t} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 3 }}>
+        {tick(m.t)}
+        <span style={{ fontFamily: MONO, fontSize: 10.5, color: m.to > m.from ? C.green : C.red }}>
+          {fmtPct(m.from, 0)}→{fmtPct(m.to, 0)}
+        </span>
+      </span>
+    )),
+  });
+  if (ch.newNames.length || ch.dropped.length) groups.push({
+    label: 'coverage', color: C.dim3,
+    body: [
+      ...ch.newNames.map(t => tick(t)),
+      ...(ch.dropped.length ? [<span key="drop" style={{ fontSize: 10.5, color: C.dim }}>
+        −{ch.dropped.join(', ')}</span>] : []),
+    ],
+  });
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'baseline', gap: 18, rowGap: 6, flexWrap: 'wrap',
+      padding: '8px 22px', borderBottom: `1px solid ${C.border}`, background: C.chrome,
+    }}>
+      <span style={{
+        fontSize: 10, letterSpacing: '.08em', textTransform: 'uppercase',
+        color: C.dim2, fontWeight: 600, whiteSpace: 'nowrap',
+      }}>
+        Since {ch.since.slice(0, 16)}
+      </span>
+      {groups.length === 0 && (
+        <span style={{ fontSize: 11.5, color: C.dim }}>No material changes — zones, flags, and agreement all held.</span>
+      )}
+      {groups.map(g => (
+        <span key={g.label} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 7 }}>
+          <span style={{ fontSize: 10.5, fontWeight: 600, color: g.color, whiteSpace: 'nowrap' }}>{g.label}</span>
+          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>{g.body}</span>
+        </span>
+      ))}
     </div>
   );
 }

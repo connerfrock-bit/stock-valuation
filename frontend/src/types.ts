@@ -56,6 +56,23 @@ export interface Company {
   methods: Method[];
 }
 
+export interface FlagChange { t: string; flags: string[] }
+export interface ConfJump { t: string; from: number; to: number }
+export interface BigMove { t: string; from: number; to: number }
+
+/** "What changed" digest vs the last valid run from a prior calendar day. */
+export interface Changes {
+  since: string;
+  enteredZone: string[];
+  leftZone: string[];
+  flagged: FlagChange[];
+  cleared: FlagChange[];
+  confJumps: ConfJump[];
+  bigMoves: BigMove[];
+  newNames: string[];
+  dropped: string[];
+}
+
 export interface Meta {
   asOf: string;
   riskFree: number;
@@ -66,6 +83,8 @@ export interface Meta {
   universeId?: string;
   covered: number;
   excluded: { ticker: string; why: string }[];
+  weights?: Record<string, number>; // L8 blend — emitted by value.py since 2026-07-07
+  changes?: Changes | null;
 }
 
 export interface UniverseInfo {

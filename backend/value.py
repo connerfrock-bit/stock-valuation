@@ -13,7 +13,7 @@ from common import (CFG, UNIVERSES, ACTIVE, resolve_universe, DB_PATH, fetch_ris
                     load_company, latest, cagr, avg_margin, avg_roe, effective_tax,
                     cost_of_debt, money, pct)
 from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim,
-                     warranted_fit, warranted_value, triangulate)
+                     warranted_fit, warranted_value, triangulate, CENTRAL_WEIGHTS)
 
 
 def load_live_momentum(tickers):
@@ -432,6 +432,64 @@ def _migrate_snapshots(con):
     con.commit()
 
 
+def run_changes(out, universe, run_id):
+    """Diff this run against the last comparable snapshot from a PRIOR calendar
+       day (same universe+model, coverage >= 80% of current) -> the Overview
+       'what changed' digest. Same-day re-runs (dev iterations) never become
+       the baseline, so the digest always answers 'since the previous session'."""
+    zone = lambda u, q: u > 0.15 and q >= 70
+    con = sqlite3.connect(DB_PATH)
+    try:
+        if not con.execute("SELECT name FROM sqlite_master WHERE name='snapshots'").fetchone():
+            return None
+        prev_date = None
+        for rd, n in con.execute(
+                "SELECT run_date, COUNT(*) FROM snapshots WHERE universe=? AND model=? "
+                "GROUP BY run_date ORDER BY run_date DESC", (universe, MODEL_VERSION)):
+            if rd[:10] != run_id[:10] and n >= 0.8 * len(out):
+                prev_date = rd
+                break
+        if prev_date is None:
+            return None
+        prev = {t: {"upside": u, "conf": c, "quality": q,
+                    "flags": set(f.split("|")) - {""} if f else set()}
+                for t, u, c, q, f in con.execute(
+                    "SELECT ticker, upside, conf, quality, flags FROM snapshots "
+                    "WHERE universe=? AND run_date=?", (universe, prev_date))}
+    finally:
+        con.close()
+
+    ch = {"since": prev_date, "enteredZone": [], "leftZone": [], "flagged": [],
+          "cleared": [], "confJumps": [], "bigMoves": [],
+          "newNames": [], "dropped": sorted(set(prev) - {x["ticker"] for x in out})}
+    for x in out:
+        t, p = x["ticker"], prev.get(x["ticker"])
+        if p is None:
+            ch["newNames"].append(t)
+            continue
+        now_z, was_z = zone(x["upside"], x["quality"]), zone(p["upside"], p["quality"])
+        if now_z and not was_z:
+            ch["enteredZone"].append(t)
+        if was_z and not now_z:
+            ch["leftZone"].append(t)
+        cur_flags = set(x["flags"]) - INFO_FLAGS
+        old_flags = p["flags"] - INFO_FLAGS
+        if cur_flags - old_flags:
+            ch["flagged"].append({"t": t, "flags": sorted(cur_flags - old_flags)})
+        if old_flags - cur_flags:
+            ch["cleared"].append({"t": t, "flags": sorted(old_flags - cur_flags)})
+        if abs(x["conf"] - p["conf"]) >= 2:
+            ch["confJumps"].append({"t": t, "from": p["conf"], "to": x["conf"]})
+        if abs(x["upside"] - p["upside"]) >= 0.15:
+            ch["bigMoves"].append({"t": t, "from": round(p["upside"], 3),
+                                   "to": round(x["upside"], 3)})
+    ch["bigMoves"].sort(key=lambda m: -abs(m["to"] - m["from"]))
+    for k in ("enteredZone", "leftZone", "flagged", "cleared", "confJumps",
+              "bigMoves", "newNames", "dropped"):
+        ch[k] = ch[k][:12]
+    return ch
+
+
 def append_snapshot(out, universe, run_id):
     """Append this run's full ranked output to `snapshots` — never overwritten.
        This is the before/after diff surface for every future model change, and the
@@ -639,9 +697,14 @@ def main(universe_id=ACTIVE):
           f"{sum(1 for t,w in excluded if w.startswith(('financial','reit')))} financials/REITs "
           f"excluded-with-reason")
 
+    run_id = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     meta = {"asOf": asof, "riskFree": rf, "riskFreeSource": rf_src, "erp": erp,
             "terminalG": term_g, "universe": uname, "universeId": uid,
-            "covered": len(out), "excluded": [{"ticker": t, "why": w} for t, w in excluded]}
+            "covered": len(out), "excluded": [{"ticker": t, "why": w} for t, w in excluded],
+            # single source of truth for the Deep-Dive weight column (was a hand
+            # mirror in the frontend — drifted once already, Plan-Opus review #1)
+            "weights": {k.lower(): v for k, v in CENTRAL_WEIGHTS.items()},
+            "changes": run_changes(out, uname, run_id)}
     payload = {"meta": meta, "companies": out}
     default = (uid == ACTIVE)
     fnames = [f"output_{uid}.json"] + (["output.json"] if default else [])
@@ -654,7 +717,6 @@ def main(universe_id=ACTIVE):
     print(f"\nExcluded ({len(excluded)}): " + ", ".join(t for t, _ in excluded))
     print(f"Wrote {len(out)} Company records → {', '.join(fnames)}")
 
-    run_id = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     n_runs = append_snapshot(out, uname, run_id)
     print(f"Snapshot {run_id} [{MODEL_VERSION}] appended ({len(out)} {uname} names) · "
           f"{n_runs} {uname} runs in history")

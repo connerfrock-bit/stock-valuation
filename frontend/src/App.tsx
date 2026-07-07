@@ -440,7 +440,8 @@ export default function App() {
           <main style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', position: 'relative' }}>
             {screen === 'overview' && (
               <Overview all={companies} filtered={filtered} filters={filters}
-                setFilters={setFilters} allSectors={allSectors} openDeep={openDeep} />
+                setFilters={setFilters} allSectors={allSectors} openDeep={openDeep}
+                changes={data.meta.changes ?? null} />
             )}
             {screen === 'screener' && (
               <Screener rows={sorted} filters={filters} setFilters={setFilters}
