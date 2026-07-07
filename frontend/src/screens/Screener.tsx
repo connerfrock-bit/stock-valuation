@@ -30,11 +30,12 @@ export function Screener(props: {
 
   const exportCsv = () => {
     const head = ['ticker', 'name', 'sector', 'price', 'low', 'mid', 'high', 'upside',
-      'confidence', 'quality', 'impliedGrowth', 'trailingGrowth', 'pe', 'evEbitda',
-      'fcfYield', 'mcapB', 'flags', 'score'];
+      'confidence', 'quality', 'momentumPct', 'momentum12_1', 'impliedGrowth', 'trailingGrowth',
+      'pe', 'evEbitda', 'fcfYield', 'mcapB', 'flags', 'score'];
     const lines = rows.map(c => [
       c.ticker, `"${c.name}"`, `"${c.sector}"`, c.price, c.low, c.mid, c.high,
       (c.upside * 100).toFixed(1) + '%', c.conf, c.quality,
+      c.momPct ?? '', c.mom12 == null ? '' : (c.mom12 * 100).toFixed(1) + '%',
       c.impliedGrowth === null ? '' : (c.impliedGrowth * 100).toFixed(1) + '%',
       c.trailingG === null ? '' : (c.trailingG * 100).toFixed(1) + '%',
       c.pe ?? '', c.evebitda ?? '', c.fcfy === null ? '' : (c.fcfy * 100).toFixed(1) + '%',
@@ -109,6 +110,7 @@ export function Screener(props: {
                 {th('Upside', 'upside')}
                 {th('Agreement', 'conf', 'left')}
                 {th('Quality', 'quality', 'left')}
+                {th('Mom', 'momPct', 'right')}
                 {th('Flags', null, 'left')}
                 {showMultiples && th('P/E', 'pe', 'right', { background: C.inset })}
                 {showMultiples && th('EV/EBITDA', null, 'right', { background: C.inset })}
@@ -152,6 +154,11 @@ export function Screener(props: {
                     </td>
                     <td style={{ padding: '7px 12px' }}><ConfMeter score={c.conf} /></td>
                     <td style={{ padding: '7px 12px', width: 96 }}><QualityGauge q={c.quality} /></td>
+                    <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: MONO, fontWeight: 600,
+                      color: c.momPct == null ? C.dim : '#b58cf0' }}
+                      title={c.mom12 == null ? '' : `12-1 return ${fmtPct(c.mom12)}`}>
+                      {c.momPct == null ? '—' : c.momPct}
+                    </td>
                     <td style={{ padding: '7px 12px' }}><FlagChips flags={c.flags} /></td>
                     {showMultiples && (
                       <>

@@ -119,6 +119,7 @@ export default function App() {
         case 'quality': return c.quality;
         case 'mcapB': return c.mcapB;
         case 'pe': return c.pe ?? -1e18;
+        case 'momPct': return c.momPct ?? -1e18;
         default: return c.score;
       }
     };

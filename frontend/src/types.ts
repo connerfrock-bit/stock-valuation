@@ -95,4 +95,4 @@ export const DEFAULT_FILTERS: Filters = {
 };
 
 export type SortKey =
-  | 'score' | 'ticker' | 'price' | 'upside' | 'conf' | 'quality' | 'mcapB' | 'pe';
+  | 'score' | 'ticker' | 'price' | 'upside' | 'conf' | 'quality' | 'mcapB' | 'pe' | 'momPct';

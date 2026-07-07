@@ -278,6 +278,43 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
             </div>
           </div>
 
+          {/* momentum — a DISPLAYED factor, orthogonal to the value/quality story */}
+          <div style={{ ...card, padding: '18px 20px' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: C.sec }}>Momentum</span>
+              <span style={{ fontFamily: MONO, fontSize: 10, color: C.dim }}>12-1, price factor</span>
+            </div>
+            {c.momPct == null ? (
+              <div style={{ fontSize: 11.5, color: C.dim3, marginTop: 8 }}>
+                No 12-month price history — momentum n/a for {c.ticker}.
+              </div>
+            ) : (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ height: 7, borderRadius: 4, background: '#161b24', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${c.momPct}%`, background: '#b58cf0', borderRadius: 4 }} />
+                    </div>
+                  </div>
+                  <span style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: '#b58cf0', lineHeight: 1 }}>
+                    {c.momPct}
+                  </span>
+                  <span style={{ fontSize: 10.5, color: C.dim }}>/100</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 10, fontSize: 12 }}>
+                  <span style={{ color: C.dim3 }}>Trailing 12-1 return</span>
+                  <span style={{ fontFamily: MONO, fontWeight: 600, color: (c.mom12 ?? 0) >= 0 ? C.green : C.red }}>
+                    {c.mom12 == null ? 'n/a' : fmtPct(c.mom12, 0)}
+                  </span>
+                </div>
+                <div style={{ fontSize: 10.5, color: C.dim, lineHeight: 1.5, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
+                  Percentile rank within this universe. A displayed factor only —
+                  <b> not</b> blended into the fair-value estimate (see Methodology → Momentum factor).
+                </div>
+              </>
+            )}
+          </div>
+
           <div style={{ ...card, padding: '18px 20px' }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: C.sec, marginBottom: 14 }}>
               Financial trends{' '}
