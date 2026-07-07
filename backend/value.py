@@ -584,8 +584,10 @@ def main(universe_id=ACTIVE):
                         if (eff_arch == "standard" and ebitda > 0) else None,
             "fcfy": round(base_fcf / r["mcap"], 4)
                     if (eff_arch == "standard" and base_fcf is not None and r["mcap"]) else None,
-            "om": None if r["om"] is None else round(r["om"], 4),
-            "roic": None if r["roic"] is None else round(r["roic"], 4),
+            # om is pretax/NII-based and inv-cap is deposits/float for gated financials —
+            # both meaningless; same honesty rule as fcfy/evebitda/nde above.
+            "om": round(r["om"], 4) if (eff_arch == "standard" and r["om"] is not None) else None,
+            "roic": round(r["roic"], 4) if (eff_arch == "standard" and r["roic"] is not None) else None,
             "altmanZ": None if z is None else round(z, 2),
             "piotroski": fscore, "piotroskiN": fn,
             "nde": round((r["debt_risk"] - r["cash"]) / ebitda, 2)

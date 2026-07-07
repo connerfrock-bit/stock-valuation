@@ -8,15 +8,22 @@ from common import DB_PATH, CFG, http_text
 
 
 def fetch_monthly(symbol):
-    """{ 'YYYY-MM' -> close } of ~5y monthly closes from Yahoo."""
+    """-> ({'YYYY-MM' -> close}, [(month, close, adjclose)]) of ~5y monthly bars."""
     sym = urllib.parse.quote(symbol)
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?range=5y&interval=1mo"
     res = json.loads(http_text(url))["chart"]["result"][0]
-    out = {}
-    for t, c in zip(res["timestamp"], res["indicators"]["quote"][0]["close"]):
-        if c is not None:
-            out[time.strftime("%Y-%m", time.gmtime(t))] = c
-    return out
+    quote = res["indicators"]["quote"][0].get("close") or []
+    adj = (res["indicators"].get("adjclose") or [{}])[0].get("adjclose") or quote
+    out, rows = {}, []
+    for i, ts in enumerate(res.get("timestamp") or []):
+        c = quote[i] if i < len(quote) else None
+        if c is None:
+            continue
+        m = time.strftime("%Y-%m", time.gmtime(ts))
+        a = adj[i] if i < len(adj) and adj[i] is not None else c
+        out[m] = c
+        rows.append((m, c, a))
+    return out, rows
 
 
 def beta_from(stock, mkt, min_months=24):
@@ -40,22 +47,34 @@ def beta_from(stock, mkt, min_months=24):
     return raw, adj, n
 
 
+def upsert_prices(con, symbol, rows):
+    """Refresh price_monthly with the fetched 5y window — this is what keeps the LIVE
+       per-name momentum (value.py momPct) fresh via the normal REFRESH flow, instead of
+       silently staling until the next backtest-side prices.py run."""
+    con.execute("CREATE TABLE IF NOT EXISTS price_monthly(ticker TEXT, month TEXT, "
+                "close REAL, adjclose REAL, PRIMARY KEY (ticker, month))")
+    con.executemany("INSERT OR REPLACE INTO price_monthly VALUES (?,?,?,?)",
+                    [(symbol, m, c, a) for m, c, a in rows])
+
+
 def main():
-    mkt = fetch_monthly("^GSPC")
+    mkt, mkt_rows = fetch_monthly("^GSPC")
     print(f"S&P 500 monthly history: {len(mkt)} months\n")
     con = sqlite3.connect(DB_PATH)
     con.execute("CREATE TABLE IF NOT EXISTS betas("
                 "ticker TEXT PRIMARY KEY, beta_raw REAL, beta REAL, months INTEGER, updated TEXT)")
     now = time.strftime("%Y-%m-%d %H:%M:%S")
+    upsert_prices(con, "^GSPC", mkt_rows)
     tickers = [r[0] for r in con.execute("SELECT ticker FROM companies ORDER BY ticker")]
 
     print(f"{'TICK':6}{'raw β':>8}{'adj β':>8}{'mo':>5}")
     print("-" * 27)
     for t in tickers:
         try:
-            stock = fetch_monthly(t); time.sleep(0.2)
+            stock, rows = fetch_monthly(t); time.sleep(0.2)
         except Exception as e:
             print(f"{t:6} fetch failed {e!r}"); continue
+        upsert_prices(con, t, rows)
         r = beta_from(stock, mkt)
         if not r:
             print(f"{t:6} insufficient overlap"); continue

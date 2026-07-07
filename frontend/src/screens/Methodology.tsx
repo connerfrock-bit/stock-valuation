@@ -117,7 +117,7 @@ const UNIVERSES: [string, string, string][] = [
 
 export function Methodology({ meta }: { meta: Meta }) {
   const [bts, setBts] = useState<Record<string, Backtest | null>>({});
-  const [ledger, setLedger] = useState<Ledger | null>(null);
+  const [ledgers, setLedgers] = useState<Record<string, Ledger | null>>({});
   const [moms, setMoms] = useState<Record<string, Momentum | null>>({});
   const [uni, setUni] = useState('ndx');
   useEffect(() => {
@@ -125,7 +125,7 @@ export function Methodology({ meta }: { meta: Meta }) {
       __FV_LEDGER__?: Ledger | null; __FV_MOM__?: Record<string, Momentum> };
     if (w.__FV_BT__) {                                // single-file share build
       setBts(w.__FV_BT__);
-      setLedger(w.__FV_LEDGER__ ?? null);
+      setLedgers({ ndx: w.__FV_LEDGER__ ?? null });   // share embeds the default universe only
       setMoms(w.__FV_MOM__ ?? {});
       return;
     }
@@ -138,14 +138,15 @@ export function Methodology({ meta }: { meta: Meta }) {
         .then(r => (r.ok ? r.json() : null))
         .then(d => setMoms(p => ({ ...p, [k]: d })))
         .catch(() => {});
+      fetch(`${import.meta.env.BASE_URL}ledger_${k}.json`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => setLedgers(p => ({ ...p, [k]: d })))
+        .catch(() => {});
     }
-    fetch(`${import.meta.env.BASE_URL}ledger.json`)
-      .then(r => (r.ok ? r.json() : null))
-      .then(d => setLedger(d))
-      .catch(() => {});
   }, []);
   const bt = bts[uni] ?? null;
   const mom = moms[uni] ?? null;
+  const ledger = ledgers[uni] ?? null;
 
   const assumptions = [
     { label: 'Risk-free (10Y)', value: (meta.riskFree * 100).toFixed(2) + '%', src: meta.riskFreeSource },

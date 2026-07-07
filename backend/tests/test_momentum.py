@@ -61,7 +61,7 @@ class TestRunNoLookahead(unittest.TestCase):
         adj["T0"]["2020-01"] = 50.0; adj["T0"]["2020-12"] = 130.0
         adj["T0"]["2021-02"] = 110.0
         mem_q = {"2021-01": set(adj)}
-        series = run(adj, mem_q, ["2021-01"], {}, {}, trend_filter=False)
+        series = run(adj, mem_q, ["2021-01"], {}, trend_filter=False)
         self.assertEqual(len(series), 1)
         m, strat, bench, turn = series[0]
         self.assertEqual(m, "2021-01")

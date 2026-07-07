@@ -497,3 +497,39 @@ borrow) not modelled; the live per-name score reads price_monthly, which the inc
 prices.py does not advance for existing names — it is fresh now but a betas-piggybacked
 monthly refresh is the robust follow-on. Net: a real edge, honestly bounded — not a
 free lunch, and not blended into the honest fair-value screen.
+
+---
+
+## Review pass — Fable-5 audit of Plans A/B/C (2026-07-07) ✅
+
+Requested review of the Opus-era work (Plans A/B/C + per-ticker momentum). Verified the
+worklog claims against the code and data; overall verdict: **architecture and honesty
+discipline held up well — no correctness errors in the router, ledger, or momentum math.**
+Five real misses found and fixed (three user-facing):
+
+1. **Deep Dive method-weight column stale since Plan 3** (pre-dates Opus — my own miss:
+   the Plan-3 sweep grepped Methodology.tsx but not DeepDive.tsx). The "Weight" column
+   showed the OLD blend (DCF 25/RIM 20/W 25) while engines.py has used DCF 10/RIM 35/W 30
+   since v2. Every ticker page displayed wrong weights for four model versions. Fixed +
+   sync comment.
+2. **RIM-gated financials displayed garbage om/ROIC** (85/90 names — e.g. HBAN "op margin
+   172%", which is a net-interest-income ratio, not an operating margin; ROIC on
+   deposits/float is meaningless). Same honesty rule that nulls fcfy/EV-EBITDA/ND-EBITDA
+   now covers om/roic; FCF-routed asset-light names (V/MA) correctly keep theirs.
+3. **`FYundefined–FYundefined`** rendered in the Deep Dive trends header for SYF/TFC
+   (no mapped annual series) — guarded.
+4. **Live momentum would silently stale**: momPct reads price_monthly, which the REFRESH
+   flow never advanced. betas.py (already fetching 5y monthly bars per live ticker every
+   refresh) now upserts close+adjclose into price_monthly (incl. ^GSPC) — live momentum
+   self-refreshes with zero extra network.
+5. **Methodology ledger panel always showed the Nasdaq ledger** regardless of the universe
+   toggle — now fetches ledger_<id>.json per universe (share build still embeds default-only).
+
+Minor tidy: dead `rf` threading removed from momentum.py. **Noted, deliberately NOT
+churned:** (a) quality percentiles for gated financials still ingest the raw om/roic/lowlev
+dims (contained — banks are conf-2 RIM names; a proper "bank quality" composite is a future
+refinement, not a hotfix); (b) the backtest engine stack still lacks the archetype gate
+(pre-existing, documented divergence — re-validating v2w with the router is real work);
+(c) frontend WEIGHTS duplicates backend CENTRAL_WEIGHTS by hand — exporting weights via
+meta would kill this class of drift; deferred. Also: prior commit messages said "44 tests";
+the true count was 64 (now 70). All 70 green; outputs regenerated; share rebuilt.

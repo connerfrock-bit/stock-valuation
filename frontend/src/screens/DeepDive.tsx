@@ -23,7 +23,8 @@ const FLAG_EXPLAIN: [RegExp, string][] = [
 const explain = (f: string) =>
   FLAG_EXPLAIN.find(([re]) => re.test(f))?.[1] ?? '';
 
-const WEIGHTS: Record<string, number> = { dcf: 0.25, rim: 0.20, warranted: 0.25, ddm: 0.10 };
+// mirror of engines.py CENTRAL_WEIGHTS (v2 reweight, Plan 3) — keep in sync
+const WEIGHTS: Record<string, number> = { dcf: 0.10, rim: 0.35, warranted: 0.30, ddm: 0.10 };
 
 const card: React.CSSProperties = {
   background: C.panel, border: `1px solid ${C.border}`, borderRadius: 11,
@@ -319,7 +320,8 @@ export function DeepDive({ c, meta, peers, watch, toggleWatch, openDeep }: {
             <div style={{ fontSize: 13, fontWeight: 600, color: C.sec, marginBottom: 14 }}>
               Financial trends{' '}
               <span style={{ fontSize: 10, color: C.dim, fontWeight: 400 }}>
-                FY{t.years[0]}–FY{t.years[t.years.length - 1]} · as filed
+                {t.years.length ? `FY${t.years[0]}–FY${t.years[t.years.length - 1]} · as filed`
+                  : 'no mapped annual series'}
               </span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>

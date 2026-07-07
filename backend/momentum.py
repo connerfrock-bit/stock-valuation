@@ -57,7 +57,7 @@ def mom_12_1(a, m):
     return (p1 / p0 - 1) if (p0 and p1 and p0 > 0) else None
 
 
-def run(adj, mem_q, months, mkt, rf, trend_filter, cost_per_side=0.0):
+def run(adj, mem_q, months, mkt, trend_filter, cost_per_side=0.0):
     """-> per-month [(month, strat_ret_net, bench_ret)] holding month m→m+1.
        cost_per_side charged on the turnover of the held basket (monthly momentum is
        high-turnover; the gross number is misleading without it)."""
@@ -129,21 +129,16 @@ def main(universe="ndx"):
     suf = "_sp500" if universe == "sp500" else ""
     con = sqlite3.connect(DB_PATH)
     adj, mem_q = load(con, suf)
-    try:
-        rf = dict(con.execute("SELECT month, rate FROM rf_monthly"))
-    except sqlite3.OperationalError:
-        rf = {}
     con.close()
     mkt = adj.get("^GSPC", {})
     months = sorted(m for m in {mm for t in adj for mm in adj[t]}
                     if m >= START and month_add(m, 1) in mkt)
-    months = [m for m in months if m <= max(mkt)]
 
     # gross, net of realistic large-cap costs (10bps/side), and trend-filtered
-    variants = {"MOM (gross)":   run(adj, mem_q, months, mkt, rf, False, 0.0),
-                "MOM (net 10bp)": run(adj, mem_q, months, mkt, rf, False, 0.0010),
-                "MOM (net 25bp)": run(adj, mem_q, months, mkt, rf, False, 0.0025),
-                "MOM+trend (net)": run(adj, mem_q, months, mkt, rf, True, 0.0010)}
+    variants = {"MOM (gross)":   run(adj, mem_q, months, mkt, False, 0.0),
+                "MOM (net 10bp)": run(adj, mem_q, months, mkt, False, 0.0010),
+                "MOM (net 25bp)": run(adj, mem_q, months, mkt, False, 0.0025),
+                "MOM+trend (net)": run(adj, mem_q, months, mkt, True, 0.0010)}
     wins = [("full 2012-26", "2012-01", "2026-12"),
             ("pre2012-15 (OOS)", "2012-01", "2015-12"),
             ("2016-2021", "2016-01", "2021-12"),
