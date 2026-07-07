@@ -66,6 +66,46 @@ export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: 
 
   const whyPoints = c.flags.map(f => ({ tag: f, text: explain(f) }));
 
+  // The counter-case is assembled from measured drivers, never boilerplate —
+  // flags are already itemized above, so this only cites the non-flag signals.
+  const counterCase = (() => {
+    const d: string[] = [];
+    if (c.upside > 0.04) {
+      if (igStr !== null && tg !== null && ig !== null && ig < tg - 0.04)
+        d.push(`the price only implies ${igStr}/yr growth vs ${Math.round(tg * 100)}% trailing — the market is betting on deceleration`);
+      if (c.momPct != null && c.momPct <= 35)
+        d.push(`momentum sits at the ${c.momPct}th percentile — the market is still marking it down`);
+      if (c.quality < 48)
+        d.push(`quality screens ${c.quality}/100, so part of the discount is earned`);
+      if (c.conf <= 2)
+        d.push(`only ${c.conf}/5 engine agreement — the fair-value range itself is soft`);
+      return {
+        tag: 'Bear case:',
+        text: d.length
+          ? d.join('; ') + '.'
+          : 'no measured driver in coverage — the discount rests on factors outside this model (litigation, pipeline, regulation, sentiment). Read the filings before trusting it.',
+      };
+    }
+    if (c.upside < -0.04) {
+      if (igStr !== null && tg !== null && ig !== null && ig > tg + 0.04)
+        d.push(`the price underwrites ${igStr}/yr growth vs ${Math.round(tg * 100)}% trailing — the market believes in acceleration this model won't assume`);
+      if (c.momPct != null && c.momPct >= 65)
+        d.push(`momentum is strong (${c.momPct}th percentile) and the market keeps paying up`);
+      if (c.quality >= 70)
+        d.push(`quality is ${c.quality}/100 — compounding beyond the 10-yr model horizon is the standard justification`);
+      return {
+        tag: 'Bull case:',
+        text: d.length
+          ? d.join('; ') + '.'
+          : 'no measured driver in coverage — the premium rests on expectations this model doesn\'t capture.',
+      };
+    }
+    return {
+      tag: 'At fair value:',
+      text: 'model and market roughly agree — the band brackets the price, so there is no valuation edge here either way.',
+    };
+  })();
+
   const leverage = [
     { label: 'Net debt / EBITDA', value: na(c.nde, v => v.toFixed(1) + 'x'), color: (c.nde ?? 0) > 2 ? C.amber : C.hi },
     { label: 'Altman-Z', value: na(c.altmanZ, v => v.toFixed(1)), color: c.altmanZ === null ? C.dim : c.altmanZ < 1.81 ? C.red : c.altmanZ < 3 ? C.amber : C.green },
@@ -238,10 +278,7 @@ export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: 
                 <Point key={w.tag} color={/Altman|Negative|Declining|VIE|Suspect|Piotroski/.test(w.tag) ? C.red : C.amber}
                   tag={w.tag + ' —'} text={w.text} />
               ))}
-              <Point color={C.mid} tag="Bear case:"
-                text={c.upside > 0.05
-                  ? 'skeptics argue growth decelerates faster than the model assumes and the discount is deserved.'
-                  : 'bulls argue current multiples already bake in the premium; little margin of safety left.'} />
+              <Point color={C.mid} tag={counterCase.tag} text={counterCase.text} />
             </div>
             <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.border}`, display: 'flex', gap: 20, flexWrap: 'wrap' }}>
               {leverage.map(lv => (
