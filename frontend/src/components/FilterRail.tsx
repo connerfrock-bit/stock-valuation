@@ -98,6 +98,12 @@ export function FilterRail({ filters, setFilters, allSectors }: {
           onChange={e => patch({ upside: +e.target.value })} />
       </Section>
 
+      <Section title={`Min momentum · ${filters.minMom || 'off'}`}>
+        <input type="range" min={0} max={100} step={5} value={filters.minMom}
+          aria-label="Minimum momentum percentile"
+          onChange={e => patch({ minMom: +e.target.value })} />
+      </Section>
+
       <button onClick={() => patch({ hideTraps: !filters.hideTraps })}
         role="switch" aria-checked={filters.hideTraps} className="hoverrow"
         style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 2px', width: '100%', borderRadius: 4 }}>

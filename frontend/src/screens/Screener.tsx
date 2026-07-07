@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { C, MONO, upColor } from '../theme';
 import { fmtPrice, fmtPct, fmtMcapB, na } from '../format';
 import { FilterRail } from '../components/FilterRail';
@@ -11,6 +12,10 @@ const PRESETS: [string, Partial<Filters>][] = [
   ['Deep value', { upside: 25, minConf: 3, hideTraps: false }],
   ['Quality compounders', { minQ: 78, upside: 0, hideTraps: true }],
   ['Clean & cheap', { upside: 10, minQ: 65, hideTraps: true }],
+  // the one intersection the project's own backtests support: cheap by the
+  // model AND confirmed by the tape (momentum is the sole factor with a
+  // demonstrated edge — see Methodology → Momentum factor)
+  ['Value confirmed by tape', { upside: 15, minConf: 3, hideTraps: true, minMom: 50 }],
 ];
 
 export function Screener(props: {
@@ -27,6 +32,22 @@ export function Screener(props: {
 }) {
   const { rows, filters, setFilters, allSectors, sortKey, sortDir, setSort,
     showMultiples, setShowMultiples, watch, toggleWatch, selected, openDeep } = props;
+
+  // Row windowing above 150 rows (S&P-scale universes; NDX renders in full).
+  // Fixed row-height estimate + generous overscan absorbs the few taller
+  // wrapped-flag rows. Spacer rows keep the scrollbar honest.
+  const ROW_H = 46.5, OVERSCAN = 15;
+  const virtual = rows.length > 150;
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [win, setWin] = useState({ top: 0, h: 900 });
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) setWin(w => (w.h === el.clientHeight ? w : { ...w, h: el.clientHeight }));
+  }, [virtual]);
+  const start = virtual ? Math.max(0, Math.floor(win.top / ROW_H) - OVERSCAN) : 0;
+  const end = virtual ? Math.min(rows.length, Math.ceil((win.top + win.h) / ROW_H) + OVERSCAN) : rows.length;
+  const visible = rows.slice(start, end);
+  const colCount = 9 + (showMultiples ? 3 : 0);
 
   const exportCsv = () => {
     const head = ['ticker', 'name', 'sector', 'price', 'low', 'mid', 'high', 'upside',
@@ -71,9 +92,11 @@ export function Screener(props: {
   );
 
   return (
-    <div style={{ minHeight: '100%', display: 'flex' }}>
+    // height:100% (not minHeight) so the table wrap below is the real vertical
+    // scroller — row windowing and the sticky header both depend on that.
+    <div style={{ height: '100%', display: 'flex' }}>
       <FilterRail filters={filters} setFilters={setFilters} allSectors={allSectors} />
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {/* toolbar */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 10, padding: '11px 18px',
@@ -113,7 +136,11 @@ export function Screener(props: {
         </div>
 
         {/* table */}
-        <div style={{ flex: 1, overflow: 'auto' }}>
+        <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflow: 'auto' }}
+          onScroll={virtual ? e => {
+            const el = e.currentTarget;
+            setWin({ top: el.scrollTop, h: el.clientHeight });
+          } : undefined}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: 5 }}>
               <tr>
@@ -133,7 +160,12 @@ export function Screener(props: {
               </tr>
             </thead>
             <tbody>
-              {rows.map(c => {
+              {virtual && start > 0 && (
+                <tr aria-hidden style={{ height: start * ROW_H }}>
+                  <td colSpan={colCount} style={{ padding: 0, border: 'none' }} />
+                </tr>
+              )}
+              {visible.map(c => {
                 const starred = !!watch[c.ticker];
                 return (
                   <tr key={c.ticker} className="rowlink" tabIndex={0}
@@ -205,6 +237,11 @@ export function Screener(props: {
                   </tr>
                 );
               })}
+              {virtual && end < rows.length && (
+                <tr aria-hidden style={{ height: (rows.length - end) * ROW_H }}>
+                  <td colSpan={colCount} style={{ padding: 0, border: 'none' }} />
+                </tr>
+              )}
             </tbody>
           </table>
           {rows.length === 0 && (

@@ -179,6 +179,7 @@ export default function App() {
       if (c.quality < filters.minQ) return false;
       if (c.conf < filters.minConf) return false;
       if (c.upside * 100 < filters.upside) return false;
+      if (filters.minMom > 0 && (c.momPct ?? -1) < filters.minMom) return false;
       if (filters.hideTraps && c.flags.length > 0) return false;
       return true;
     });

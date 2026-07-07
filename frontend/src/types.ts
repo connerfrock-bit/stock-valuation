@@ -107,11 +107,12 @@ export interface Filters {
   minQ: number;
   minConf: number;
   upside: number; // percent, -60..50
+  minMom: number; // momentum percentile floor, 0 = off (names without momPct fail when > 0)
   hideTraps: boolean;
 }
 
 export const DEFAULT_FILTERS: Filters = {
-  sectors: null, mcap: 'all', minQ: 0, minConf: 1, upside: -100, hideTraps: false,
+  sectors: null, mcap: 'all', minQ: 0, minConf: 1, upside: -100, minMom: 0, hideTraps: false,
 };
 
 export type SortKey =
