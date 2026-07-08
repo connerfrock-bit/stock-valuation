@@ -98,9 +98,9 @@ const ENGINES: Engine[] = [
   },
   {
     name: 'Warranted multiple v2', discount: 'relative',
-    answers: 'Sector-median EV/EBIT anchor (fixed-effects), adjusted within sector, applied to this company’s EBIT.',
-    formula: ['anchor = sector median EV/EBIT, capped at 28×', 'mult = anchor + b·(g − ḡ_sector)   (sign-guarded)', 'Value = (mult × EBIT − Debt + Cash) / shares'],
-    gotcha: 'The 28× cap stops the relative engine from inheriting market froth; TECH is still one bucket (semis vs software) — subsector split is a known refinement.',
+    answers: 'Bucket-median EV/EBIT anchor (fixed-effects), adjusted within bucket, applied to this company’s EBIT. TECH splits into semis / software / hardware (hand-mapped override table; ≥8 fitted names per bucket or it rolls back to the sector).',
+    formula: ['anchor = bucket median EV/EBIT, capped at 28×', 'mult = anchor + b·(g − ḡ_bucket)   (sign-guarded)', 'Value = (mult × EBIT − Debt + Cash) / shares'],
+    gotcha: 'The 28× cap stops the relative engine from inheriting market froth (semis and hardware both sit AT the cap in the current tape — the AI bid is real). The big split win is IT services: ACN/IBM/CTSH now anchor at their own ~14× median instead of whole-TECH froth. Overrides live in assumptions.toml; unmapped names stay in the parent bucket on purpose.',
   },
   {
     name: 'DDM — Dividend Discount', discount: 'Re',
