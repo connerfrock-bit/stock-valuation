@@ -298,13 +298,22 @@ Honesty rules: never a single fair value without its range · agreement always b
       override>SIC>sector, 54/54=100% agreement with the hand-map where SIC opines.)
 
 ### Phase 3 — widen (BOTH Phase-2 gates PASSED: ingest <10min ✅ · S&P 1500 ≥90% ✅)
-- [ ] S&P 1500 live in the universe picker (mid/small caps = where cross-sectional
-      value evidence is strongest; sector anchors finally get statistical teeth).
-- [ ] Full NYSE as a SCREENING universe only — Methodology states plainly that
-      credible backtesting stops at SPX (no delisted-price history without CRSP).
-      Forward ledger runs per-universe and becomes the broad universe's evidence.
-- [ ] Scatter density at 2,000+ names: canvas rendering or a stated default
-      "investable" filter.
+- [x] **S&P 1500 live in the universe picker** ✅ (2026-07-08) — `sp1500` source
+      (500 ∪ 400 ∪ 600) + config (min_mcap 0.3e9 flag threshold). Scored **1444 names**;
+      the warranted anchor now fits on **989 names / 12 sector anchors** (the promised
+      statistical teeth), TECH split runs deep (42/55/33), 105 REITs. Top picks are
+      mid-caps (EXEL/BKE/QLYS). Forward ledger extends to sp1500 (its evidence, since
+      no backtest). Methodology shows a context-aware **screening-only** panel — no faked
+      curve; the delisted-price gap is worst for small-caps. See WORKLOG.
+- [x] **Scatter density** ✅ — the real problem was OUTLIER BLOWOUT (one +23000%
+      small-cap auto-scaled the axis to uselessness), not raw count. Fixed with a
+      percentile-based domain + honest clamp count ("N beyond axis →"); 1450 SVG dots
+      render fine, canvas not needed. Axis reads [-50%, +100%].
+- [ ] **Full NYSE as a SCREENING universe** — next increment (not done). Needs a
+      SIC→sector map for non-S&P filers (no clean constituent list) + size buckets;
+      L0 hygiene finally does real work here. Methodology already states credible
+      backtesting stops at SPX (no delisted-price history without CRSP); the forward
+      ledger is the broad universe's evidence. Builds on the S&P 1500 plumbing.
 
 ### Standing rules
 - No new valuation engines (seven triangulate; an eighth is procrastination).

@@ -843,3 +843,56 @@ smaller filers). Emitted `data_quality.json` → a live Methodology data-quality
 (dataquality gate). Tests 93 → 112 (`test_bulk.py`: normalization, name-match/namesake
 guard, header-prefix parse, hygiene, SIC precedence). Both Phase-2 gates PASSED:
 ingest <10min AND S&P 1500 ≥90% coverage — the two conditions for Phase 3 (widen).
+
+---
+
+## Phase 3 — widen: S&P 1500 live in the picker (2026-07-08)
+
+Both Phase-2 gates passed (ingest <10min, S&P 1500 dry-run 99.1%), so the broad
+universe goes live. `universe.py` gains an `sp1500` source (500 ∪ 400-mid ∪ 600-small,
+deduped) and a `[[universe]]` block (min_mcap 0.3e9 — a small-cap FLAG threshold, not
+a filter). The junction + `value.py all` + `ledger.py all` machinery already fan out
+per-universe, so scoring and the forward ledger came almost for free.
+
+**Pipeline at scale (all bulk-backed):** ingest 1510/1518 names in 348s (0 API calls);
+betas 1492; 447k datapoints; coverage guard green. **value.py scored 1444 S&P 1500
+records.** The widening delivered exactly the promised "statistical teeth": the
+warranted anchor now fits on **989 names across 12 sector anchors** (was ~400), the
+TECH split runs deep (semis 42 · software 55 · hardware 33), and the REIT P/FFO anchor
+sits on **105 REITs**. Archetype router at scale: standard 1095 · financial 244 ·
+reit 105. Top picks are now mid-caps (EXEL, BKE, QLYS, BAH) — the mid/small-cap
+cross-section the large-cap-only board never surfaced.
+
+**L0 hygiene fired 0 times** on the S&P 1500 — correct, not a bug: the S&P selection
+committee already excludes sub-$1 names, SPACs, warrants and units. Hygiene is the gate
+for the *full-NYSE* universe (below), where those instruments actually appear.
+
+**Screening-only honesty (the load-bearing UX).** The S&P 1500 publishes NO backtest,
+by design — a credible survivorship-free curve needs delisted-member price history, and
+that gap is WORST for small-caps (they delist most; no free source serves their prices —
+see [[delisted-price-gap]]). Methodology now:
+- shows a context-aware toggle (defaults to the board's universe) with an "S&P 1500 ·
+  screen" marker;
+- renders a "Screening universe — no backtest by design" panel explaining the price-gap
+  reason instead of faking a curve;
+- keeps the **forward paper-trading ledger** as the broad universe's own evidence
+  (ledger_sp1500.json, inception today) — "cannot be flattered: the picks were committed
+  before the returns existed."
+The NASDAQ-100 / S&P 500 backtests (constituent-based, survivorship measured) still
+render exactly as before — regression-verified in the browser.
+
+**Scatter outlier fix (the real density problem).** At 1500 names the universe-map
+axis auto-scaled to the single most extreme upside — a distorted small-cap at **+23000%**
+blew the X-axis out and crushed every real name onto the left edge. Fixed with a ROBUST
+domain: the upper bound tracks the ~96th percentile (not the max), capped at +250% for
+readability; the ~62 outliers clamp to the right edge and are COUNTED honestly ("62
+names beyond axis (clamped) →") — never a silent crop. Axis now reads [-50%, +100%];
+1450 SVG circles render fine, so canvas wasn't needed. Verified in the browser.
+
+**Deferred honestly — full NYSE as a screening universe.** The third Phase-3 bullet
+(all NYSE large+mid) is the next increment, not done here: it needs a SIC→sector map for
+the thousands of non-S&P filers (no clean Wikipedia constituent list) and would put L0
+hygiene to real work. The S&P 1500 is the gated, ready deliverable; NYSE builds on this
+same plumbing when we take it.
+
+Tests 112 → 115 (sp1500 universe config). Frontend prod build + share rebuilt.
