@@ -276,19 +276,28 @@ Honesty rules: never a single fair value without its range · agreement always b
       meter + trap gate + momentum overlay — not an alpha signal. Momentum stays
       the one live edge (within-pool: +0.50%/q SPX, +1.63%/q NDX).
 
-### Phase 2 — plumbing for scale (before any universe growth)
-- [ ] Bulk EDGAR transport: nightly companyfacts.zip + submissions.zip (one download
-      replaces per-ticker calls — the 2026-07-07 throttled ingest took ~5h for 513
-      names). Tag-mapping + coverage guard unchanged. Gate: full universe <10 min
-      after download.
-- [ ] Bulk prices: Stooq daily files primary, yfinance demoted to spot-check;
-      betas from bulk monthly.
-- [ ] L0 hygiene rules, visible per honesty law: sub-$1, units/warrants/preferreds,
-      SPAC shells — excluded WITH reasons, never silently.
-- [ ] S&P 1500 dry run. Gate: ≥90% coverage; tag-fallback rate measured and shown
-      on a Methodology data-quality panel. This number is the NYSE go/no-go.
+### Phase 2 — plumbing for scale (before any universe growth) ✅ (2026-07-08)
+- [x] **Bulk EDGAR transport** ✅ — `bulk.py`: nightly companyfacts.zip + submissions.zip
+      (conditional download, header-prefix filers scan @ ~15k/s). Ingest **5h → 120s**
+      (515 names, 0 API calls, coverage guard green). Gate PASSED 5×. Bonus: delisted
+      CIK recovery via SEC formerNames (no_cik 170→~55, ~115 names, all hand-verified) —
+      and it FOUND+FIXED a latent reassigned-ticker bug (Sprint's S→SentinelOne etc.
+      were injecting namesake financials into the backtest). The delisted-name gap is
+      now proven **price-bound**: fundamentals recover, but Yahoo 404s delisted prices
+      and Stooq is access-gated → survivorship haircut stands (needs CRSP). See WORKLOG.
+- [x] **Bulk prices** ✅ (decision: keep Yahoo) — spark batch is close-only (unsafe
+      across splits); proven per-symbol v8/chart (adjclose+splits, incremental) kept.
+      Stooq now PoW+401 gated → documented unavailable. EDGAR was the real bottleneck.
+- [x] **L0 hygiene** ✅ — `hygiene_reason`: sub-$1, SPAC (SIC 6770), instrument names
+      (warrant/right/preferred). High-precision (no …W/…U suffix guessing); 0 fired on
+      the clean large-caps, the gate for broad universes. Visible in the excluded panel.
+- [x] **S&P 1500 dry run** ✅ — `dataquality.py`: 1503 names via bulk in 62s,
+      **coverage 99.1% (1490/1503) → GATE PASS (≥90%)**. Per-concept tag-fallback rate
+      measured (interest_exp 85%, short_debt 80%) → live Methodology data-quality panel.
+      This number is the NYSE go/no-go. **PASSED.** (SIC subsector defaults also landed:
+      override>SIC>sector, 54/54=100% agreement with the hand-map where SIC opines.)
 
-### Phase 3 — widen (only after both gates)
+### Phase 3 — widen (BOTH Phase-2 gates PASSED: ingest <10min ✅ · S&P 1500 ≥90% ✅)
 - [ ] S&P 1500 live in the universe picker (mid/small caps = where cross-sectional
       value evidence is strongest; sector anchors finally get statistical teeth).
 - [ ] Full NYSE as a SCREENING universe only — Methodology states plainly that

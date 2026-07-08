@@ -766,3 +766,80 @@ doesn't erase it — it remains the one evidence-backed overlay, with its own ca
 Phase 1 complete: 1.1 financials ✅ · 1.2 REITs ✅ · 1.3 TECH split + overrides ✅ ·
 1.4 survivorship + gate ✅. Next: Phase 2 (bulk EDGAR/price plumbing) — where the
 delisted-name data gap this measurement quantified can actually be closed.
+
+---
+
+## Phase 2 — plumbing for scale: bulk EDGAR transport (2026-07-08)
+
+**The headline:** the SEC's nightly `companyfacts.zip` (~1.4GB, 20k XBRL filers) +
+`submissions.zip` (~1.6GB, 976k filer headers) replace ~520 throttled per-ticker
+API calls. **Full union ingest: ~5h → 120s** (515/518 names, 0 API calls, coverage
+guard green). Gate ("<10 min after download") PASSED by 5×. `bulk.py` handles
+conditional download (If-Modified-Since + atomic .part rename), random-access member
+reads, and a `filers` scan. The scan reads ONLY the header prefix of each submission
+member (everything before the multi-MB `"filings"` object — unambiguous since that
+byte sequence can't occur inside a JSON string) → ~15k filers/s, whole corpus in 27s.
+
+**Delisted CIK recovery (the session's stated hope) — measured, half-closed.** The
+gap the 1.4 survivorship number quantified has TWO halves; bulk EDGAR closes exactly
+one:
+- **Fundamentals half — CLOSED.** `pit_meta` no_cik **170 → ~55** (recovered ~115
+  delisted names). The SEC BLANKS the `tickers` field on deregistration (SVB, First
+  Republic read `tickers:[]`), so a dead ticker maps to its CIK only by NAME. The
+  filers scan stores each filer's normalized current+former names; `resolve_delisted`
+  two-tiers exact→unique-substring against them. Spot-checked all 75 first-pass
+  recoveries by hand — every one correct, including hard renames (ADS→Bread Financial,
+  RIMM→BlackBerry, JDSU→Viavi, NLOK→Gen Digital, DV→Covista via the CIK's own
+  `formerNames` "DEVRY EDUCATION GROUP").
+- **Price half — NOT closeable (honest negative).** Yahoo 404s every delisted name
+  (SIVB/FRC/ATVI/TWTR/DISH); Stooq (the specced alternative) is now access-restricted
+  (bulk zip HTTP-401, per-symbol CSV behind a SHA-256 proof-of-work then "Access
+  denied"). Of the ~115 recovered fundamentals, only **~7** also have prices, so only
+  7 became usable in the backtest. The +1.4pp/+2.8pp survivorship haircut therefore
+  STANDS — it is price-bound, and closing it needs a paid delisted-price source
+  (CRSP), exactly as the Phase-8 note foresaw. Documented, not papered over.
+
+**Latent correctness bug FOUND + FIXED (the real prize).** Some delisted tickers get
+REASSIGNED to new companies (Sprint's `S`→SentinelOne, Spectra's `SE`→Sea Ltd,
+Pepco's `POM`→POMDoctor, DeVry's `DV`→DoubleVerify). The current-ticker map — used by
+BOTH the old API path and the new bulk map — silently resolved these to the NAMESAKE,
+injecting the wrong company's fundamentals into the backtest's PIT store. Fix:
+`pit.py` now name-validates every DELISTED member (active constituents keep the
+authoritative live ticker). `cik_name_matches` uses spaceless-containment
+(`SIRIUSXM`⊂`SIRIUS XM`, `VF`⊂`V F` accept; `PEPCOHOLDINGS`⊄`POMDOCTOR` rejects) so
+renames pass and namesakes are rejected to an honest no_cik. Verified: POM→Pepco,
+S→Sprint, SE→Spectra all now resolve to the RIGHT CIK or reject.
+
+**Bulk prices — kept Yahoo (correctness over a minor speedup).** Yahoo's batched
+`spark` endpoint returns close-only (no adjclose/splits) — a raw close across a split
+date is a fake −50% return, unsafe for betas/backtest. The proven per-symbol
+`v8/chart` path (adjclose+splits, already incremental) stays. EDGAR was the 5h
+bottleneck; prices/betas were always ~8min. Stooq unavailability documented.
+
+**L0 hygiene — visible exclusions (BUILD_PLAN honesty law).** `hygiene_reason` in
+value.py: sub-$1 price, SPAC/blank-check (SIC 6770), and instrument-class names
+(warrant/right/preferred/depositary). Deliberately high-precision — ticker-suffix
+guessing (…W/…U) is avoided (Wayfair, Unity), and "Unit Corporation" must not trip.
+No-op on the current clean large-caps (0 fired), the gate for the broad universes.
+
+**SIC subsector defaults (Phase-1.3 deferral, now free from bulk).** SIC codes land in
+`companies.sic` at ingest; `assumptions.toml [subsector_by_sic]` maps only the
+NON-conflicting codes (3674→semis, 7372→software, 3571/72/76→hardware). Precedence
+override > SIC > sector; SIC fires only inside Information Technology. Standalone SIC
+reproduces the 78-name hand-map for **54/54 = 100%** of names it has an opinion on;
+the 24 conflicting/parent-SIC names (QCOM 3663 vs MSI 3663; FTNT/PANW under a
+peripheral-hardware SIC) correctly defer to the hand-map. S&P split nudged 23/20/23 →
+24/21/24 as the default auto-buckets uncovered IT names.
+
+**S&P 1500 dry run — the NYSE go/no-go, PASSED.** New `dataquality.py` ingests the
+S&P 500+400+600 union (1503 names) via the bulk path WITHOUT touching the live picker,
+measuring coverage + per-concept tag-fallback rate. **Coverage 99.1% (1490/1503,
+≥15/25 concepts) in 62s → GATE PASS (≥90%).** Highest tag-fallback concepts surfaced
+(interest_exp 85%, short_debt 80% rely on non-primary tags — where the map thins on
+smaller filers). Emitted `data_quality.json` → a live Methodology data-quality panel
+(GATE PASS badge + stat tiles + fallback chips), verified rendering in the browser.
+
+**Refresh + tests.** `REFRESH DATA.cmd` gains step 0 (bulk download + scan) and step 7
+(dataquality gate). Tests 93 → 112 (`test_bulk.py`: normalization, name-match/namesake
+guard, header-prefix parse, hygiene, SIC precedence). Both Phase-2 gates PASSED:
+ingest <10min AND S&P 1500 ≥90% coverage — the two conditions for Phase 3 (widen).
