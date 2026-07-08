@@ -257,9 +257,13 @@ Honesty rules: never a single fair value without its range · agreement always b
       the capped covered-median multiple (live: 15.6× = 6.4% FFO yield — gate PASSED).
       Replaces RIM-on-book; flag retired; AMT/CCI/EQIX/IRM/SBAC/SPG recovered (482→488).
       Known: flat anchor across sub-sectors → fold into the 1.3 override/split work.
-- [ ] Warranted multiple: split TECH (semis/software/hardware via SIC + override
-      table). Gate: ≥8 names per anchor bucket. Override table seed: CSGP (CoStar —
-      GICS Real Estate but a data/software business; currently RIM-on-book as a reit).
+- [x] **Warranted TECH split + override table** ✅ (v2.5, 2026-07-07) — 78-name hand-map
+      (semis/software/hardware) with the ≥8-fitted-names gate (SPX 23/20/23 hold; NDX
+      hardware rolls back at 5). Live anchors: software 23.7×, semis/hardware AT the 28×
+      cap, IT-services leftovers at their own 13.7× — CDW/CTSH/ACN dropped 62–87pp of
+      froth-anchor upside. CSGP archetype-corrected (REIT pool 31→30, anchor purer).
+      SIC-driven default split deferred to Phase 2's bulk submissions.zip (free there;
+      513 throttled calls here). Gate PASSED.
 - [ ] Point-in-time index membership for the SPX backtest; re-run; publish the
       measured survivorship effect in Methodology caveats whichever way it cuts.
 - [ ] DECISION GATE: if the survivorship-clean value composite still shows no edge,

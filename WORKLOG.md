@@ -699,3 +699,32 @@ override/split work. CCI −47% additionally proved the impairment add-back matt
 
 Tests 78 → 84 green. AMT deep-dive verified live: P/FFO $156.72 carries the mid at
 100% weight, RIM row reads "replaced by P/FFO", no REIT flag. Share rebuilt.
+
+---
+
+## Phase 1.3 — warranted TECH split + the override table (2026-07-07, v2.5)
+
+**The problem:** one TECH bucket mixed 13× services with 35× software — every anchor
+was a compromise — and the v2.3 audit had already caught GICS misrouting CSGP (a
+data/software business) into the REIT engine.
+
+**The fix (v2.5):** `assumptions.toml [overrides]` — the manual-override table
+BLUEPRINT L1c promised. Archetype override corrects CSGP → standard; a 78-name
+subsector hand-map splits TECH into semis/software/hardware. `assign_buckets()`
+enforces ≥8 FITTED names per split bucket, else members roll back to the parent
+sector (NDX hardware, 5 names, rolls back; SPX holds 23/20/23). Unmapped names stay
+in the parent on purpose — a wrong bucket is worse than a coarse one. Precedence:
+override > SIC map > sector; the SIC default layer is deferred to Phase 2's bulk
+submissions.zip, where it's one download instead of 513 throttled calls.
+
+**What the data said (gate passed):** software anchors at 23.7× (uncapped); semis
+AND hardware sit AT the 28× cap — the 2026 AI-hardware bid is real and the froth
+cap is doing exactly its job. The biggest honesty win is the leftover IT-services
+bucket at 13.7×: CDW/CTSH/ACN/IT had been riding the whole-TECH froth anchor and
+gave back 47–87pp of upside (CDW −87pp). CSGP now prices on FCF engines at conf 5
+(warranted honestly N/A — EBIT too thin), and its exit purified the REIT pool
+(31→30, anchor 15.6→15.4×). Coefficients refit on cleaner bucket-centered
+residuals → broad sub-2pp ripples across standard names, by design.
+
+Tests +6 → suite green. Share rebuilt. Phase 1 remaining: 1.4 point-in-time SPX
+membership + survivorship re-test (the product-positioning decision gate).
