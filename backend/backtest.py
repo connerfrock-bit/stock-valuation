@@ -508,6 +508,38 @@ def main(universe="ndx"):
                        "avgExcessQ": round(sum(agg["excess"]) / len(agg["excess"]), 4),
                        "quarters": agg["n"]})
 
+    # ---- Phase 1.4: survivorship, MEASURED -------------------------------
+    # The benchmark is equal-weight of COVERED members; members we can't price
+    # (delisted -> no EDGAR/Yahoo data) are absent from both sides. The
+    # measurable half of that bias: covered-EW vs the real EQUAL-WEIGHT index
+    # total return (RSP / QQQE adjclose) over identical quarters — like-for-like
+    # weighting, so the gap isolates coverage, not cap-vs-equal weighting.
+    # Positive gap = the covered pool ran hot = the flattery bound.
+    ew_proxy, cap_proxy = ("RSP", "SPY") if suf == "_sp500" else ("QQQE", "QQQ")
+    lvl = {c["d"]: c["bench"] for c in curve}
+    surv = None
+    p_ew, p_cap = adj.get(ew_proxy, {}), adj.get(cap_proxy, {})
+    if p_ew:
+        wrows = []
+        for wn, a, b in windows:
+            qs = [q for q in quarters if a <= q <= b and q in lvl and p_ew.get(q[:7])]
+            if len(qs) < 8:
+                continue
+            yrs = (len(qs) - 1) / 4
+            g = lambda series, key=None: (series[qs[-1][:7]] / series[qs[0][:7]]) ** (1 / yrs) - 1
+            bch = (lvl[qs[-1]] / lvl[qs[0]]) ** (1 / yrs) - 1
+            row = {"label": wn, "coveredEW": round(bch, 4), "indexEwTR": round(g(p_ew), 4),
+                   "gapPP": round((bch - g(p_ew)) * 100, 1)}
+            if p_cap.get(qs[0][:7]) and p_cap.get(qs[-1][:7]):
+                row["indexCapTR"] = round(g(p_cap), 4)
+            wrows.append(row)
+        if wrows:
+            surv = {"ewProxy": ew_proxy, "capProxy": cap_proxy, "windows": wrows}
+            print(f"{chr(10)}===== SURVIVORSHIP, MEASURED [{universe}]  (covered-EW vs {ew_proxy} TR) =====")
+            for w in wrows:
+                print(f"  {w['label']:16} covered {w['coveredEW']*100:+6.2f}%/yr · {ew_proxy} "
+                      f"{w['indexEwTR']*100:+6.2f}%/yr · gap {w['gapPP']:+5.1f}pp/yr")
+
     avg_cov = sum(c["signals"] / c["members"] for c in coverage) / len(coverage)
     early = [c for c in coverage if c["d"] < "2016-01-01"]
     early_cov = (sum(c["signals"] / c["members"] for c in early) / len(early)) if early else None
@@ -519,10 +551,14 @@ def main(universe="ndx"):
             "rebalance": "quarterly", "portfolio": "top quintile by composite score, equal-weight",
             "benchmark": "equal-weight of all covered members",
             "avgCoverage": round(avg_cov, 3), "namesExcluded": n_missing,
-            "scoring": ADOPTED,
+            "scoring": ADOPTED, "survivorship": surv,
             "caveats": [
                 "Fundamentals are point-in-time (vintages by SEC `filed` date) — no restatement look-ahead.",
-                f"Average signal coverage {avg_cov:.0%} of members; delisted names without price/EDGAR data are missing (residual survivorship bias, direction unknown).",
+                (f"Average signal coverage {avg_cov:.0%} of members; delisted names without price/EDGAR data are missing. "
+                 + (f"MEASURED (Phase 1.4): the covered equal-weight pool ran {surv['windows'][0]['gapPP']:+.1f}pp/yr vs {surv['ewProxy']} "
+                    f"(the real equal-weight index, full window) — that gap IS the survivorship flattery bound at the universe level; "
+                    f"subtract it mentally from every excess figure." if surv else
+                    "(residual survivorship bias, direction unknown — proxy history unavailable this run).")),
                 (f"Survivorship grows the further back we reach: pre-2016 coverage is only "
                  f"~{early_cov:.0%} (vs ~90% recently) — the missing names are disproportionately "
                  f"delisted losers, which FLATTERS all variants, so the 2012-2015 window is the "

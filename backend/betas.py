@@ -7,10 +7,10 @@ import json, sqlite3, time, urllib.parse
 from common import DB_PATH, CFG, http_text
 
 
-def fetch_monthly(symbol):
-    """-> ({'YYYY-MM' -> close}, [(month, close, adjclose)]) of ~5y monthly bars."""
+def fetch_monthly(symbol, rng="5y"):
+    """-> ({'YYYY-MM' -> close}, [(month, close, adjclose)]) of monthly bars."""
     sym = urllib.parse.quote(symbol)
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?range=5y&interval=1mo"
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?range={rng}&interval=1mo"
     res = json.loads(http_text(url))["chart"]["result"][0]
     quote = res["indicators"]["quote"][0].get("close") or []
     adj = (res["indicators"].get("adjclose") or [{}])[0].get("adjclose") or quote
@@ -65,6 +65,13 @@ def main():
                 "ticker TEXT PRIMARY KEY, beta_raw REAL, beta REAL, months INTEGER, updated TEXT)")
     now = time.strftime("%Y-%m-%d %H:%M:%S")
     upsert_prices(con, "^GSPC", mkt_rows)
+    # total-return proxies for the backtest's survivorship measurement (Phase 1.4):
+    # kept fresh alongside the market series (INSERT OR REPLACE preserves history)
+    for _proxy in ("SPY", "QQQ", "RSP", "QQQE"):
+        try:
+            upsert_prices(con, _proxy, fetch_monthly(_proxy)[1])
+        except Exception as e:
+            print(f"  proxy {_proxy} refresh failed ({e}) — backtest keeps prior history")
     tickers = [r[0] for r in con.execute("SELECT ticker FROM companies ORDER BY ticker")]
 
     print(f"{'TICK':6}{'raw β':>8}{'adj β':>8}{'mo':>5}")
