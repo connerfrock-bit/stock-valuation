@@ -6,9 +6,13 @@ const card: React.CSSProperties = {
   background: C.panel, border: `1px solid ${C.border}`, borderRadius: 11,
 };
 
+interface SurvWindow {
+  label: string; coveredEW: number; indexEwTR: number; indexCapTR?: number; gapPP: number;
+}
 interface Backtest {
   meta: { ranAt: string; start: string; end: string; rebalance: string;
-    portfolio: string; benchmark: string; avgCoverage: number; caveats: string[] };
+    portfolio: string; benchmark: string; avgCoverage: number; caveats: string[];
+    survivorship?: { ewProxy: string; capProxy: string; windows: SurvWindow[] } | null };
   curve: { d: string; strat: number; bench: number }[];
   stats: { quarters: number; years: number; stratCAGR: number; benchCAGR: number;
     hitRate: number; stratSharpe: number; benchSharpe: number;
@@ -218,7 +222,41 @@ export function Methodology({ meta }: { meta: Meta }) {
                 Over {bt.meta.start.slice(0, 4)}–{bt.meta.end.slice(0, 4)}, the composite top-quintile returned{' '}
                 {(bt.stats.stratCAGR * 100).toFixed(1)}%/yr vs {(bt.stats.benchCAGR * 100).toFixed(1)}%/yr
                 for equal-weight. Treat every screen as a research aid, not a signal with proven alpha.
+                {bt.meta.survivorship && (
+                  <>{' '}<b>Decision gate (Phase 1.4):</b> with survivorship now measured at{' '}
+                  {bt.meta.survivorship.windows[0].gapPP >= 0 ? '+' : ''}{bt.meta.survivorship.windows[0].gapPP}pp/yr
+                  of covered-pool tailwind, the composite has no demonstrated edge — this product is an{' '}
+                  <b>expectations meter + trap gate + momentum overlay</b>, not an alpha signal.</>
+                )}
               </div>
+              {bt.meta.survivorship && (
+                <div style={{
+                  marginTop: 10, padding: '10px 13px', borderRadius: 8,
+                  border: `1px solid ${C.border}`, background: C.inset ?? undefined,
+                }}>
+                  <div style={{ fontSize: 11, fontWeight: 650, color: C.sec, marginBottom: 6 }}>
+                    Survivorship, measured{' '}
+                    <span style={{ fontWeight: 400, color: C.dim }}>
+                      — covered equal-weight pool vs {bt.meta.survivorship.ewProxy} (real equal-weight index, total return).
+                      The gap is the flattery bound: delisted members we can't price are missing from both
+                      strategy and benchmark.
+                    </span>
+                  </div>
+                  {bt.meta.survivorship.windows.map(w => (
+                    <div key={w.label} style={{
+                      display: 'flex', gap: 14, fontFamily: MONO, fontSize: 11,
+                      color: C.mid, lineHeight: 1.8, flexWrap: 'wrap',
+                    }}>
+                      <span style={{ width: 110, color: C.dim }}>{w.label}</span>
+                      <span>covered {(w.coveredEW * 100).toFixed(1)}%/yr</span>
+                      <span>{bt.meta.survivorship!.ewProxy} {(w.indexEwTR * 100).toFixed(1)}%/yr</span>
+                      <span style={{ fontWeight: 650, color: w.gapPP > 0 ? C.amber : C.green }}>
+                        gap {w.gapPP >= 0 ? '+' : ''}{w.gapPP.toFixed(1)}pp/yr
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           ) : (
             <div style={{
