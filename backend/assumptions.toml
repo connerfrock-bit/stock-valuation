@@ -42,6 +42,18 @@ name     = "S&P 500"
 source   = "sp500"              # universe.py sp500 constituents (Wikipedia)
 min_mcap  = 3e9                 # S&P 500 floor is lower than the Nasdaq-100
 
+[[universe]]
+id       = "sp1500"
+name     = "S&P 1500"
+source   = "sp1500"             # universe.py sp1500 = 500 ∪ 400 (mid) ∪ 600 (small)
+min_mcap  = 0.3e9               # small-caps are legitimately ~$0.3-2B — below this the
+                                # share count is suspect (this is a FLAG threshold, not a filter)
+# Phase 3 (widen): the broad SCREENING universe. Mid/small caps are where cross-sectional
+# value evidence is strongest and where the warranted sector anchors finally get
+# statistical teeth. NO credible backtest here (delisted-price gap is worse for small
+# caps — see [[delisted-price-gap]]); the forward ledger is its evidence. Backtest stays
+# constituent-based on ndx/sp500 only.
+
 # ---------------------------------------------------------------------------
 # L5/L6 manual-override table (BLUEPRINT L1c promised this; Phase 1.3 delivers).
 # Precedence everywhere: override > SIC map (Phase 2, bulk submissions.zip) > GICS sector.

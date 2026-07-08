@@ -1,1 +1,1 @@
-[{"id": "ndx", "name": "Nasdaq-100", "covered": 96, "default": true}, {"id": "sp500", "name": "S&P 500", "covered": 485, "default": false}]
+[{"id": "ndx", "name": "Nasdaq-100", "covered": 96, "default": true}, {"id": "sp500", "name": "S&P 500", "covered": 488, "default": false}, {"id": "sp1500", "name": "S&P 1500", "covered": 1444, "default": false}]

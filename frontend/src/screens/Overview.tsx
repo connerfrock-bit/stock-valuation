@@ -159,12 +159,19 @@ function Scatter({ list, openDeep }: { list: Company[]; openDeep: (t: string) =>
   const [hover, setHover] = useState<string | null>(null);
   const W = 1000, H = 540, pl = 58, pr = 24, pt = 26, pb = 46;
 
-  // Domain fits the data (5% padding, snapped to 5% steps) instead of the old
-  // fixed [-45%, +55%] clamp, which piled every deeper discount onto the edge
-  // and misread as "-45%". Zero line and the >=15% money zone stay in view.
+  // Domain fits the data but is ROBUST to outliers: at S&P 1500 scale a single
+  // distorted small-cap (+230× fair value) would blow the axis to +23000% and crush
+  // every real name onto the left edge. So the upper bound tracks a high PERCENTILE
+  // (not the max), with a readability cap; the few names beyond it clamp to the right
+  // edge and are counted honestly. Zero line and the >=15% money zone stay in view.
   const ups = list.map(c => c.upside);
-  const xMin = Math.min(-0.10, Math.floor((Math.min(...ups, 0) - 0.04) * 20) / 20);
-  const xMax = Math.max(0.30, Math.ceil((Math.max(...ups, 0) + 0.04) * 20) / 20);
+  const sortedUp = [...ups].sort((a, b) => a - b);
+  const pct = (p: number) => sortedUp.length
+    ? sortedUp[Math.min(sortedUp.length - 1, Math.max(0, Math.floor((p / 100) * sortedUp.length)))]
+    : 0;
+  const xMin = Math.max(-1.0, Math.min(-0.10, Math.floor((pct(2) - 0.04) * 20) / 20));
+  const xMax = Math.min(2.5, Math.max(0.30, Math.ceil((pct(96) + 0.06) * 20) / 20));
+  const offChart = list.filter(c => c.upside > xMax || c.upside < xMin).length;
   const step = [0.1, 0.2, 0.25, 0.5].find(s => (xMax - xMin) / s <= 7) ?? 0.5;
   const ticks: number[] = [];
   for (let t = Math.ceil(xMin / step) * step; t <= xMax + 1e-9; t += step) ticks.push(Math.round(t * 100) / 100);
@@ -213,6 +220,14 @@ function Scatter({ list, openDeep }: { list: Company[]; openDeep: (t: string) =>
       </text>
       <text x={16} y={(pt + H - pb) / 2} textAnchor="middle" fill={C.mid} fontSize={11.5} fontWeight={600}
         fontFamily="Inter" transform={`rotate(-90 16 ${(pt + H - pb) / 2})`}>quality score →</text>
+
+      {/* honest note: outliers clamped to the edge so one distorted small-cap can't
+          blow out the axis (S&P 1500 scale). Never a silent crop. */}
+      {offChart > 0 && (
+        <text x={W - pr - 4} y={H - pb - 8} textAnchor="end" fill={C.dim} fontSize={10.5} fontFamily={MONO}>
+          {offChart} name{offChart > 1 ? 's' : ''} beyond axis (clamped) →
+        </text>
+      )}
 
       {/* dots — largest first so small caps stay clickable */}
       {[...list].sort((a, b) => b.mcapB - a.mcapB).map(c => {

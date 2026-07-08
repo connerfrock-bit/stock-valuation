@@ -129,9 +129,11 @@ const ENGINES: Engine[] = [
   },
 ];
 
+// [id, backtest file ('' = screening-only, no credible backtest), label]
 const UNIVERSES: [string, string, string][] = [
   ['ndx', 'backtest.json', 'NASDAQ-100'],
   ['sp500', 'backtest_sp500.json', 'S&P 500'],
+  ['sp1500', '', 'S&P 1500'],
 ];
 
 export function Methodology({ meta }: { meta: Meta }) {
@@ -139,7 +141,10 @@ export function Methodology({ meta }: { meta: Meta }) {
   const [ledgers, setLedgers] = useState<Record<string, Ledger | null>>({});
   const [moms, setMoms] = useState<Record<string, Momentum | null>>({});
   const [dq, setDq] = useState<DataQuality | null>(null);
-  const [uni, setUni] = useState('ndx');
+  // default the backtest/ledger toggle to the universe the board is showing, so
+  // opening Methodology from the S&P 1500 board lands on its (screening-only) view
+  const [uni, setUni] = useState(
+    UNIVERSES.some(([k]) => k === meta.universeId) ? meta.universeId! : 'ndx');
   useEffect(() => {
     const w = window as unknown as { __FV_BT__?: Record<string, Backtest>;
       __FV_LEDGER__?: Ledger | null; __FV_MOM__?: Record<string, Momentum>;
@@ -156,11 +161,11 @@ export function Methodology({ meta }: { meta: Meta }) {
       .then(d => setDq(d))
       .catch(() => {});
     for (const [k, f] of UNIVERSES) {
-      fetch(`${import.meta.env.BASE_URL}${f}`)
+      if (f) fetch(`${import.meta.env.BASE_URL}${f}`)     // '' = screening-only, no backtest
         .then(r => (r.ok ? r.json() : null))
         .then(d => setBts(p => ({ ...p, [k]: d })))
         .catch(() => {});
-      fetch(`${import.meta.env.BASE_URL}momentum${k === 'sp500' ? '_sp500' : ''}.json`)
+      fetch(`${import.meta.env.BASE_URL}momentum${k === 'ndx' ? '' : '_' + k}.json`)
         .then(r => (r.ok ? r.json() : null))
         .then(d => setMoms(p => ({ ...p, [k]: d })))
         .catch(() => {});
@@ -201,13 +206,13 @@ export function Methodology({ meta }: { meta: Meta }) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6, gap: 10, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: C.sec }}>Backtest equity curve</div>
-              {UNIVERSES.filter(([k]) => bts[k]).map(([k, , label]) => (
-                <button key={k} onClick={() => setUni(k)} aria-pressed={uni === k} style={{
+              {UNIVERSES.filter(([k, f]) => bts[k] || ledgers[k] || !f).map(([k, f, label]) => (
+                <button key={k} onClick={() => setUni(k)} aria-pressed={uni === k} title={f ? 'constituent-based backtest' : 'screening-only — forward ledger evidence'} style={{
                   fontSize: 10.5, borderRadius: 5, padding: '3px 9px',
                   border: `1px solid ${uni === k ? hexA(C.blue, 0.4) : C.borderHi}`,
                   background: uni === k ? 'rgba(68,147,248,0.15)' : undefined,
                   color: uni === k ? '#fff' : C.mid, fontWeight: 600,
-                }}>{label}</button>
+                }}>{label}{!f && <span style={{ color: C.dim, fontWeight: 400 }}> · screen</span>}</button>
               ))}
             </div>
             {bt && (
@@ -272,6 +277,25 @@ export function Methodology({ meta }: { meta: Meta }) {
                 </div>
               )}
             </>
+          ) : UNIVERSES.find(([k]) => k === uni)?.[1] === '' ? (
+            <div style={{
+              borderRadius: 9, padding: '20px 20px', fontSize: 12.5, lineHeight: 1.75,
+              background: hexA(C.blue, 0.06), border: `1px solid ${hexA(C.blue, 0.28)}`, color: C.sec,
+            }}>
+              <div style={{ fontSize: 13, fontWeight: 650, marginBottom: 5 }}>
+                Screening universe — no backtest by design
+              </div>
+              <span style={{ color: C.dim3 }}>
+                The S&amp;P 1500 is a broad SCREENING universe. We deliberately publish no
+                equity curve for it: a credible, survivorship-free backtest needs delisted-member
+                PRICE history, and that gap is worst exactly here — small-caps delist most and no
+                free source serves their prices (needs CRSP). Claiming a backtest we can't stand
+                behind would violate the honesty law. The backtested evidence lives under
+                NASDAQ-100 and S&amp;P 500 (constituent-based, survivorship measured); the{' '}
+                <b style={{ color: C.sec }}>forward paper-trading ledger below</b> is this
+                universe's own out-of-sample test, accruing from inception.
+              </span>
+            </div>
           ) : (
             <div style={{
               border: `1px dashed ${C.borderHi}`, borderRadius: 9, padding: '38px 20px',

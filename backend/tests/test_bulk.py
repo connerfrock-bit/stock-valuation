@@ -133,5 +133,29 @@ class TestSubsectorPrecedence(unittest.TestCase):
                          "Information Technology")
 
 
+class TestUniverseConfig(unittest.TestCase):
+    def test_sp1500_configured(self):
+        from common import UNIVERSES, resolve_universe
+        self.assertIn("sp1500", UNIVERSES)
+        cfg = resolve_universe("sp1500")
+        self.assertEqual(cfg["id"], "sp1500")
+        self.assertEqual(cfg["source"], "sp1500")
+        # small-cap flag threshold must be low enough not to flag legitimate small-caps
+        self.assertLessEqual(cfg["min_mcap"], 1e9)
+
+    def test_three_live_universes(self):
+        from common import UNIVERSES
+        for u in ("ndx", "sp500", "sp1500"):
+            self.assertIn(u, UNIVERSES)
+
+    def test_sp1500_source_dispatch_known(self):
+        # the id must be a recognized source (dispatch reaches the sp1500 branch, not
+        # the unknown-id SystemExit) — asserted WITHOUT a network call
+        import universe
+        self.assertTrue(hasattr(universe, "sp1500_constituents"))
+        self.assertIn("sp400", universe.SP_INDEXES)
+        self.assertIn("sp600", universe.SP_INDEXES)
+
+
 if __name__ == "__main__":
     unittest.main()

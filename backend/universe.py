@@ -189,10 +189,27 @@ def sp500_constituents():
     return _sp_constituents("sp500")
 
 
+def sp1500_constituents():
+    """S&P Composite 1500 = 500 (large) ∪ 400 (mid) ∪ 600 (small), deduped by ticker
+       (large-cap name/sector wins on the rare cross-listing). ~1500 names — the broad
+       screening universe where mid/small-cap cross-sectional value evidence lives."""
+    seen, out, srcs = {}, [], []
+    for uid in ("sp500", "sp400", "sp600"):
+        lst, src = _sp_constituents(uid)
+        srcs.append(f"{uid}:{len(lst)}")
+        for tk, nm, sec in lst:
+            if tk not in seen:
+                seen[tk] = True
+                out.append((tk, nm, sec))
+    return out, f"Wikipedia ({' + '.join(srcs)})"
+
+
 def load_constituents(uid):
     """Dispatch by universe id -> ([(ticker, name, sector)], source)."""
     if uid == "ndx":
         return get_universe()
+    if uid == "sp1500":
+        return sp1500_constituents()
     if uid in SP_INDEXES:
         return _sp_constituents(uid)
     raise SystemExit(f"unknown universe id {uid!r}")
@@ -200,7 +217,7 @@ def load_constituents(uid):
 
 # Universes whose sector column is authoritative GICS (vs the Nasdaq page's coarse ICB
 # mapping, which mislabels e.g. PayPal as Industrials). GICS wins for overlap names.
-GICS_SOURCES = {"sp500", "sp400", "sp600"}
+GICS_SOURCES = {"sp500", "sp400", "sp600", "sp1500"}
 
 
 def build_union(uids):
