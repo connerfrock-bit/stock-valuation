@@ -182,6 +182,15 @@ def collect(con, rf, erp, tax_fallback, betas, universe_id):
         wacc = wacc_of(mcap, max(debt, 0.0), re_, rd, tax_r)
 
         equity_now = inst("equity")
+        ffo_s = ffo_ps = ffo_basis = None
+        if arch == "reit":
+            gain_s, imp_s = f.get("gain_sale", {}), f.get("re_impair", {})
+            ffo_s = ffo_series(ni_s, f.get("dep_amort", {}), gain_s, imp_s)
+            ffo_now = latest(ffo_s)
+            ffo_ps = ffo_now / shares if (ffo_now and shares) else None
+            adj = (("−gains" if any(y in gain_s for y in ffo_s) else "")
+                   + ("+impair" if any(y in imp_s for y in ffo_s) else ""))
+            ffo_basis = "NI+D&A" + adj
         inv_cap = (equity_now or 0.0) + debt - cash
         roic = (ebit_now * (1 - tax_r) / inv_cap
                 if (ebit_now is not None and inv_cap > 0) else None)
@@ -198,6 +207,7 @@ def collect(con, rf, erp, tax_fallback, betas, universe_id):
             fin_thru=nowd.get("revenue", (None, None, None))[1],
             ni_now=nv("net_income", latest(ni_s)), cfo_now=nv("cfo", latest(cfo_s)),
             equity_now=equity_now, cfo_s=cfo_s, f=f, nowd=nowd,
+            ffo_s=ffo_s, ffo_ps=ffo_ps, ffo_basis=ffo_basis,
         ))
     return rows, excluded
 
@@ -301,6 +311,27 @@ def rev_volatility(r):
     return (sum((x - m) ** 2 for x in gr) / len(gr)) ** 0.5
 
 
+def ffo_series(ni, dna, gains, impair=None):
+    """NAREIT-shaped FFO per FY = NI + D&A − gains on property sales + RE
+       impairments. Adjustments apply only where the tag was filed (0 otherwise) —
+       the per-name basis is disclosed in the method note, never silently mixed.
+       (CCI is the live example: a $5B fiber impairment crushes NI; without the
+       add-back its computed FFO reads half of economic reality.)"""
+    impair = impair or {}
+    yrs = sorted(set(ni) & set(dna))
+    return {y: ni[y] + dna[y] - gains.get(y, 0.0) + impair.get(y, 0.0) for y in yrs}
+
+
+def pffo_anchor(pffos, lo=8.0, hi=20.0, min_n=5):
+    """Median covered-REIT P/FFO, clamped to a sane cap-rate band. None below
+       min_n peers — a 3-name median is noise wearing a number."""
+    v = sorted(x for x in pffos if x and x > 0)
+    if len(v) < min_n:
+        return None
+    m = v[len(v) // 2] if len(v) % 2 else (v[len(v) // 2 - 1] + v[len(v) // 2]) / 2
+    return min(max(m, lo), hi)
+
+
 ADR_STRUCTURE_RISK = {"PDD"}          # VIE/ADR structures the numbers can't see
 REIT_RIM_FLAG = "REIT: RIM on book, not FFO/NAV"
 # shown but NOT score-penalized — characteristics/disclosures, not traps
@@ -387,7 +418,7 @@ def quality_scores(rows):
             r["quality"] = None
 
 
-def trap_flags(r, z=None, fscore=None, min_mcap=0.0):
+def trap_flags(r, z=None, fscore=None, min_mcap=0.0, ffo_priced=False):
     flags = []
     fin = r["arch"] != "standard"          # FCF/leverage traps are undefined for banks/REITs
     rev_yrs = sorted(r["rev"])
@@ -414,7 +445,7 @@ def trap_flags(r, z=None, fscore=None, min_mcap=0.0):
         flags.append("VIE/ADR structure")
     if r["mcap"] < min_mcap:
         flags.append("Suspect share count")
-    if r["arch"] == "reit":
+    if r["arch"] == "reit" and not ffo_priced:
         flags.append(REIT_RIM_FLAG)
     if r["stale"]:
         flags.append("Stale filings")
@@ -422,7 +453,10 @@ def trap_flags(r, z=None, fscore=None, min_mcap=0.0):
 
 
 # ---------------- snapshot history (append-only) ----------------
-MODEL_VERSION = "v2.3"        # frozen model tag — bump whenever scoring/engine logic changes
+MODEL_VERSION = "v2.4"        # frozen model tag — bump whenever scoring/engine logic changes
+# v2.4 — REIT P/FFO engine (NI+D&A, gains subtracted once the tag lands) at the
+#        capped covered-median multiple, REPLACING RIM-on-book; REIT_RIM_FLAG retired
+#        for FFO-priced names; negative-book REITs (towers/logistics) become priceable
 # v2.3 — archetype-aware quality (bank dims: ROE level/stability, equity/assets,
 #        ranked among financial peers; standard pools cleaned of gated garbage);
 #        Piotroski n/a for financials/REITs (same validity gate as Altman-Z)
@@ -599,6 +633,16 @@ def main(universe_id=ACTIVE):
     else:
         print("Warranted v2 fit FAILED — engine disabled\n")
 
+    # Phase 1.2 — REIT relative anchor: median covered-REIT P/FFO, capped 8-20x.
+    # Same family as the warranted sector-median (relative engine, disclosed cap);
+    # None below 5 peers -> those universes keep the legacy RIM path.
+    reit_anchor = pffo_anchor([r["price"] / r["ffo_ps"] for r in rows
+                               if r["eff_arch"] == "reit" and (r["ffo_ps"] or 0) > 0])
+    n_reits = sum(1 for r in rows if r["eff_arch"] == "reit")
+    if n_reits:
+        print(f"REIT P/FFO anchor: {'%.1fx' % reit_anchor if reit_anchor else 'n/a (<5 peers - RIM fallback)'}"
+              f" · {n_reits} REITs in universe")
+
     out = []
     tally = {"standard": 0, "financial": 0, "reit": 0}
     rim_only = fcf_routed = 0
@@ -612,6 +656,11 @@ def main(universe_id=ACTIVE):
                      r["debt"], r["shares"], r["dna"], r["capex_now"])
         book_ps, roe, rim_ok = r["book_ps"], r["roe_avg"], r["rim_ok"]
         rim_ps = rim(book_ps, roe, r["re_"], H) if rim_ok else None
+        ffo_val = (reit_anchor * r["ffo_ps"]
+                   if (r["eff_arch"] == "reit" and reit_anchor and (r["ffo_ps"] or 0) > 0)
+                   else None)
+        if ffo_val is not None:
+            rim_ps = None    # FFO REPLACES RIM-on-book (historical-cost book misprices REITs)
         warr_ps = warranted_value(wfit, r["sector"], r["g1"], r["om"] or 0.0,
                                   r["ebit_now"], r["cash"], r["debt"], r["shares"])
         impl, op = reverse_dcf(base_fcf, r["wacc"], term_g, ndebt, r["mcap"], H, S1)
@@ -639,14 +688,14 @@ def main(universe_id=ACTIVE):
         # (current-ratio/leverage/margin signals are meaningless for banks) — n/a,
         # so JPM can never again wear a "Piotroski 2/9" trap flag it didn't earn
         fscore, fn = piotroski(r) if eff_arch == "standard" else (None, 0)
-        tri = triangulate({"DCF": dcf_ps, "RIM": rim_ps, "Warranted": warr_ps},
+        tri = triangulate({"DCF": dcf_ps, "RIM": rim_ps, "Warranted": warr_ps, "FFO": ffo_val},
                           epv_ps, r["price"])
-        flags = trap_flags(r, z, fscore, min_mcap)
+        flags = trap_flags(r, z, fscore, min_mcap, ffo_priced=ffo_val is not None)
         if not tri:
             reason = {"financial": "financial: RIM only, and book value/ROE not usable "
                                     "(negative/buyback-distorted book, or implausible ROE)",
-                      "reit": "reit: unpriceable — needs FFO/NAV; book is negative or "
-                              "historical-cost-distorted and no EV/FCF engine applies"}.get(
+                      "reit": "reit: unpriceable — no positive FFO base (NI+D&A) and "
+                              "book unusable for the RIM fallback"}.get(
                           arch, "no positive FCF/earnings base (GAAP loss-maker)")
             excluded.append((r["t"], reason)); continue
         tally[arch] += 1
@@ -711,7 +760,15 @@ def main(universe_id=ACTIVE):
                  "note": ("book + PV excess ROE · ω 0.62"
                           + (" · the anchor for this archetype" if arch != "standard" else ""))
                          if rim_ps is not None else
-                         "N/A — book value buyback-distorted or ROE implausible"},
+                         ("replaced by P/FFO — historical-cost book misprices REITs"
+                          if ffo_val is not None else
+                          "N/A — book value buyback-distorted or ROE implausible")},
+                *([{"key": "ffo", "name": "P/FFO", "value": _r2(ffo_val),
+                    "applicable": ffo_val is not None,
+                    "note": (f"{r['ffo_basis']} × {reit_anchor:.1f}× covered-REIT median "
+                             f"(capped 8–20×)" if ffo_val is not None else
+                             "no positive FFO base — RIM fallback carries the mid")}]
+                  if eff_arch == "reit" else []),
                 {"key": "epv", "name": "EPV (floor)", "value": _r2(epv_ps),
                  "applicable": epv_ps is not None,
                  "note": GATED_NOTE.get(arch) if not gates["EPV"] else

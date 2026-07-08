@@ -44,6 +44,13 @@ CONCEPTS = {
                     "PaymentsToAcquireOilAndGasProperty"],                    # energy variant
     "dep_amort":   ["DepreciationDepletionAndAmortization", "DepreciationAndAmortization",
                     "DepreciationAmortizationAndAccretionNet", "Depreciation"],
+    # Phase 1.2 — REIT FFO gains adjustment (RE-specific tags only; broad
+    # disposal tags would false-adjust industrials). Lands on next full refresh.
+    "gain_sale":   ["GainsLossesOnSalesOfInvestmentRealEstate",
+                    "GainLossOnSaleOfProperties",
+                    "GainsLossesOnSalesOfRealEstate"],
+    "re_impair":   ["ImpairmentOfRealEstate"],            # FFO adds RE impairments back
+                                                          # (CCI's fiber writedown proved it)
     "sbc":         ["ShareBasedCompensation", "AllocatedShareBasedCompensationExpense"],
     "dividends":   ["PaymentsOfDividendsCommonStock", "PaymentsOfDividends"],
     "equity":      ["StockholdersEquity",
