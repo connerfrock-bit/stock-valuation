@@ -671,3 +671,31 @@ validation (standing rule).
 book for what is really a data/software business; seeded as the first Phase-1.3
 override-table entry. REIT quality uses the interim bank dims until FFO/NAV lands
 (Phase 1.2). Tests 70 → 78 green; share rebuilt.
+
+---
+
+## Phase 1.2 — REIT P/FFO engine: RIM-on-book retired (2026-07-07, v2.4)
+
+**The problem:** all REITs were RIM-priced on historical-cost book — systematically
+wrong for the asset class — and six of the biggest (AMT, CCI, EQIX, IRM, SBAC, SPG:
+negative or distorted book) were unpriceable-excluded entirely.
+
+**The fix (v2.4):** FFO = NI + D&A − property-sale gains + RE impairments (NAREIT
+shape). The gains/impairment tags are wired into the ingest map (RE-specific tags
+only) and land with the next scheduled refresh; until then each name's method note
+discloses its basis (NI+D&A) — never silently mixed. Value = capped covered-median
+P/FFO × FFO/share (8–20×; None under 5 peers → legacy RIM path, e.g. NDX). FFO
+replaces RIM for priced REITs; REIT_RIM_FLAG retired for them (1 legacy holdout).
+
+**Gate (passed):** anchor 15.6× on 31 SPX REITs = 6.4% FFO yield, dead-center of
+historical REIT territory; median REIT upside +1% (a relative engine must center);
+AMT −5%, O −6% read plausibly. Coverage 482 → 488.
+
+**Instructive tails, logged:** SPG +44%/VICI +52% (malls/gaming trade below-median
+street multiples) and EQIX −47% (data centers above) are the flat-anchor artifact —
+same bucket-limitation as TECH in the warranted engine; folded into the Phase-1.3
+override/split work. CCI −47% additionally proved the impairment add-back matters
+(its fiber writedown halves computed FFO) — tag wired, test added for the shape.
+
+Tests 78 → 84 green. AMT deep-dive verified live: P/FFO $156.72 carries the mid at
+100% weight, RIM row reads "replaced by P/FFO", no REIT flag. Share rebuilt.

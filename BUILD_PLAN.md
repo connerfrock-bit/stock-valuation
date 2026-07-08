@@ -252,8 +252,11 @@ Honesty rules: never a single fair value without its range · agreement always b
       JPM/BAC/GS/USB/PNC/PGR match known reality. RIM Re-sensitivity measured: ±100bp Re
       → ∓2.2% mid (ω-fade dominates; book-anchored — documented on the RIM card, ω
       untouched). Discovered: CSGP misrouted reit (GICS) → override-table candidate below.
-- [ ] REIT archetype: FFO/NAV valuation (new tags: D&A add-back, gains) replacing
-      RIM-on-book; retire the REIT_RIM_FLAG. Gate: mids in plausible cap-rate range.
+- [x] **REIT archetype** ✅ (v2.4, 2026-07-07) — P/FFO engine (FFO = NI+D&A−gains
+      +RE-impairments; adjustment tags land next refresh, basis disclosed per name) at
+      the capped covered-median multiple (live: 15.6× = 6.4% FFO yield — gate PASSED).
+      Replaces RIM-on-book; flag retired; AMT/CCI/EQIX/IRM/SBAC/SPG recovered (482→488).
+      Known: flat anchor across sub-sectors → fold into the 1.3 override/split work.
 - [ ] Warranted multiple: split TECH (semis/software/hardware via SIC + override
       table). Gate: ≥8 names per anchor bucket. Override table seed: CSGP (CoStar —
       GICS Real Estate but a data/software business; currently RIM-on-book as a reit).
