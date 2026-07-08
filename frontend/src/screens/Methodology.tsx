@@ -108,6 +108,14 @@ const ENGINES: Engine[] = [
     formula: ['V = Σ PV(Dₜ) + PV(terminal)', 'dividend growth faded to terminal g'],
     gotcha: 'Consciously replaced by the warranted multiple for this universe — too few Nasdaq-100 names pay meaningful dividends.',
   },
+  {
+    name: 'P/FFO', discount: 'relative', bestFor: 'REITs',
+    answers: 'REIT cash earnings at the covered-REIT median multiple — replaces RIM-on-book, whose historical-cost book misprices REITs (and made negative-book towers/logistics unpriceable).',
+    formula: ['FFO = NI + D&A − property-sale gains + RE impairments',
+      'anchor = median covered-REIT P/FFO, capped 8–20×',
+      'Value = anchor × FFO / share'],
+    gotcha: 'One flat anchor across sub-sectors (malls ~12× vs data centers ~20× street) — same known bucket-limitation as TECH in the warranted engine. Gains/impairment tags land at the next data refresh; until then the basis is disclosed per name (NI+D&A).',
+  },
 ];
 
 const UNIVERSES: [string, string, string][] = [
