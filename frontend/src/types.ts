@@ -37,6 +37,7 @@ export interface Company {
   upside: number;
   conf: number;
   within: number;
+  nMethods?: number;              // applicable growth engines (mid); 1 = single-method by design
   impliedGrowth: number | null;
   impliedOp: string | null;
   trailingG: number | null;

@@ -1,4 +1,4 @@
-import { C, MONO, upColor, qColor, confColor, hexA } from '../theme';
+import { C, MONO, upColor, qColor, confColor, hexA, agreement } from '../theme';
 import { fmtPrice, fmtPct, fmtMcapB, na } from '../format';
 import { RangeBar } from '../components/RangeBar';
 import { ConfMeter, BigGauge, RatioBar } from '../components/Meters';
@@ -41,11 +41,12 @@ export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: 
   openDeep: (t: string) => void;
 }) {
   const starred = !!watch[c.ticker];
+  const agree = agreement(c.conf, c.nMethods);
   const verdict =
     (c.upside > 0.04 ? `Undervalued ~${Math.abs(Math.round(c.upside * 100))}% to mid`
       : c.upside < -0.04 ? `Overvalued ~${Math.abs(Math.round(c.upside * 100))}% to mid`
       : 'Fairly valued')
-    + ' · ' + (c.conf >= 4 ? 'high' : c.conf >= 2 ? 'moderate' : 'low') + ' agreement';
+    + ' · ' + (agree.single ? 'single method (by design)' : agree.word + ' agreement');
 
   // ----- reverse-DCF callout -----
   const ig = c.impliedGrowth, tg = c.trailingG;
@@ -79,8 +80,10 @@ export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: 
         d.push(`momentum sits at the ${c.momPct}th percentile — the market is still marking it down`);
       if (c.quality < 48)
         d.push(`quality screens ${c.quality}/100, so part of the discount is earned`);
-      if (c.conf <= 2)
-        d.push(`only ${c.conf}/5 engine agreement — the fair-value range itself is soft`);
+      if (agree.single)
+        d.push(`a single valuation method applies here (by design for this archetype) — there is no cross-engine agreement to lean on, so weight the one method's own caveats`);
+      else if (c.conf <= 2)
+        d.push(`only ${c.conf}/5 engine agreement — the applicable engines disagree, so the fair-value range itself is soft`);
       return {
         tag: 'Bear case:',
         text: d.length
@@ -355,14 +358,21 @@ export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: 
           <div style={{ ...card, padding: '18px 20px' }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: C.sec, marginBottom: 6 }}>Method agreement</div>
             <div style={{ fontSize: 11.5, color: C.dim3, marginBottom: 13 }}>
-              {c.within} of {growthApplicable.length} growth engines within ±10% of mid —{' '}
-              {c.conf >= 4 ? 'high' : c.conf >= 2 ? 'moderate' : 'low'} agreement.
+              {agree.single ? (
+                <>Only <b style={{ color: C.sec }}>{growthApplicable.length === 1 ? growthApplicable[0].name : 'one method'}</b> applies
+                  to this business — the other engines are N/A by design (see the method notes), so there is no
+                  cross-engine agreement to measure. The number rests on that single method's own assumptions.</>
+              ) : (
+                <>{c.within} of {growthApplicable.length} growth engines within ±10% of mid — {agree.word} agreement.</>
+              )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <ConfMeter score={c.conf} size={7} />
-              <span style={{ fontSize: 13, fontWeight: 600, color: confColor(c.conf) }}>
-                {(c.conf >= 4 ? 'High' : c.conf >= 2 ? 'Moderate' : 'Low') + ' · ' + c.conf + '/5'}
-              </span>
+              {agree.single
+                ? <span style={{ fontSize: 13, fontWeight: 600, color: C.mid }}>Single method · by design</span>
+                : <><ConfMeter score={c.conf} size={7} />
+                    <span style={{ fontSize: 13, fontWeight: 600, color: confColor(c.conf) }}>
+                      {agree.word[0].toUpperCase() + agree.word.slice(1) + ' · ' + c.conf + '/5'}
+                    </span></>}
             </div>
           </div>
 

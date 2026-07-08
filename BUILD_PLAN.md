@@ -315,6 +315,21 @@ Honesty rules: never a single fair value without its range · agreement always b
       backtesting stops at SPX (no delisted-price history without CRSP); the forward
       ledger is the broad universe's evidence. Builds on the S&P 1500 plumbing.
 
+### Phase 3.1 — single-method cleanup (triggered by the S&P 1500 widening)
+- [x] **Agreement honesty (presentation)** ✅ (2026-07-08) — diagnosed: single-method
+      names are NOT a data gap (359/380 are financials/REITs single-method BY DESIGN;
+      only 21/1444 standard names, all bad-inputs). `conf` conflated "one method applies"
+      with "engines disagree"; both showed as "2/5 moderate". Fix: emit `nMethods`, add
+      an `agreement()` helper → "single method (by design)" vs honest low/moderate/high.
+      Display-only, no scoring change. Also un-hid genuine disagreement (~900 names now
+      read "low agreement" where they truly diverge). See WORKLOG.
+- [ ] **DDM reactivation (model)** — build a conservative multi-stage DDM (an existing
+      engine, currently hardcoded off) and activate it for dividend-paying archetypes:
+      banks → RIM + DDM, REITs → P/FFO + DDM (299 single-method names pay dividends).
+      Gives them a real 2nd triangulation point. MODEL change → must beat v2.2 in a
+      time-split backtest on NDX/SPX before shipping (standing rule). Watch DDM's
+      growth-sensitivity + crisis dividend cuts; likely a modest triangulation weight.
+
 ### Standing rules
 - No new valuation engines (seven triangulate; an eighth is procrastination).
 - No model change ships without beating v2.2 in a time-split backtest or the ledger.

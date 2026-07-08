@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { C, MONO, upColor } from '../theme';
+import { C, MONO, upColor, agreement } from '../theme';
 import { fmtPrice, fmtPct, fmtMcapB, na } from '../format';
 import { FilterRail } from '../components/FilterRail';
 import { RangeBar } from '../components/RangeBar';
@@ -210,7 +210,11 @@ export function Screener(props: {
                     <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: MONO, fontWeight: 600, color: upColor(c.upside) }}>
                       {fmtPct(c.upside)}
                     </td>
-                    <td style={{ padding: '7px 12px' }}><ConfMeter score={c.conf} /></td>
+                    <td style={{ padding: '7px 12px' }}>
+                      {agreement(c.conf, c.nMethods).single
+                        ? <span style={{ fontFamily: MONO, fontSize: 10.5, color: C.dim }} title="single valuation method applies (by design) — no cross-engine agreement to measure">1 method</span>
+                        : <ConfMeter score={c.conf} />}
+                    </td>
                     <td style={{ padding: '7px 12px', width: 96 }}><QualityGauge q={c.quality} /></td>
                     <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: MONO, fontWeight: 600,
                       color: c.momPct == null ? C.dim : C.sec }}

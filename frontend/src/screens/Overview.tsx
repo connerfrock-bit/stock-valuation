@@ -1,4 +1,4 @@
-import { C, MONO, hexA, sectorColor, upColor, qColor } from '../theme';
+import { C, MONO, hexA, sectorColor, upColor, qColor, agreement } from '../theme';
 import { fmtPrice, fmtPct } from '../format';
 import { useTip } from '../components/Tooltip';
 import { FilterRail } from '../components/FilterRail';
@@ -246,7 +246,9 @@ function Scatter({ list, openDeep }: { list: Company[]; openDeep: (t: string) =>
                   { label: 'Fair (mid)', val: fmtPrice(c.mid), color: '#fff' },
                   { label: 'Upside', val: fmtPct(c.upside), color: upColor(c.upside) },
                   { label: 'Quality', val: String(c.quality), color: qColor(c.quality) },
-                  { label: 'Agreement', val: `${c.conf}/5`, color: C.mid },
+                  agreement(c.conf, c.nMethods).single
+                    ? { label: 'Agreement', val: 'single method', color: C.mid }
+                    : { label: 'Agreement', val: `${c.conf}/5`, color: C.mid },
                 ],
                 foot: c.flags.length ? '⚠ ' + c.flags.join(' · ') : 'No trap flags — clean.',
               });

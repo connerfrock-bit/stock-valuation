@@ -58,5 +58,19 @@ export const upColor = (u: number) => (u > 0.04 ? C.green : u < -0.04 ? C.red : 
 export const qColor = (q: number) => (q >= 70 ? C.green : q >= 48 ? C.amber : C.red);
 export const confColor = (c: number) => (c >= 4 ? C.green : c >= 2 ? C.amber : C.red);
 
+// Honest agreement read. A single applicable engine (REIT→P/FFO, bank→RIM) CANNOT
+// demonstrate agreement — that's "single method, by design", NOT low confidence, and
+// must not be shown as a misleading "2/5". Only score low/moderate/high when >=2
+// growth engines actually triangulate.
+export function agreement(conf: number, nMethods?: number): {
+  word: string; short: string; color: string; single: boolean;
+} {
+  if ((nMethods ?? 2) <= 1)
+    return { word: 'single method', short: '1 method', color: C.mid, single: true };
+  if (conf >= 4) return { word: 'high', short: `${conf}/5`, color: C.green, single: false };
+  if (conf >= 3) return { word: 'moderate', short: `${conf}/5`, color: C.amber, single: false };
+  return { word: 'low', short: `${conf}/5`, color: C.red, single: false };
+}
+
 // Flags matching this pattern render red (distress-type); others amber.
 export const DISTRESS_RE = /distress|cut|Declining|opacity|Negative|Suspect|VIE|Piotroski/;

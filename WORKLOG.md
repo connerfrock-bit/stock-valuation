@@ -896,3 +896,44 @@ hygiene to real work. The S&P 1500 is the gated, ready deliverable; NYSE builds 
 same plumbing when we take it.
 
 Tests 112 → 115 (sp1500 universe config). Frontend prod build + share rebuilt.
+
+---
+
+## Single-method honesty — presentation fix (2026-07-08)
+
+**The complaint (real):** at S&P 1500 scale, many names show a lone valuation method,
+and the UI read that as low confidence ("2/5 agreement"). Investigated: it is NOT a
+data gap. Of 380 single-mid-engine names, **261 are financials (RIM-only) and 98 are
+REITs (P/FFO-only) — single-method BY DESIGN** (DCF/EV-multiples are meaningless for
+balance-sheet businesses); only **21/1444 (1.5%)** are standard names dropping an
+engine, and those are legitimately un-valuable inputs (negative/buyback-distorted
+book), not un-ingested data. Bulk EDGAR coverage is fine.
+
+**Root cause of the bad read:** `triangulate` returns `conf = 2` for BOTH "a single
+engine applies (can't demonstrate agreement)" AND "multiple engines disagree" — the UI
+then labeled everything conf≥2 as "moderate", so a solid single-method REIT looked as
+shaky as a broken standard name, and genuine disagreement was hidden.
+
+**Fix (display-only — no scoring change, no validation burden):**
+- value.py emits `nMethods` (= applicable growth engines) alongside conf.
+- New `agreement(conf, nMethods)` helper: `nMethods≤1` → "single method (by design)"
+  (neutral, not a misleading /5); else conf≥4 high · conf 3 moderate · conf 2 **low**.
+- Applied on the Deep-Dive (subtitle, the "why soft" note, the Method-agreement card
+  now explains "Only RIM applies… N/A by design… no cross-engine agreement to measure"),
+  the scatter tooltip, and the Screener column ("1 method" instead of a 2/5 meter).
+- Verified live: JPM/REITs read "single method (by design)"; AAPL reads "low agreement ·
+  2/5" (0 of 2 engines within ±10% — the honest read the old "moderate" hid).
+
+Side effect worth flagging: ~900 multi-method names now read "low agreement" where they
+used to say "moderate" — because their engines genuinely diverge >10%. That's honest
+information (wide fair-value ranges), not a regression; the underlying divergence is what
+the DDM plan below and future model work address. Tests 115 (unchanged — display-only).
+
+**Queued next (the substance): DDM reactivation.** DDM is one of the seven canonical
+engines but is hardcoded off for every name ("few payers" — true for the NDX, false for
+the S&P 1500 where 299 of the single-method names pay dividends). Banks and REITs are
+dividend machines (REITs must distribute 90% of taxable income). Building a conservative
+multi-stage DDM and activating it for dividend-paying archetypes gives banks RIM+DDM and
+REITs P/FFO+DDM — a real second triangulation point, using an existing engine (not an
+eighth). It is a MODEL change, so per the standing rules it must beat v2.2 in a
+time-split backtest on NDX/SPX before it ships. Scoped as the next plan.

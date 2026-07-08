@@ -789,7 +789,7 @@ def main(universe_id=ACTIVE):
             "negBook": bool(r["equity_now"] is not None and r["equity_now"] < 0),
             "low": round(tri["low"], 2), "mid": round(tri["mid"], 2),
             "high": round(tri["high"], 2), "upside": round(upside, 4),
-            "conf": tri["conf"], "within": tri["within"],
+            "conf": tri["conf"], "within": tri["within"], "nMethods": tri["n"],
             "impliedGrowth": None if impl is None else round(impl, 4),
             "impliedOp": op,
             "trailingG": None if r["g_trail"] is None else round(r["g_trail"], 4),
