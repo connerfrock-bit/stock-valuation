@@ -39,6 +39,13 @@ interface Momentum {
   variants: Record<string, Record<string, MomStat>>;
 }
 
+interface DataQuality {
+  universe: string; generated: string; names: number; no_cik: number; no_facts: number;
+  ingestable: number; core_min: number; core_covered: number; coverage_pct: number;
+  gate_pass: boolean; elapsed_s: number;
+  concepts: { concept: string; have: number; have_pct: number; fallback: number; fallback_pct: number }[];
+}
+
 function EquityCurve({ bt }: { bt: Backtest }) {
   const W = 560, H = 220, pl = 40, pr = 12, pt = 14, pb = 24;
   const pts = bt.curve;
@@ -131,16 +138,23 @@ export function Methodology({ meta }: { meta: Meta }) {
   const [bts, setBts] = useState<Record<string, Backtest | null>>({});
   const [ledgers, setLedgers] = useState<Record<string, Ledger | null>>({});
   const [moms, setMoms] = useState<Record<string, Momentum | null>>({});
+  const [dq, setDq] = useState<DataQuality | null>(null);
   const [uni, setUni] = useState('ndx');
   useEffect(() => {
     const w = window as unknown as { __FV_BT__?: Record<string, Backtest>;
-      __FV_LEDGER__?: Ledger | null; __FV_MOM__?: Record<string, Momentum> };
+      __FV_LEDGER__?: Ledger | null; __FV_MOM__?: Record<string, Momentum>;
+      __FV_DQ__?: DataQuality | null };
     if (w.__FV_BT__) {                                // single-file share build
       setBts(w.__FV_BT__);
       setLedgers({ ndx: w.__FV_LEDGER__ ?? null });   // share embeds the default universe only
       setMoms(w.__FV_MOM__ ?? {});
+      setDq(w.__FV_DQ__ ?? null);
       return;
     }
+    fetch(`${import.meta.env.BASE_URL}data_quality.json`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => setDq(d))
+      .catch(() => {});
     for (const [k, f] of UNIVERSES) {
       fetch(`${import.meta.env.BASE_URL}${f}`)
         .then(r => (r.ok ? r.json() : null))
@@ -552,6 +566,52 @@ export function Methodology({ meta }: { meta: Meta }) {
           ))}
         </div>
       </div>
+
+      {/* data-quality dry run — the S&P 1500 coverage gate for universe expansion */}
+      {dq && (
+        <div style={{ ...card, padding: '18px 20px', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.sec }}>
+              Data-quality dry run <span style={{ fontSize: 10, color: C.dim, fontWeight: 400 }}>bulk-EDGAR coverage on the broad S&amp;P 1500 — the universe-expansion gate</span>
+            </div>
+            <span style={{
+              fontFamily: MONO, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 6,
+              color: dq.gate_pass ? C.green : C.red,
+              background: hexA(dq.gate_pass ? C.green : C.red, 0.13),
+            }}>{dq.gate_pass ? 'GATE PASS' : 'GATE FAIL'}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap', margin: '10px 0 4px' }}>
+            {[
+              [`${dq.coverage_pct}%`, `coverage (≥${dq.core_min}/25 concepts)`],
+              [`${dq.core_covered} / ${dq.names}`, 'names covered'],
+              [`${dq.ingestable}`, 'ingestable (CIK + facts)'],
+              [`${dq.elapsed_s}s`, 'bulk ingest time'],
+            ].map(([v, l]) => (
+              <div key={l}>
+                <div style={{ fontFamily: MONO, fontSize: 18, fontWeight: 600, color: C.sec }}>{v}</div>
+                <div style={{ fontSize: 10, color: C.dim, marginTop: 2 }}>{l}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: C.dim3, lineHeight: 1.7, marginTop: 8 }}>
+            Where a concept leans on a non-primary XBRL tag — the seams that widen on smaller filers:
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+            {[...dq.concepts].filter(c => c.have >= 50).sort((a, b) => b.fallback_pct - a.fallback_pct).slice(0, 6).map(c => (
+              <div key={c.concept} style={{ background: C.chrome, border: `1px solid ${C.border}`, borderRadius: 7, padding: '7px 11px' }}>
+                <div style={{ fontFamily: MONO, fontSize: 11.5, color: C.mid, fontWeight: 600 }}>{c.concept}</div>
+                <div style={{ fontSize: 10, color: C.dim, marginTop: 3 }}>
+                  <span style={{ color: c.fallback_pct > 50 ? C.amber : C.dim3 }}>{c.fallback_pct}% fallback</span> · {c.have_pct}% present
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 10, color: C.dim, marginTop: 10, lineHeight: 1.6 }}>
+            {dq.names} names measured in {dq.elapsed_s}s via one nightly download (was ~5h of throttled per-ticker calls).
+            Coverage counts raw concept presence; the live board applies stricter per-name value gates. {dq.no_cik} no-CIK · {dq.no_facts} no-facts. Generated {dq.generated}.
+          </div>
+        </div>
+      )}
 
       {/* excluded */}
       <div style={{ ...card, padding: '18px 20px' }}>

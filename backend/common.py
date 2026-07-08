@@ -1,5 +1,5 @@
 """Shared helpers for the valuation engines (stdlib only)."""
-import sqlite3, sys, tomllib, urllib.request
+import json, sqlite3, sys, time, tomllib, urllib.error, urllib.request
 from pathlib import Path
 
 try:                              # Windows console is cp1252; our output uses β → · –
@@ -13,6 +13,8 @@ _TOML      = tomllib.load(open(BASE / "assumptions.toml", "rb"))
 CFG        = _TOML["global"]
 # L5/L6 manual overrides (Phase 1.3): {"archetype": {ticker: arch}, "subsector": {ticker: bucket}}
 OVERRIDES  = _TOML.get("overrides", {})
+# SIC → subsector default layer (Phase 2): fires for IT names with no hand-map entry.
+SUBSECTOR_BY_SIC = _TOML.get("subsector_by_sic", {})
 
 # Live-screener universes (Plan A). [[universe]] array keyed by id; ACTIVE is the default
 # for the bare output.json/ledger.json artifacts.
@@ -27,12 +29,33 @@ def resolve_universe(uid):
 UCFG       = resolve_universe(ACTIVE)                 # back-compat: the active universe's config
 BROWSER_UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                             "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"}
+SEC_UA     = {"User-Agent": "FairValue research conner.frock@gmail.com"}  # SEC requires a descriptive UA
 
 
 def http_text(url, timeout=15):
     req = urllib.request.Request(url, headers=BROWSER_UA)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read().decode("utf-8", "replace")
+
+
+def http_json(url, headers=None, timeout=25, retries=4):
+    """GET JSON with exponential backoff on throttling/transient errors. At universe
+       scale (~500 names) EDGAR intermittently 429s a contiguous burst — without a
+       retry those names silently vanished from the screener."""
+    headers = headers or SEC_UA
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 503, 502, 504) and attempt < retries - 1:
+                time.sleep(1.5 * (2 ** attempt)); continue
+            raise
+        except (urllib.error.URLError, TimeoutError):
+            if attempt < retries - 1:
+                time.sleep(1.5 * (2 ** attempt)); continue
+            raise
 
 
 def fetch_risk_free(retries=3):

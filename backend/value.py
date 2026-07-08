@@ -8,9 +8,9 @@ Two passes: (1) load + derive inputs for every company, (2) cross-sectional cont
 ranked output + data/output.json (the Company contract the dashboard binds to).
 stdlib only.  Run after ingest_v1.py and betas.py:   python value.py
 """
-import datetime, json, sqlite3, statistics, sys
-from common import (CFG, OVERRIDES, UNIVERSES, ACTIVE, resolve_universe, DB_PATH,
-                    fetch_risk_free, load_company, latest, cagr, avg_margin, avg_roe,
+import datetime, json, re, sqlite3, statistics, sys
+from common import (CFG, OVERRIDES, SUBSECTOR_BY_SIC, UNIVERSES, ACTIVE, resolve_universe,
+                    DB_PATH, fetch_risk_free, load_company, latest, cagr, avg_margin, avg_roe,
                     effective_tax, roe_stability, equity_to_assets, cost_of_debt,
                     money, pct)
 from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim,
@@ -108,12 +108,17 @@ def collect(con, rf, erp, tax_fallback, betas, universe_id):
     today = datetime.date.today()
     has_now = bool(con.execute(
         "SELECT name FROM sqlite_master WHERE name='financials_now'").fetchone())
+    if "sic" not in [r[1] for r in con.execute("PRAGMA table_info(companies)")]:
+        con.execute("ALTER TABLE companies ADD COLUMN sic TEXT")   # pre-Phase-2 DB
     rows, excluded = [], []
     for t in universe_tickers(con, universe_id):
         name, price, f = load_company(con, t)
-        sector, shares_out, fin_ccy, cik = con.execute(
-            "SELECT sector, shares_out, fin_currency, cik FROM companies WHERE ticker=?",
+        sector, shares_out, fin_ccy, cik, sic = con.execute(
+            "SELECT sector, shares_out, fin_currency, cik, sic FROM companies WHERE ticker=?",
             (t,)).fetchone()
+        hy = hygiene_reason(t, name, price, sic)           # L0: instrument/shell/penny → visible exclude
+        if hy:
+            excluded.append((t, hy)); continue
         arch = OVERRIDES.get("archetype", {}).get(t) or archetype_of(sector)
         rev = f.get("revenue", {})
         shares = shares_out or latest(f.get("shares", {}))
@@ -198,6 +203,7 @@ def collect(con, rf, erp, tax_fallback, betas, universe_id):
 
         rows.append(dict(
             t=t, name=name, sector=sector, arch=arch, fin_ccy=fin_ccy or "USD", cik=cik,
+            sic=sic or "",
             price=price, shares=shares, mcap=mcap,
             beta=beta, re_=re_, wacc=wacc, rev=rev, rev_now=rev_now,
             fcf_norm=fcf_norm, fcf_last=fcf_last, fcf_margin=fcf_margin,
@@ -333,16 +339,54 @@ def pffo_anchor(pffos, lo=8.0, hi=20.0, min_n=5):
     return min(max(m, lo), hi)
 
 
+# ---- L0 hygiene (Phase 2): non-common / shell / penny exclusions, always with a
+# reason (honesty law: never silently dropped). Precise by design — the current
+# large-cap universes trip none of these; the rules are the gate for the broad
+# S&P 1500 / NYSE universes where units, warrants, preferreds and SPAC shells live.
+SPAC_SIC = {"6770"}                                        # blank-check / SPAC shells
+_INSTRUMENT_NAME = re.compile(
+    r"\b(WARRANTS?|RIGHTS?|PREFERRED|DEPOSITARY|SUBORDINATED\s+NOTES?)\b", re.I)
+
+
+def hygiene_reason(ticker, name, price, sic):
+    """L0 exclusion reason for a non-investable line, or None. Kept high-precision:
+       SIC 6770 (SPAC), sub-$1 price, and instrument-class names (warrant/right/
+       preferred/depositary). Ticker-suffix guessing (…W/…U) is deliberately avoided —
+       too many real tickers end in W/U (Wayfair, Unity) to classify safely."""
+    if price is not None and 0 < price < 1.0:
+        return "sub-$1 share price (L0 hygiene)"
+    if (sic or "") in SPAC_SIC:
+        return "SPAC / blank-check shell (SIC 6770)"
+    if name and _INSTRUMENT_NAME.search(name):
+        return "non-common instrument (warrant/right/preferred)"
+    return None
+
+
+def _resolved_bucket(r, sub_ovr):
+    """override > SIC map > GICS sector (Phase 2). The SIC default fires only for
+       Information-Technology names (the split lives inside IT) with no hand-map entry —
+       elsewhere SIC stays silent so a stray code can't pull a non-IT name into a tech
+       bucket."""
+    if r["t"] in sub_ovr:
+        return sub_ovr[r["t"]]
+    if r["sector"] == "Information Technology":
+        b = SUBSECTOR_BY_SIC.get(r.get("sic") or "")
+        if b:
+            return b
+    return r["sector"]
+
+
 def assign_buckets(rows, sub_ovr, fit_ok, min_bucket=8):
-    """Warranted-anchor bucket per row: subsector override else GICS sector, with
-       split buckets under `min_bucket` FITTED names rolled back to the parent
-       sector (a 4-name anchor is noise wearing a median). Sets r['wbucket']."""
+    """Warranted-anchor bucket per row: override > SIC > GICS sector, with split
+       buckets under `min_bucket` FITTED names rolled back to the parent sector
+       (a 4-name anchor is noise wearing a median). Sets r['wbucket']."""
     from collections import Counter
-    n = Counter(sub_ovr.get(r["t"], r["sector"]) for r in rows if fit_ok(r))
+    n = Counter(_resolved_bucket(r, sub_ovr) for r in rows if fit_ok(r))
     for r in rows:
-        b = sub_ovr.get(r["t"], r["sector"])
+        b = _resolved_bucket(r, sub_ovr)
         r["wbucket"] = b if (b == r["sector"] or n[b] >= min_bucket) else r["sector"]
-    return {b: c for b, c in n.items() if any(sub_ovr.get(r["t"]) == b for r in rows)}
+    return {b: c for b, c in n.items() if b not in
+            {r["sector"] for r in rows}}                   # report only the split sub-buckets
 
 
 ADR_STRUCTURE_RISK = {"PDD"}          # VIE/ADR structures the numbers can't see

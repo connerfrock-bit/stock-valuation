@@ -40,13 +40,17 @@ def parse_date(s):
     return date(int(m.group(3)), MONTHS[m.group(1)], int(m.group(2)))
 
 
-def parse_changes(tables, min_rows=50):
-    best, changes = 0, []
+def parse_changes(tables, min_rows=50, names=None):
+    """-> sorted [(date, add_ticker, rem_ticker)]. When `names` (a dict) is passed,
+       also harvests ticker→security-name from the cell adjacent to each ticker —
+       the ONLY place a since-delisted member's company name survives (used later to
+       name-match a dead ticker back to its CIK via the bulk filers table)."""
+    best, changes, best_names = 0, [], {}
     for tbl in tables:
         rows = [r for r in tbl if r]
         if len(rows) < min_rows:
             continue
-        out, cur_date = [], None
+        out, cur_date, tbl_names = [], None, {}
         for r in rows:
             cells = [c.strip() for c in r]
             d = parse_date(cells[0]) if cells else None
@@ -62,10 +66,19 @@ def parse_changes(tables, min_rows=50):
                     add = c
                 elif rem is None and i >= 1:
                     rem = c
+            # security name = the first non-ticker text cell right after the ticker
+            for tk, idx in ((add, next((i for i, c in ticks if c == add), None)),
+                            (rem, next((i for i, c in ticks if c == rem), None))):
+                if tk and idx is not None and idx + 1 < len(cells):
+                    nm = cells[idx + 1]
+                    if nm and not TICK_RE.match(nm) and len(nm) > 2:
+                        tbl_names.setdefault(norm(tk), nm)
             if add or rem:
                 out.append((cur_date, add, rem))
         if len(out) > best:
-            best, changes = len(out), out
+            best, changes, best_names = len(out), out, tbl_names
+    if names is not None:
+        names.update(best_names)
     return sorted(changes, key=lambda x: x[0], reverse=True)
 
 
@@ -93,14 +106,15 @@ def quarter_ends(start_year=2012, end=None):        # Plan B: 2015 → 2012 (XBR
 
 
 def load_universe(key):
-    """-> (current member set, {ticker: sector}, changes list, table suffix)."""
+    """-> (current member set, {ticker: sector}, changes list, table suffix, source, names)."""
     if key == "ndx":
         current, src = get_universe()
         members = {norm(t) for t, _, _ in current} - DUP_CLASSES
         sectors = {norm(t): s for t, _, s in current}
+        names = {norm(t): nm for t, nm, _ in current}     # current members' names (free)
         html = http_text("https://en.wikipedia.org/wiki/Nasdaq-100", timeout=25)
         p = _Tables(); p.feed(html)
-        return members, sectors, parse_changes(p.tables), "", src
+        return members, sectors, parse_changes(p.tables, names=names), "", src, names
     if key == "sp500":
         html = http_text("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies", timeout=25)
         p = _Tables(); p.feed(html)
@@ -109,12 +123,19 @@ def load_universe(key):
             raise SystemExit(f"S&P constituents parse failed ({len(cur)} rows)")
         members = {norm(t) for t, _ in cur} - DUP_CLASSES
         sectors = {norm(t): s for t, s in cur}
-        return members, sectors, parse_changes(p.tables), "_sp500", "Wikipedia (live)"
+        names = {}                                         # sp500_current carries no names;
+        from universe import sp500_constituents           # pull them from the components list
+        try:
+            for t, nm, _ in sp500_constituents()[0]:
+                names[norm(t)] = nm
+        except Exception:
+            pass
+        return members, sectors, parse_changes(p.tables, names=names), "_sp500", "Wikipedia (live)", names
     raise SystemExit(f"unknown universe {key!r}")
 
 
 def main(key):
-    members, sectors, changes, suf, src = load_universe(key)
+    members, sectors, changes, suf, src, names = load_universe(key)
     print(f"[{key}] current members: {len(members)} [{src}]")
     print(f"[{key}] parsed {len(changes)} changes ({changes[-1][0]} → {changes[0][0]})")
 
@@ -160,13 +181,20 @@ def main(key):
     CREATE TABLE membership{suf}(qdate TEXT, ticker TEXT, PRIMARY KEY (qdate, ticker));
     DROP TABLE IF EXISTS sectors{suf};
     CREATE TABLE sectors{suf}(ticker TEXT PRIMARY KEY, sector TEXT);
+    CREATE TABLE IF NOT EXISTS member_names(ticker TEXT PRIMARY KEY, name TEXT);
     """)
     for q, s in snaps.items():
         con.executemany(f"INSERT INTO membership{suf} VALUES (?,?)",
                         [(q.isoformat(), t) for t in sorted(s)])
     con.executemany(f"INSERT OR REPLACE INTO sectors{suf} VALUES (?,?)",
                     list(sectors.items()))
+    # ticker→name for BOTH universes (shared table): current members + change-table
+    # securities — the recovery key for delisted members in pit.py
+    con.executemany("INSERT OR REPLACE INTO member_names VALUES (?,?)",
+                    [(t, nm) for t, nm in names.items() if nm])
     con.commit()
+    print(f"[{key}] member_names: {len(names)} ticker→name mappings "
+          f"({sum(1 for t in snaps[max(snaps)] if t not in members)} past members in latest snap)")
 
     all_names = sorted({t for s in snaps.values() for t in s})
     print(f"[{key}] snapshots: {len(snaps)} ({min(snaps)} → {max(snaps)}); "

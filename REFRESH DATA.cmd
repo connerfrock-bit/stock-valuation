@@ -4,43 +4,57 @@ rem /auto = headless (scheduled task): skip the pauses so the run can end itself
 if /I "%~1"=="/auto" set FV_AUTO=1
 cd /d "C:\Users\conne\Desktop\stock valuation project\backend"
 echo ============================================================
-echo  Fair Value - full data refresh (union of Nasdaq-100 + S&P 500, ~25 min)
-echo  1) EDGAR financials + prices   2) share-count cross-check
-echo  3) betas    4) valuation engines (both universes)   5) forward ledgers
+echo  Fair Value - full data refresh (union of Nasdaq-100 + S&P 500)
+echo  0) bulk EDGAR download + filers scan   1) financials + prices
+echo  2) share cross-check   3) betas   4) engines   5) ledgers
+echo  6) momentum   7) S&P 1500 data-quality gate
 echo ============================================================
 echo.
 
-echo [1/5] Ingesting EDGAR financials + prices for the union (~15 min)...
+echo [0/7] Refreshing bulk EDGAR zips (conditional) + filers scan...
+echo   (one ~2.9GB nightly download replaces ~500 throttled per-ticker calls;
+echo    If-Modified-Since skips it when SEC has not rebuilt since last run)
+python bulk.py download
+if errorlevel 1 goto :fail
+python bulk.py scan
+if errorlevel 1 goto :fail
+
+echo.
+echo [1/7] Ingesting EDGAR financials + prices for the union (~2 min from the zip)...
 python ingest_v1.py
 if errorlevel 1 goto :fail
-echo   (backfilling any names EDGAR throttled...)
+echo   (backfilling any names EDGAR throttled / newer than the nightly zip...)
 python ingest_v1.py --resume
 if errorlevel 1 goto :fail
 
 echo.
-echo [2/5] Cross-checking share counts vs Yahoo...
+echo [2/7] Cross-checking share counts vs Yahoo...
 python sanity.py
 if errorlevel 1 goto :fail
 
 echo.
-echo [3/5] Computing betas (~8 min)...
+echo [3/7] Computing betas (~8 min)...
 python betas.py
 if errorlevel 1 goto :fail
 
 echo.
-echo [4/5] Running valuation engines for every universe...
+echo [4/7] Running valuation engines for every universe...
 python value.py all
 if errorlevel 1 goto :fail
 
 echo.
-echo [5/6] Updating the forward paper-trading ledgers...
+echo [5/7] Updating the forward paper-trading ledgers...
 python ledger.py all
 if errorlevel 1 goto :fail
 
 echo.
-echo [6/6] Refreshing the momentum factor study...
+echo [6/7] Refreshing the momentum factor study...
 python momentum.py
 python momentum.py sp500
+
+echo.
+echo [7/7] Data-quality dry run (S&P 1500 coverage gate for universe expansion)...
+python dataquality.py sp1500
 
 echo.
 echo ============================================================

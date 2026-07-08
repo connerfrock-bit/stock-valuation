@@ -12,6 +12,7 @@ import json, sqlite3, time, urllib.request, urllib.error
 from pathlib import Path
 from universe import get_universe, build_union
 from common import UNIVERSES
+import bulk
 
 CONTACT   = "FairValue research conner.frock@gmail.com"   # SEC requires a descriptive UA
 SEC_UA    = {"User-Agent": CONTACT}
@@ -367,13 +368,16 @@ def current_shares(facts):
     return val
 
 
-def fetch_financials(cik):
-    """-> (annual concept series in USD, shares_now, reporting currency).
+def fetch_financials(cik, facts_doc=None):
+    """-> (annual concept series in USD, shares_now, reporting currency, now-dict).
        us-gaap namespace first (covers ARM/ASML/PDD 20-F filers too); true IFRS filers
        (TRI/CCEP/FER) fall through to the ifrs-full map. Non-USD reporters are converted
-       to USD at today's spot — an approximation, disclosed via the currency field."""
-    data = http_json(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json", SEC_UA)
-    facts = data.get("facts", {})
+       to USD at today's spot — an approximation, disclosed via the currency field.
+       facts_doc: pre-loaded companyfacts from the bulk zip (Phase 2); when None we hit
+       the per-ticker EDGAR API (unchanged path — a registrant newer than the nightly)."""
+    if facts_doc is None:
+        facts_doc = http_json(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json", SEC_UA)
+    facts = facts_doc.get("facts", {})
     out, ccy, win = {}, None, None
     for ns_name, cmap in [("us-gaap", CONCEPTS), ("ifrs-full", IFRS_CONCEPTS)]:
         ns = facts.get(ns_name, {})
@@ -420,7 +424,8 @@ def init_db(con):
     DROP TABLE IF EXISTS financials_now;          -- TTM flows + freshest instants (Plan 5)
     CREATE TABLE companies(
         ticker TEXT PRIMARY KEY, name TEXT, cik TEXT, sector TEXT,
-        price REAL, currency TEXT, shares_out REAL, fin_currency TEXT, updated TEXT);
+        price REAL, currency TEXT, shares_out REAL, fin_currency TEXT, updated TEXT,
+        sic TEXT);                                -- SIC code (bulk submissions) → hygiene + subsector
     CREATE TABLE financials(
         ticker TEXT, fiscal_year INTEGER, concept TEXT, value REAL,
         PRIMARY KEY (ticker, fiscal_year, concept));
@@ -479,8 +484,15 @@ def coverage_check(con, now, warn_drop=0.05, universe="ALL"):
 
 def main(universe_ids=None, resume=False):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    cikmap = load_ticker_map()
     con = sqlite3.connect(DB_PATH)
+    use_bulk = bulk.zips_present()
+    # bulk ticker→CIK (filers scan ∪ company_tickers.json) when the zips are here,
+    # else the classic current-only map. The bulk map also carries delisted registrants.
+    cikmap = bulk.ticker_cik_map(con) if use_bulk else load_ticker_map()
+    if use_bulk:
+        print(f"BULK MODE — facts from {bulk.FACTS_ZIP.name} (local reads, no EDGAR throttle)")
+    else:
+        print("API MODE — per-ticker EDGAR calls (run `python bulk.py download` for the fast path)")
     if not resume:
         init_db(con)                                      # full rebuild (schema may evolve)
     else:
@@ -506,7 +518,8 @@ def main(universe_ids=None, resume=False):
             c = cikmap.get(tk)
             if c:
                 seen_ciks.add(c)
-    ok = full = 0
+    ok = full = n_zip = n_api = 0
+    t0 = time.time()
     for i, (ticker, name, sector) in enumerate(universe, 1):
         cik = cikmap.get(ticker)
         if not cik:
@@ -516,17 +529,24 @@ def main(universe_ids=None, resume=False):
         if cik in seen_ciks:
             print(f"[{i:3}/{n}] {ticker:6} duplicate share class — skipped"); continue
         seen_ciks.add(cik)
+        facts_doc = bulk.facts_json(cik) if use_bulk else None
         try:
-            fins, shares_now, fin_ccy, nowd = fetch_financials(cik); time.sleep(0.25)  # polite to EDGAR
+            fins, shares_now, fin_ccy, nowd = fetch_financials(cik, facts_doc)
+            if facts_doc is None:                          # only sleep when we hit the network
+                time.sleep(0.25); n_api += 1               # (API fallback / non-bulk run)
+            else:
+                n_zip += 1
         except Exception as e:
             print(f"[{i:3}/{n}] {ticker:6} EDGAR FAILED {type(e).__name__}"); continue
         try:
             price, ccy = fetch_price(ticker)
         except Exception:
             price, ccy = None, None
+        sub = bulk.submission_header(cik) if use_bulk else None
+        sic = str(sub.get("sic") or "") if sub else ""
 
-        con.execute("INSERT OR REPLACE INTO companies VALUES (?,?,?,?,?,?,?,?,?)",
-                    (ticker, name, cik, sector, price, ccy, shares_now, fin_ccy, now))
+        con.execute("INSERT OR REPLACE INTO companies VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (ticker, name, cik, sector, price, ccy, shares_now, fin_ccy, now, sic))
         rows = [(ticker, fy, c, float(v))
                 for c, s in fins.items() for fy, v in s.items() if v is not None]
         con.executemany("INSERT OR REPLACE INTO financials VALUES (?,?,?,?)", rows)
@@ -554,9 +574,13 @@ def main(universe_ids=None, resume=False):
     per_uni = {u: sum(1 for us in ingested.values() if u in us) for u in universe_ids}
 
     total = con.execute("SELECT COUNT(*) FROM financials").fetchone()[0]
+    dt = max(time.time() - t0, 1e-6)
     print(f"\nIngested {ok}/{n} companies ({full} with ≥15/{len(CONCEPTS)} coverage); {total} datapoints → {DB_PATH}")
+    print(f"Facts source: {n_zip} from bulk zip · {n_api} from EDGAR API · "
+          f"{dt:.0f}s ({n/dt:.1f} names/s)")
     print(f"Live membership: " + " · ".join(f"{u}={c}" for u, c in per_uni.items()))
     coverage_check(con, now)
+    bulk.close()
     con.close()
 
 

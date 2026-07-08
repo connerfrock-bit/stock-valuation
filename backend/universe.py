@@ -119,10 +119,11 @@ GICS = {"Information Technology", "Communication Services", "Consumer Discretion
 SP500_CACHE = CACHE.parent / "universe_cache_sp500.json"
 
 
-def sp500_from_wikipedia():
-    """[(ticker, name, GICS-sector)] from the live S&P 500 components table.
-       Columns: Symbol · Security · GICS Sector · … — identified by a GICS sector cell."""
-    html = http_text("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies", timeout=25)
+def _sp_from_wikipedia(url):
+    """[(ticker, name, GICS-sector)] from any S&P components table (500/400/600 share
+       the same shape). Columns: Symbol · Security · GICS Sector · … — identified by a
+       GICS sector cell; the company name is the column right after the Symbol."""
+    html = http_text(url, timeout=25)
     p = _Tables(); p.feed(html)
     best = []
     for tbl in p.tables:
@@ -135,7 +136,6 @@ def sp500_from_wikipedia():
             if ti is None or not sec:
                 continue
             tick = cells[ti]
-            # Security (company name) is the column immediately after the Symbol column
             name = cells[ti + 1] if ti + 1 < len(cells) and cells[ti + 1] != sec else tick
             out.append((tick.replace(".", "-"), name, sec))
         if len(out) > len(best):
@@ -143,44 +143,64 @@ def sp500_from_wikipedia():
     return best
 
 
-def sp500_constituents():
-    """Live S&P 500 with a cache fallback + churn guard (mirrors get_universe honesty)."""
+def sp500_from_wikipedia():
+    return _sp_from_wikipedia("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies")
+
+
+# S&P components: (Wikipedia URL, minimum plausible parse count, cache file). The
+# 400/600 pages share the S&P 500 table shape, so one parser serves all three.
+SP_INDEXES = {
+    "sp500": ("https://en.wikipedia.org/wiki/List_of_S%26P_500_companies", 450, SP500_CACHE),
+    "sp400": ("https://en.wikipedia.org/wiki/List_of_S%26P_400_companies", 350,
+              CACHE.parent / "universe_cache_sp400.json"),
+    "sp600": ("https://en.wikipedia.org/wiki/List_of_S%26P_600_companies", 550,
+              CACHE.parent / "universe_cache_sp600.json"),
+}
+
+
+def _sp_constituents(uid):
+    """Live S&P 400/500/600 with a cache fallback + churn guard (get_universe honesty)."""
+    url, floor, cache_path = SP_INDEXES[uid]
     cached = None
-    if SP500_CACHE.exists():
+    if cache_path.exists():
         try:
-            cached = json.loads(SP500_CACHE.read_text(encoding="utf-8"))
+            cached = json.loads(cache_path.read_text(encoding="utf-8"))
         except Exception:
             cached = None
     u = []
     try:
-        u = sp500_from_wikipedia()
+        u = _sp_from_wikipedia(url)
     except Exception as e:
-        print(f"  ! S&P 500 fetch failed ({e!r})")
-    if len(u) >= 450:
+        print(f"  ! {uid} fetch failed ({e!r})")
+    if len(u) >= floor:
         if cached:
             churn = {t for t, _, _ in cached["names"]} ^ {t for t, _, _ in u}
             if len(churn) > max(20, len(cached["names"]) // 10):
-                print(f"  ⚠ S&P 500 churn vs cache {cached['date']}: {len(churn)} names — verify parse")
-        SP500_CACHE.write_text(json.dumps({"date": time.strftime("%Y-%m-%d"), "names": u}),
-                               encoding="utf-8")
+                print(f"  ⚠ {uid} churn vs cache {cached['date']}: {len(churn)} names — verify parse")
+        cache_path.write_text(json.dumps({"date": time.strftime("%Y-%m-%d"), "names": u}),
+                              encoding="utf-8")
         return u, "Wikipedia (live)"
-    if cached and len(cached.get("names", [])) >= 450:
+    if cached and len(cached.get("names", [])) >= floor:
         return [tuple(x) for x in cached["names"]], f"cache ({cached['date']})"
-    raise SystemExit("S&P 500 constituents unavailable (no live parse, no cache)")
+    raise SystemExit(f"{uid} constituents unavailable (no live parse, no cache)")
+
+
+def sp500_constituents():
+    return _sp_constituents("sp500")
 
 
 def load_constituents(uid):
     """Dispatch by universe id -> ([(ticker, name, sector)], source)."""
     if uid == "ndx":
         return get_universe()
-    if uid == "sp500":
-        return sp500_constituents()
+    if uid in SP_INDEXES:
+        return _sp_constituents(uid)
     raise SystemExit(f"unknown universe id {uid!r}")
 
 
 # Universes whose sector column is authoritative GICS (vs the Nasdaq page's coarse ICB
 # mapping, which mislabels e.g. PayPal as Industrials). GICS wins for overlap names.
-GICS_SOURCES = {"sp500"}
+GICS_SOURCES = {"sp500", "sp400", "sp600"}
 
 
 def build_union(uids):

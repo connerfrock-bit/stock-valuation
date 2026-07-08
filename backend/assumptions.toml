@@ -134,3 +134,26 @@ TEL = "hardware"
 TRMB = "hardware"
 WDC = "hardware"
 ZBRA = "hardware"
+
+# ---------------------------------------------------------------------------
+# SIC → subsector DEFAULT layer (Phase 2, from bulk submissions.zip). Fires only
+# for Information-Technology names with NO hand-map override — the precedence is
+# override > SIC > sector. Deliberately HIGH-PRECISION: only SIC codes that map
+# to exactly ONE bucket in the 78-name hand-map are listed. Conflicting/parent
+# codes (3663 QCOM-semis vs MSI-hardware; 3577 FTNT-software vs storage-hardware;
+# 3823/3827 mixed) are OMITTED on purpose — SIC stays silent and the name falls
+# through to its GICS sector rather than risk a wrong bucket. Standalone SIC
+# reproduces the hand-map for ~78% of mapped names; the hand-map keeps the rest.
+[subsector_by_sic]
+"3674" = "semis"      # Semiconductors & Related Devices
+"3559" = "semis"      # Semiconductor manufacturing equipment (ASML, LRCX)
+"7372" = "software"   # Prepackaged Software
+"7371" = "software"   # Computer Programming Services
+"7370" = "software"   # Computer Programming / Data Processing
+"7374" = "software"   # Computer Processing & Data Preparation
+"3571" = "hardware"   # Electronic Computers
+"3572" = "hardware"   # Computer Storage Devices
+"3576" = "hardware"   # Computer Communications Equipment
+"3570" = "hardware"   # Computer & Office Equipment
+"3672" = "hardware"   # Printed Circuit Boards
+"3678" = "hardware"   # Electronic Connectors
