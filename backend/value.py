@@ -9,9 +9,10 @@ ranked output + data/output.json (the Company contract the dashboard binds to).
 stdlib only.  Run after ingest_v1.py and betas.py:   python value.py
 """
 import datetime, json, sqlite3, statistics, sys
-from common import (CFG, UNIVERSES, ACTIVE, resolve_universe, DB_PATH, fetch_risk_free,
-                    load_company, latest, cagr, avg_margin, avg_roe, effective_tax,
-                    roe_stability, equity_to_assets, cost_of_debt, money, pct)
+from common import (CFG, OVERRIDES, UNIVERSES, ACTIVE, resolve_universe, DB_PATH,
+                    fetch_risk_free, load_company, latest, cagr, avg_margin, avg_roe,
+                    effective_tax, roe_stability, equity_to_assets, cost_of_debt,
+                    money, pct)
 from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim,
                      warranted_fit, warranted_value, triangulate, CENTRAL_WEIGHTS)
 
@@ -113,7 +114,7 @@ def collect(con, rf, erp, tax_fallback, betas, universe_id):
         sector, shares_out, fin_ccy, cik = con.execute(
             "SELECT sector, shares_out, fin_currency, cik FROM companies WHERE ticker=?",
             (t,)).fetchone()
-        arch = archetype_of(sector)
+        arch = OVERRIDES.get("archetype", {}).get(t) or archetype_of(sector)
         rev = f.get("revenue", {})
         shares = shares_out or latest(f.get("shares", {}))
         cfo_s, cap_s, sbc_s = f.get("cfo", {}), f.get("capex", {}), f.get("sbc", {})
@@ -332,6 +333,18 @@ def pffo_anchor(pffos, lo=8.0, hi=20.0, min_n=5):
     return min(max(m, lo), hi)
 
 
+def assign_buckets(rows, sub_ovr, fit_ok, min_bucket=8):
+    """Warranted-anchor bucket per row: subsector override else GICS sector, with
+       split buckets under `min_bucket` FITTED names rolled back to the parent
+       sector (a 4-name anchor is noise wearing a median). Sets r['wbucket']."""
+    from collections import Counter
+    n = Counter(sub_ovr.get(r["t"], r["sector"]) for r in rows if fit_ok(r))
+    for r in rows:
+        b = sub_ovr.get(r["t"], r["sector"])
+        r["wbucket"] = b if (b == r["sector"] or n[b] >= min_bucket) else r["sector"]
+    return {b: c for b, c in n.items() if any(sub_ovr.get(r["t"]) == b for r in rows)}
+
+
 ADR_STRUCTURE_RISK = {"PDD"}          # VIE/ADR structures the numbers can't see
 REIT_RIM_FLAG = "REIT: RIM on book, not FFO/NAV"
 # shown but NOT score-penalized — characteristics/disclosures, not traps
@@ -453,7 +466,10 @@ def trap_flags(r, z=None, fscore=None, min_mcap=0.0, ffo_priced=False):
 
 
 # ---------------- snapshot history (append-only) ----------------
-MODEL_VERSION = "v2.4"        # frozen model tag — bump whenever scoring/engine logic changes
+MODEL_VERSION = "v2.5"        # frozen model tag — bump whenever scoring/engine logic changes
+# v2.5 — warranted TECH split (semis/software/hardware hand-map, >=8-name buckets,
+#        rollup to sector below that) + manual override table (assumptions.toml):
+#        CSGP archetype-corrected standard (was REIT-routed by GICS)
 # v2.4 — REIT P/FFO engine (NI+D&A, gains subtracted once the tag lands) at the
 #        capped covered-median multiple, REPLACING RIM-on-book; REIT_RIM_FLAG retired
 #        for FFO-priced names; negative-book REITs (towers/logistics) become priceable
@@ -620,10 +636,15 @@ def main(universe_id=ACTIVE):
     # cross-sectional context. Warranted anchor is fit on 'standard' names ONLY — banks/
     # REITs have no meaningful EV/EBIT and would pollute the sector-median regression.
     quality_scores(rows)
-    fit_rows = [(r["sector"], (r["mcap"] + r["debt"] - r["cash"]) / r["ebit_now"],
+    def _fit_ok(r):
+        return (r["arch"] == "standard" and r["ebit_now"] and r["ebit_now"] > 0
+                and (r["mcap"] + r["debt"] - r["cash"]) / r["ebit_now"] > 0)
+    split_counts = assign_buckets(rows, OVERRIDES.get("subsector", {}), _fit_ok)
+    if split_counts:
+        print("Anchor split: " + " · ".join(f"{b} {c}" for b, c in sorted(split_counts.items())))
+    fit_rows = [(r["wbucket"], (r["mcap"] + r["debt"] - r["cash"]) / r["ebit_now"],
                  r["g1"], r["om"] or 0.0)
-                for r in rows if r["arch"] == "standard" and r["ebit_now"] and r["ebit_now"] > 0
-                and (r["mcap"] + r["debt"] - r["cash"]) / r["ebit_now"] > 0]
+                for r in rows if _fit_ok(r)]
     wfit = warranted_fit(fit_rows)
     if wfit:
         smeans, gmean, coef = wfit
@@ -661,7 +682,7 @@ def main(universe_id=ACTIVE):
                    else None)
         if ffo_val is not None:
             rim_ps = None    # FFO REPLACES RIM-on-book (historical-cost book misprices REITs)
-        warr_ps = warranted_value(wfit, r["sector"], r["g1"], r["om"] or 0.0,
+        warr_ps = warranted_value(wfit, r["wbucket"], r["g1"], r["om"] or 0.0,
                                   r["ebit_now"], r["cash"], r["debt"], r["shares"])
         impl, op = reverse_dcf(base_fcf, r["wacc"], term_g, ndebt, r["mcap"], H, S1)
 
@@ -776,7 +797,7 @@ def main(universe_id=ACTIVE):
                 {"key": "warranted", "name": "Warranted mult.", "value": _r2(warr_ps),
                  "applicable": warr_ps is not None,
                  "note": GATED_NOTE.get(arch) if not gates["Warranted"] else
-                         "sector-anchored EV/EBIT, adjusted within sector for growth/margin"},
+                         f"{r['wbucket']}-median EV/EBIT anchor, adjusted for growth/margin"},
                 {"key": "ddm", "name": "DDM", "value": None, "applicable": False,
                  "note": "replaced by warranted multiple for this universe (few payers)"},
             ],

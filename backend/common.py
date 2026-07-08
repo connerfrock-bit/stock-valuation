@@ -11,6 +11,8 @@ BASE       = Path(__file__).resolve().parent
 DB_PATH    = BASE / "data" / "fairvalue.db"
 _TOML      = tomllib.load(open(BASE / "assumptions.toml", "rb"))
 CFG        = _TOML["global"]
+# L5/L6 manual overrides (Phase 1.3): {"archetype": {ticker: arch}, "subsector": {ticker: bucket}}
+OVERRIDES  = _TOML.get("overrides", {})
 
 # Live-screener universes (Plan A). [[universe]] array keyed by id; ACTIVE is the default
 # for the bare output.json/ledger.json artifacts.
