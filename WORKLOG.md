@@ -728,3 +728,41 @@ residuals → broad sub-2pp ripples across standard names, by design.
 
 Tests +6 → suite green. Share rebuilt. Phase 1 remaining: 1.4 point-in-time SPX
 membership + survivorship re-test (the product-positioning decision gate).
+
+---
+
+## Phase 1.4 — survivorship measured; the decision gate closes (2026-07-07)
+
+**What 1.4 turned out to be:** membership was already point-in-time (membership.py
+walks Wikipedia change tables backward; 58 quarterly member sets per universe) and
+the backtest already consumed it. The real residual was members we cannot price —
+delisted names EDGAR/Yahoo no longer serve — absent from BOTH strategy and
+benchmark, labeled "direction unknown" in the caveats. That unknown is now a number.
+
+**The measurement:** covered equal-weight pool vs the real equal-weight index funds
+(RSP for SPX, QQQE for NDX — like-for-like weighting isolates coverage bias from
+cap-vs-equal effects), on identical quarters, from 15y of monthly TR history now in
+price_monthly (betas.py keeps SPY/QQQ/RSP/QQQE fresh weekly).
+
+| window | SPX gap vs RSP | NDX gap vs QQQE |
+|---|---|---|
+| full 2012-26 | +1.4pp/yr | +2.8pp/yr |
+| pre2012-15 | +1.3pp | +3.5pp |
+| fit2016-21 | +1.9pp | +2.5pp |
+| holdout2022-26 | +0.8pp | +2.1pp |
+
+The gap shrinks exactly where coverage is best (2022-26) — the mechanism is what we
+said it was. Emitted as backtest meta.survivorship, a measured caveat (replacing
+"direction unknown"), a printed table, and a Methodology block.
+
+**DECISION GATE, closed:** the composite's nominal excess (+0.03pp SPX; negative in
+most variants/windows) sits far inside the measured +1.4pp tailwind. After honest
+accounting there is no demonstrated edge. The positioning is now WRITTEN in the
+Methodology verdict box: **expectations meter + trap gate + momentum overlay — not
+an alpha signal.** Momentum's excess is computed within the same covered pool on
+both sides (+0.50%/q SPX, +1.63%/q NDX top-quintile), so the universe-level haircut
+doesn't erase it — it remains the one evidence-backed overlay, with its own caveats.
+
+Phase 1 complete: 1.1 financials ✅ · 1.2 REITs ✅ · 1.3 TECH split + overrides ✅ ·
+1.4 survivorship + gate ✅. Next: Phase 2 (bulk EDGAR/price plumbing) — where the
+delisted-name data gap this measurement quantified can actually be closed.

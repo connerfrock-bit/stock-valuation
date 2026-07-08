@@ -264,11 +264,17 @@ Honesty rules: never a single fair value without its range · agreement always b
       froth-anchor upside. CSGP archetype-corrected (REIT pool 31→30, anchor purer).
       SIC-driven default split deferred to Phase 2's bulk submissions.zip (free there;
       513 throttled calls here). Gate PASSED.
-- [ ] Point-in-time index membership for the SPX backtest; re-run; publish the
-      measured survivorship effect in Methodology caveats whichever way it cuts.
-- [ ] DECISION GATE: if the survivorship-clean value composite still shows no edge,
-      the product's positioning stays "expectations meter + trap gate + momentum
-      overlay" — written on the Methodology page, not implied.
+- [x] **Survivorship measured** ✅ (2026-07-07) — membership was already PIT
+      (membership.py, 58 quarterly member sets); the residual bias (unpriceable
+      delisted members) is now MEASURED against the real equal-weight index funds:
+      covered pool ran +1.4pp/yr hot vs RSP (SPX; +0.8pp in the best-covered window)
+      and +2.8pp/yr vs QQQE (NDX; +3.5pp pre-2016). Emitted in backtest meta +
+      caveats + a Methodology block. RSP/QQQE/SPY/QQQ kept fresh weekly via betas.py.
+- [x] **DECISION GATE — CLOSED** ✅ (2026-07-07): composite nominal excess +0.03pp
+      (SPX) vs a +1.4pp survivorship tailwind = no demonstrated edge after honest
+      accounting. Positioning now WRITTEN on the Methodology page: expectations
+      meter + trap gate + momentum overlay — not an alpha signal. Momentum stays
+      the one live edge (within-pool: +0.50%/q SPX, +1.63%/q NDX).
 
 ### Phase 2 — plumbing for scale (before any universe growth)
 - [ ] Bulk EDGAR transport: nightly companyfacts.zip + submissions.zip (one download
