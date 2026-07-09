@@ -323,16 +323,26 @@ Honesty rules: never a single fair value without its range · agreement always b
       an `agreement()` helper → "single method (by design)" vs honest low/moderate/high.
       Display-only, no scoring change. Also un-hid genuine disagreement (~900 names now
       read "low agreement" where they truly diverge). See WORKLOG.
-- [ ] **DDM reactivation (model)** — build a conservative multi-stage DDM (an existing
-      engine, currently hardcoded off) and activate it for dividend-paying archetypes:
-      banks → RIM + DDM, REITs → P/FFO + DDM (299 single-method names pay dividends).
-      Gives them a real 2nd triangulation point. MODEL change → must beat v2.2 in a
-      time-split backtest on NDX/SPX before shipping (standing rule). Watch DDM's
-      growth-sensitivity + crisis dividend cuts; likely a modest triangulation weight.
+- [x] **RIM scoped + DDM reactivated** ✅ (2026-07-08, model v2.6) — RIM is a book
+      engine, scoped to financials/REITs (was the low outlier 78% of the time on standard
+      names, dragging the mid). DDM reactivated for dividend payers (banks RIM+DDM, REITs
+      P/FFO+DDM, standard payers DCF+Warranted+DDM; growth clamped [0,8%]; fixed BAC-type
+      stale-dividend tag). **Single-method 26%→11%.** Agreement reframed off "/5" to the
+      applicable set. **Backtest: v2rd loses ~1–2pp to v2w** (garbage RIM was an accidental
+      cheapness proxy) — SHIPPED ANYWAY: composite isn't an alpha signal (Phase 1.4), gap
+      is inside the survivorship band, sensible valuations beat a prettier edge-less curve.
+      Forward ledger is the arbiter. Standing rule consciously overridden with rationale
+      logged. See WORKLOG.
 
 ### Standing rules
 - No new valuation engines (seven triangulate; an eighth is procrastination).
-- No model change ships without beating v2.2 in a time-split backtest or the ledger.
+- No model change ships without beating the incumbent in a time-split backtest or the
+  ledger — UNLESS the change fixes a correctness/honesty defect in the valuations and the
+  incumbent's backtest "edge" sits inside the survivorship band (i.e. no real edge to
+  protect). Precedent: v2.6 (Phase 3.1) shipped RIM-scoping despite backtesting ~1pp under
+  v2.5, because v2.5's advantage was a garbage-low-RIM cheapness proxy and the composite is
+  not an alpha signal. The forward ledger arbitrates such changes. The rule protects a REAL
+  edge; it does not force showing users broken valuations to keep a prettier edge-less curve.
 - No silent universe filtering; every exclusion visible with a reason.
 - Docs are law: UI changes either conform to UI_SPEC or amend it citing the trigger.
 - Never run value.py while an ingest is rebuilding the DB (2026-07-07 race).

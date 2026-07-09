@@ -937,3 +937,53 @@ multi-stage DDM and activating it for dividend-paying archetypes gives banks RIM
 REITs P/FFO+DDM — a real second triangulation point, using an existing engine (not an
 eighth). It is a MODEL change, so per the standing rules it must beat v2.2 in a
 time-split backtest on NDX/SPX before it ships. Scoped as the next plan.
+
+---
+
+## Phase 3.1 — RIM scoped + DDM reactivated (2026-07-08, model v2.6)
+
+**Trigger:** the S&P 1500 board read "low agreement" on ~900 names. Diagnosed (data,
+not vibes): 69% of multi-engine names had estimates >2× apart, and **RIM was the low
+outlier 78% of the time / a garbage-low outlier (<60% of the next engine) 61% of the
+time** on standard names. RIM is a book-anchored FINANCIALS engine; on buyback-heavy /
+asset-light firms (ACN RIM $71 vs DCF $323 / Warr $437) book understates value, and at
+the highest blend weight (.35) it dragged the mid AND manufactured false 3-way
+disagreement. Even without RIM, DCF-vs-Warranted still differ ~1.7× median — real
+intrinsic-vs-relative divergence, not a bug.
+
+**The fix (v2.6):**
+- **RIM scoped to financials/REITs.** `rim_ps` enters the mid only for
+  `eff_arch != "standard"`; standard names show it N/A-with-reason. Halved the ">2×
+  apart" names (725→343) and doubled the tight-agreement ones.
+- **DDM reactivated** (an existing engine, hardcoded off since the NDX's "few payers" —
+  false for the S&P 1500 where 299 single-method names pay dividends). Multi-stage
+  Gordon, discounted at Re. Guards: meaningful yield ≥1%, payout covered by earnings
+  (REITs exempt — pay from FFO), and **dividend growth clamped to [0,8%]** (raw
+  revenue-CAGR overstated acquisitive REITs — O $148→$76 — and let a bank's declining-g
+  compound the dividend to ~zero). Fixed a real data bug on the way: BAC (and peers)
+  drop `PaymentsOfDividendsCommonStock` after ~2013 for `DividendsCommonStockCash` —
+  added the tag, so DDM runs on the current dividend, not a stale $0.24.
+- Result: banks get RIM+DDM, REITs P/FFO+DDM, standard payers DCF+Warranted+DDM.
+  **Single-method 26%→11%.** Most names now triangulate on 2–3 methods that mean
+  something.
+- **Agreement reframed (display).** Dropped the "/5" denominator — 5 was never the
+  target. `agreement(conf, nMethods)` reads relative to the APPLICABLE set: "single
+  method (by design)" for one; else Strong/Fair/Wide-range among the methods that apply.
+  A REIT on P/FFO+DDM that agree reads Strong, not "2 of 5, low". 5-dot meters gone.
+
+**The honest part — it does NOT beat v2.2 in the backtest.** Added variants v2r
+(RIM-scoped) and v2rd (+DDM); ran both universes, all windows:
+
+| variant | SPX full | NDX full |
+|---|---|---|
+| v2w (was adopted) | +0.03pp | −1.94pp |
+| v2rd (shipped) | −0.94pp | −3.83pp |
+
+v2rd loses ~1–2pp. The garbage-low RIM was, perversely, an accidental cheapness proxy
+that helped the RANKING. **Shipped v2rd anyway** (user decision, with my recommendation):
+the composite is not an alpha signal (Phase 1.4 verdict), the gap sits inside the
+measured +1.4/+2.8pp survivorship band — i.e. two edge-less signals, one 1pp prettier —
+and shipping v2w would mean knowingly showing ACN=$71 because a broken number ranks
+marginally better. Honesty over the prettier curve. `ADOPTED` switched v2w→v2rd so the
+published curve matches what ships; the **forward ledger is the real arbiter** from here.
+Tests +5 (DDM goldens). Model v2.6.
