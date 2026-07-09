@@ -42,6 +42,19 @@ range_base_band      = 0.10     # floor uncertainty even for the best names
 range_quality_scale  = 0.30     # the lowest-quality name adds up to ±30% more
 range_cyclical_adder = 0.10     # cyclical revenue adds a further ±10%
 
+# Tier 3 SCENARIO engine (Bear / Base / Bull). Base = the triangulated mid. Bull/Bear re-run
+# the DCF with shifted drivers and scale the mid by the DCF's fundamental sensitivity; the
+# shift magnitude scales 1×–3× with the per-name predictability band (a stable compounder gets
+# a tight cone, a volatile cyclical a wide one). Bear is floored at the EPV no-growth value.
+scenario_delta_growth = 0.015   # ±1.5pp stage-1 growth at the typical (band=base) name
+scenario_delta_margin = 0.010   # ±1pp operating margin (shifts the NOPAT level; ROIC held)
+scenario_delta_wacc   = 0.004   # ∓0.4pp WACC (bull discounts lower, bear higher)
+scenario_scale_cap    = 2.0     # delta magnitude scales 1×–2.0× with the predictability band
+scenario_bull_cap     = 1.65    # bull ≤ 1.65× base · bear ≥ bear_floor× base (DCF is convex —
+scenario_bear_floor   = 0.55    #   an uncapped ratio yields absurd legs; caps keep the cone sane)
+scenario_probs        = [0.25, 0.50, 0.25]   # bear / base / bull weights (sum = 1)
+scenario_converge_yrs = 5       # horizon for the annualized (IRR-like) probability-weighted return
+
 # risk_free is pulled LIVE from FRED DGS10 — never hardcoded. Fallback only if the fetch fails.
 risk_free_fallback   = 0.043
 

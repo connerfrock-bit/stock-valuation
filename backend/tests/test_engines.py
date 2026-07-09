@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from common import (ev_present_value, ev_present_value_nopat, effective_tax, cost_of_debt,
                     size_premium)
 from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim, ddm,
-                     warranted_fit, warranted_value, triangulate)
+                     warranted_fit, warranted_value, triangulate, blend_scenarios)
 from value import quality_band
 
 BANDS = [[10e9, 0.000], [2e9, 0.003], [0.5e9, 0.008], [0.0, 0.015]]
@@ -367,6 +367,39 @@ class TestTriangulate(unittest.TestCase):
         tri = triangulate({"DCF": 50.0, "RIM": 150.0}, None, price=100.0, min_band=0.10)
         self.assertAlmostEqual(tri["low"], 50.0)
         self.assertAlmostEqual(tri["high"], 150.0)
+
+
+class TestBlendScenarios(unittest.TestCase):
+    P = [0.25, 0.50, 0.25]
+
+    def test_cone_is_monotone_and_base_is_mid(self):
+        # DCF base 100 → bull 130 / bear 80 sensitivity applied to a mid of 120.
+        s = blend_scenarios(120.0, 100.0, 130.0, 80.0, epv=60.0, price=110.0,
+                            probs=self.P, conv_years=5)
+        self.assertAlmostEqual(s["base"], 120.0)
+        self.assertLess(s["bear"], s["base"])
+        self.assertGreater(s["bull"], s["base"])
+        self.assertAlmostEqual(s["bull"], 120.0 * 1.30)      # 156
+        self.assertAlmostEqual(s["bear"], 120.0 * 0.80)      # 96 (above the EPV 60 floor)
+
+    def test_bear_floored_at_epv(self):
+        # a harsh bear (dcf_bear 40 → bear 48) must not print below the EPV no-growth floor.
+        s = blend_scenarios(120.0, 100.0, 130.0, 40.0, epv=90.0, price=110.0,
+                            probs=self.P, conv_years=5)
+        self.assertAlmostEqual(s["bear"], 90.0)              # floored at EPV, not 48
+
+    def test_prob_weighted_and_expected_returns(self):
+        s = blend_scenarios(120.0, 100.0, 130.0, 80.0, epv=60.0, price=100.0,
+                            probs=self.P, conv_years=5)
+        pw = 0.25 * (120 * 0.8) + 0.50 * 120 + 0.25 * (120 * 1.3)     # 120.0
+        self.assertAlmostEqual(s["pw"], pw)
+        self.assertAlmostEqual(s["expBase"], 0.20)          # 120/100 − 1
+        self.assertAlmostEqual(s["annPW"], (pw / 100) ** (1 / 5) - 1)
+
+    def test_none_when_dcf_base_unusable(self):
+        self.assertIsNone(blend_scenarios(120.0, None, 130.0, 80.0, 60.0, 110.0, self.P, 5))
+        self.assertIsNone(blend_scenarios(120.0, 0.0, 130.0, 80.0, 60.0, 110.0, self.P, 5))
+        self.assertIsNone(blend_scenarios(120.0, 100.0, 130.0, 80.0, 60.0, 0.0, self.P, 5))
 
 
 class TestQualityBand(unittest.TestCase):

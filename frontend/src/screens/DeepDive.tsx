@@ -1,6 +1,8 @@
 import { C, MONO, upColor, qColor, hexA, agreement } from '../theme';
 import { fmtPrice, fmtPct, fmtMcapB, na } from '../format';
 import { RangeBar } from '../components/RangeBar';
+import { ScenarioCone } from '../components/ScenarioCone';
+import { CapitalPanel } from '../components/CapitalPanel';
 import { BigGauge, RatioBar } from '../components/Meters';
 import { SectorTag } from '../components/SectorTag';
 import { Sparkline } from '../components/Sparkline';
@@ -225,6 +227,9 @@ export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: 
             <RangeBar c={c} full />
           </div>
 
+          {/* scenario cone — Tier 3; renders nothing for financials/REITs (no DCF) */}
+          <ScenarioCone c={c} />
+
           {/* reverse DCF */}
           <div style={{
             background: C.panel,
@@ -354,6 +359,9 @@ export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: 
               Bars: percentile within {poolLabel}.
             </div>
           </div>
+
+          {/* capital efficiency — Tier 3; renders nothing for financials/REITs (no DCF) */}
+          <CapitalPanel c={c} />
 
           <div style={{ ...card, padding: '18px 20px' }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: C.sec, marginBottom: 6 }}>Method agreement</div>

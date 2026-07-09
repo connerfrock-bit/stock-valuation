@@ -14,7 +14,8 @@ from common import (CFG, OVERRIDES, SUBSECTOR_BY_SIC, UNIVERSES, ACTIVE, resolve
                     effective_tax, roe_stability, equity_to_assets, cost_of_debt, size_premium,
                     money, pct)
 from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim, ddm,
-                     warranted_fit, warranted_value, triangulate, CENTRAL_WEIGHTS)
+                     warranted_fit, warranted_value, triangulate, blend_scenarios,
+                     CENTRAL_WEIGHTS)
 
 
 def load_live_momentum(tickers):
@@ -411,6 +412,65 @@ def quality_band(quality, cyclical):
     return base + (1 - q) * scale + (cyc_add if cyclical else 0.0)
 
 
+def scenario_of(r, dcf_base, epv_ps, base_fcf, ndebt, term_g, H, S1, mid, band):
+    """Tier 3 Bear/Base/Bull: re-run the DCF with growth/margin/WACC shifted, magnitude
+       scaled 1×–3× by the predictability `band` (stable name → tight cone, volatile → wide).
+       Returns the scenario dict (via blend_scenarios) or None. Standard names only — a usable
+       positive DCF base + NOPAT/ROIC are required; financials/REITs (no DCF) get None."""
+    if not (dcf_base and dcf_base > 0):
+        return None
+    om, nopat, roic = r["om"], r["nopat_norm"], r["roic_dcf"]
+    if not (nopat and nopat > 0 and roic and roic > 0):
+        return None
+    base_band = CFG.get("range_base_band", RANGE_BASE_BAND)
+    u = min(CFG.get("scenario_scale_cap", 1.5), max(1.0, band / base_band)) if base_band else 1.0
+    dg = CFG["scenario_delta_growth"] * u
+    dm = CFG["scenario_delta_margin"] * u
+    dw = CFG["scenario_delta_wacc"] * u
+    # Shift the NOPAT LEVEL by the margin delta, but hold ROIC (the reinvestment driver)
+    # FIXED: letting margin lift ROIC collapses the g/ROIC reinvestment term and the convex
+    # value-driver DCF explodes (PEP bull 8× price). The level shift alone is the honest lever.
+    rel = min(0.5, dm / max(om or 0.05, 0.05))            # bounded relative NOPAT-level shift
+    wfloor = term_g + CFG["min_wacc_minus_g"] + 0.005     # keep WACC − term_g valid on the bull leg
+    g1 = r["g1"]
+    bull = dcf(base_fcf, max(r["wacc"] - dw, wfloor), term_g, ndebt, r["shares"],
+               min(g1 + dg, CFG["initial_growth_cap"] + 0.10), H, S1,
+               nopat0=nopat * (1 + rel), roic=roic)
+    bear = dcf(base_fcf, r["wacc"] + dw, term_g, ndebt, r["shares"],
+               max(g1 - dg, -0.05), H, S1,
+               nopat0=nopat * (1 - rel), roic=roic)
+    return blend_scenarios(mid, dcf_base, bull, bear, epv_ps, r["price"],
+                           CFG.get("scenario_probs", [0.25, 0.50, 0.25]),
+                           CFG.get("scenario_converge_yrs", 5),
+                           bull_cap=CFG.get("scenario_bull_cap", 2.0),
+                           bear_floor=CFG.get("scenario_bear_floor", 0.40))
+
+
+def capital_efficiency(r, wacc):
+    """Tier 3 capital panel (standard names): ROIC, economic spread (ROIC − WACC — is growth
+       creating or destroying value?), the DCF's reinvestment assumption (g/ROIC), and
+       incremental ROIC (ΔNOPAT / Δinvested-capital over the history — the return on the
+       LAST dollars deployed). incRoic is None when the firm shrank invested capital (net
+       capital returner — no incremental base to measure against). None off a usable ROIC."""
+    roic = r["roic_dcf"]
+    if roic is None or roic <= 0:
+        return None
+    reinvest = min(0.90, max(0.0, (r["g1"] or 0.0) / roic))
+    f, tax = r["f"], r["tax_r"]
+    ebit, eq = f.get("ebit", {}), f.get("equity", {})
+    ld, sd, csh = f.get("long_debt", {}), f.get("short_debt", {}), f.get("cash", {})
+    yrs = sorted(set(ebit) & set(eq))
+    inc = None
+    if len(yrs) >= 3:
+        a, b = yrs[max(0, len(yrs) - 5)], yrs[-1]         # up to ~4y apart
+        ic = lambda y: eq.get(y, 0.0) + ld.get(y, 0.0) + sd.get(y, 0.0) - csh.get(y, 0.0)
+        d_ic = ic(b) - ic(a)
+        if d_ic > 0 and d_ic > 0.02 * abs(ic(b)):         # meaningful net capital added
+            inc = (ebit[b] - ebit[a]) * (1 - tax) / d_ic
+    return {"roic": round(roic, 4), "spread": round(roic - wacc, 4),
+            "reinvest": round(reinvest, 4), "incRoic": None if inc is None else round(inc, 4)}
+
+
 def _resolved_bucket(r, sub_ovr):
     """override > SIC map > GICS sector (Phase 2). The SIC default fires only for
        Information-Technology names (the split lives inside IT) with no hand-map entry —
@@ -559,7 +619,15 @@ def trap_flags(r, z=None, fscore=None, min_mcap=0.0, ffo_priced=False):
 
 
 # ---------------- snapshot history (append-only) ----------------
-MODEL_VERSION = "v2.8.1"      # frozen model tag — bump whenever scoring/engine logic changes
+MODEL_VERSION = "v2.9"        # frozen model tag — bump whenever scoring/engine logic changes
+# v2.9 (Tier 3): Bear/Base/Bull scenario engine + capital-efficiency panel (both additive
+#        display fields — mid/upside/conf/quality/score are byte-for-byte v2.8.1). Scenarios
+#        re-run the DCF with growth/margin/WACC shifted (ROIC held fixed — letting margin lift
+#        ROIC collapses the g/ROIC reinvestment term and the convex DCF explodes), scaled 1×–2×
+#        by the predictability band, cone capped 1.65×/0.55×, bear floored at EPV. Base = mid.
+#        + probability-weighted fair value (25/50/25) and an annualized expected return. Capital
+#        panel: ROIC, economic spread (ROIC−WACC), reinvestment (g/ROIC), incremental ROIC.
+#        Standard names only (both N/A for financials/REITs — no DCF). See WORKLOG.
 # v2.8.1: the quality range band widens only the HIGH; the low is anchored at the real EPV/
 #        engine floor and never synthesized below the no-growth value (was pushing ~20 value
 #        names' low below their EPV — inconsistent with "EPV is the floor"). Display-only.
@@ -859,9 +927,9 @@ def main(universe_id=ACTIVE):
         # (current-ratio/leverage/margin signals are meaningless for banks) — n/a,
         # so JPM can never again wear a "Piotroski 2/9" trap flag it didn't earn
         fscore, fn = piotroski(r) if eff_arch == "standard" else (None, 0)
+        band = quality_band(r["quality"], r["cyclical"])
         tri = triangulate({"DCF": dcf_ps, "RIM": rim_ps, "Warranted": warr_ps,
-                           "FFO": ffo_val, "DDM": ddm_ps}, epv_ps, r["price"],
-                          min_band=quality_band(r["quality"], r["cyclical"]))
+                           "FFO": ffo_val, "DDM": ddm_ps}, epv_ps, r["price"], min_band=band)
         flags = trap_flags(r, z, fscore, min_mcap, ffo_priced=ffo_val is not None)
         if not tri:
             reason = {"financial": "financial: RIM only, and book value/ROE not usable "
@@ -881,6 +949,11 @@ def main(universe_id=ACTIVE):
         score = ((max(-0.5, min(0.6, upside)) + 0.5) * (tri["conf"] / 5)
                  * (q / 100) * (0.85 ** n_pen))
 
+        # Tier 3 Bear/Base/Bull (standard names — needs a usable DCF base). dcf_ps is the
+        # archetype-gated value, so financials/REITs get None (scenario N/A there for now).
+        scen = scenario_of(r, dcf_ps, epv_ps, base_fcf, ndebt, term_g, H, S1, tri["mid"], band)
+        cap_eff = capital_efficiency(r, r["wacc"]) if eff_arch == "standard" else None
+
         ni_ps = (r["ni_now"] or 0) / r["shares"]
         ebitda = (r["ebit_now"] or 0) + (r["dna"] or 0)
         rec = {
@@ -896,6 +969,12 @@ def main(universe_id=ACTIVE):
             "negBook": bool(r["equity_now"] is not None and r["equity_now"] < 0),
             "low": round(tri["low"], 2), "mid": round(tri["mid"], 2),
             "high": round(tri["high"], 2), "upside": round(upside, 4),
+            "scenario": ({"bear": _r2(scen["bear"]), "base": _r2(scen["base"]),
+                          "bull": _r2(scen["bull"]), "pw": _r2(scen["pw"]),
+                          "expBase": round(scen["expBase"], 4), "expPW": round(scen["expPW"], 4),
+                          "annPW": None if scen["annPW"] is None else round(scen["annPW"], 4)}
+                         if scen else None),
+            "capital": cap_eff,
             "conf": tri["conf"], "within": tri["within"], "nMethods": tri["n"],
             "impliedGrowth": None if impl is None else round(impl, 4),
             "impliedOp": op,

@@ -204,6 +204,33 @@ def ddm(div0_ps, re_, term_g, g1, horizon, stage1):
 # a real 2nd method). RIM is scoped to financials/REITs in value.py (a bank engine).
 CENTRAL_WEIGHTS = {"DCF": 0.10, "RIM": 0.35, "Warranted": 0.30, "FFO": 0.30, "DDM": 0.10}
 
+def blend_scenarios(base_mid, dcf_base, dcf_bull, dcf_bear, epv, price, probs, conv_years,
+                    bull_cap=2.0, bear_floor=0.40):
+    """Bear / Base / Bull fair values + a probability-weighted expected return.
+       Base = the triangulated mid (the headline number); Bull/Bear scale it by the DCF's
+       fundamental sensitivity to shifted drivers (dcf_bull/dcf_base, dcf_bear/dcf_base), so
+       the cone is anchored on what the app already shows. The multiplier is capped to
+       [bear_floor, bull_cap] — the value-driver DCF is convex, so an uncapped ratio produces
+       absurd bull legs. Monotone (bear ≤ base ≤ bull); the bear leg is floored at the EPV
+       no-growth value when that sits below base (v2.8.1: EPV is the downside floor), never
+       below 0. Returns None when the DCF base is unusable. Annualized return assumes
+       convergence over conv_years."""
+    if not (dcf_base and dcf_base > 0 and base_mid and base_mid > 0 and price and price > 0):
+        return None
+    bull = base_mid * min(dcf_bull / dcf_base, bull_cap) if (dcf_bull and dcf_bull > 0) else base_mid
+    bear = base_mid * max(dcf_bear / dcf_base, bear_floor) if (dcf_bear and dcf_bear > 0) else base_mid
+    bull = max(bull, base_mid)                         # keep the cone monotone
+    bear = min(bear, base_mid)
+    if epv and 0 < epv < base_mid:
+        bear = max(bear, epv)                          # no-growth floor bounds the downside
+    bear = max(bear, 0.0)
+    pb, p0, pu = probs
+    pw = pb * bear + p0 * base_mid + pu * bull
+    ann = ((pw / price) ** (1.0 / conv_years) - 1) if (pw > 0 and conv_years) else None
+    return {"bear": bear, "base": base_mid, "bull": bull, "pw": pw,
+            "expBase": base_mid / price - 1, "expPW": pw / price - 1, "annPW": ann}
+
+
 def triangulate(growth, floor, price, weights=None, min_band=0.0):
     """growth: {engine_name: per-share value} for applicable growth engines.
        floor:  EPV per-share value (or None). weights: override CENTRAL_WEIGHTS

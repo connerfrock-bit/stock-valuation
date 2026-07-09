@@ -8,6 +8,25 @@ export interface Method {
   note: string;
 }
 
+/** Tier 3 Bear/Base/Bull scenario cone. null for financials/REITs (no DCF base). */
+export interface Scenario {
+  bear: number;
+  base: number;   // == the headline mid
+  bull: number;
+  pw: number;     // probability-weighted fair value (bear/base/bull @ 25/50/25)
+  expBase: number; // base/price − 1 (== upside)
+  expPW: number;   // pw/price − 1
+  annPW: number | null; // annualized pw expected return over the convergence horizon
+}
+
+/** Tier 3 capital-efficiency panel. null for financials/REITs. */
+export interface Capital {
+  roic: number;
+  spread: number;    // ROIC − WACC (economic spread)
+  reinvest: number;  // the DCF's g/ROIC reinvestment assumption
+  incRoic: number | null; // ΔNOPAT/Δinvested-capital; null for net capital-returners
+}
+
 export interface Trends {
   years: number[];
   revenueB: (number | null)[];
@@ -35,6 +54,8 @@ export interface Company {
   mid: number;
   high: number;
   upside: number;
+  scenario?: Scenario | null;  // Tier 3 — standard names only
+  capital?: Capital | null;    // Tier 3 — standard names only
   conf: number;
   within: number;
   nMethods?: number;              // applicable growth engines (mid); 1 = single-method by design
