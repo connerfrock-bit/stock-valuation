@@ -13,7 +13,7 @@ from common import (CFG, OVERRIDES, SUBSECTOR_BY_SIC, UNIVERSES, ACTIVE, resolve
                     DB_PATH, fetch_risk_free, load_company, latest, cagr, avg_margin, avg_roe,
                     effective_tax, roe_stability, equity_to_assets, cost_of_debt,
                     money, pct)
-from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim,
+from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim, ddm,
                      warranted_fit, warranted_value, triangulate, CENTRAL_WEIGHTS)
 
 
@@ -510,7 +510,12 @@ def trap_flags(r, z=None, fscore=None, min_mcap=0.0, ffo_priced=False):
 
 
 # ---------------- snapshot history (append-only) ----------------
-MODEL_VERSION = "v2.5"        # frozen model tag — bump whenever scoring/engine logic changes
+MODEL_VERSION = "v2.6"        # frozen model tag — bump whenever scoring/engine logic changes
+# v2.6 (Phase 3.1): RIM scoped to financials/REITs (a book engine off standard names);
+# DDM reactivated for dividend payers (banks/REITs triangulate; single-method 26%→11%).
+# Ships despite backtesting ~1pp under v2.5 — the composite is an expectations meter, not
+# an alpha signal (Phase 1.4), the gap sits inside the survivorship band, and RIM-in-mid
+# only "won" as an accidental cheapness proxy. Forward ledger is the arbiter. See WORKLOG.
 # v2.5 — warranted TECH split (semis/software/hardware hand-map, >=8-name buckets,
 #        rollup to sector below that) + manual override table (assumptions.toml):
 #        CSGP archetype-corrected standard (was REIT-routed by GICS)
@@ -720,7 +725,14 @@ def main(universe_id=ACTIVE):
         epv_ps = epv((r["om"] or 0) * (r["rev_now"] or 0), r["tax_r"], r["wacc"], r["cash"],
                      r["debt"], r["shares"], r["dna"], r["capex_now"])
         book_ps, roe, rim_ok = r["book_ps"], r["roe_avg"], r["rim_ok"]
-        rim_ps = rim(book_ps, roe, r["re_"], H) if rim_ok else None
+        # RIM is a book-anchored FINANCIALS/REIT engine — residual income needs
+        # economically-meaningful book capital (regulated bank/insurer equity). On
+        # buyback-heavy / asset-light standard firms book understates value and RIM is
+        # the low outlier ~78% of the time, manufacturing false 3-way disagreement.
+        # So it only enters the mid for non-standard archetypes (financials keep it as
+        # their anchor); for standard names it's shown N/A-with-reason, never weighted.
+        rim_ps = (rim(book_ps, roe, r["re_"], H)
+                  if (rim_ok and r["eff_arch"] != "standard") else None)
         ffo_val = (reit_anchor * r["ffo_ps"]
                    if (r["eff_arch"] == "reit" and reit_anchor and (r["ffo_ps"] or 0) > 0)
                    else None)
@@ -728,6 +740,26 @@ def main(universe_id=ACTIVE):
             rim_ps = None    # FFO REPLACES RIM-on-book (historical-cost book misprices REITs)
         warr_ps = warranted_value(wfit, r["wbucket"], r["g1"], r["om"] or 0.0,
                                   r["ebit_now"], r["cash"], r["debt"], r["shares"])
+        # DDM (Phase 3.1) — a real second method for dividend payers. REITs pay from FFO
+        # (allow regardless of NI); everyone else needs the payout covered by earnings
+        # (div ≤ 1.5× NI, NI > 0) or projecting a doomed dividend inflates the value.
+        div0_ps = (r["div"] / r["shares"]) if (r["div"] and r["shares"]) else None
+        # only DDM a MEANINGFUL dividend (yield ≥ 1%): a sub-1% "dividend" is usually a
+        # token payout (DDM is noise there) or a stale/partial data point — either way
+        # not something to anchor a value on. Then require the payout be covered by
+        # earnings (REITs pay from FFO, so they're exempt from the NI check).
+        meaningful_div = bool(div0_ps and r["price"] and div0_ps / r["price"] >= 0.01)
+        ddm_ok = meaningful_div and (
+            r["eff_arch"] == "reit"
+            or bool(r["ni_now"] and r["ni_now"] > 0 and (r["div"] or 0) <= r["ni_now"] * 1.5))
+        # Dividends grow slower and stickier than revenue — feeding raw revenue-CAGR into
+        # the DDM overstated acquisitive REITs (O) and let a bank's declining-revenue g
+        # compound the dividend to ~zero (BAC). Clamp the DDM's stage-1 growth to a sane
+        # dividend band [0%, 8%]: dividends are rarely cut (floor 0) and rarely outgrow
+        # this range sustainably (cap 8%, still fading to terminal g).
+        ddm_g = max(0.0, min(0.08, r["g1"] or 0.0))
+        ddm_ps = (ddm(div0_ps, r["re_"], term_g, ddm_g, H, S1)
+                  if (div0_ps and ddm_ok) else None)
         impl, op = reverse_dcf(base_fcf, r["wacc"], term_g, ndebt, r["mcap"], H, S1)
 
         # L5 router (Plan A) — the ONE enforcement seam. Forcing a gated engine to None
@@ -753,8 +785,8 @@ def main(universe_id=ACTIVE):
         # (current-ratio/leverage/margin signals are meaningless for banks) — n/a,
         # so JPM can never again wear a "Piotroski 2/9" trap flag it didn't earn
         fscore, fn = piotroski(r) if eff_arch == "standard" else (None, 0)
-        tri = triangulate({"DCF": dcf_ps, "RIM": rim_ps, "Warranted": warr_ps, "FFO": ffo_val},
-                          epv_ps, r["price"])
+        tri = triangulate({"DCF": dcf_ps, "RIM": rim_ps, "Warranted": warr_ps,
+                           "FFO": ffo_val, "DDM": ddm_ps}, epv_ps, r["price"])
         flags = trap_flags(r, z, fscore, min_mcap, ffo_priced=ffo_val is not None)
         if not tri:
             reason = {"financial": "financial: RIM only, and book value/ROE not usable "
@@ -827,6 +859,9 @@ def main(universe_id=ACTIVE):
                          if rim_ps is not None else
                          ("replaced by P/FFO — historical-cost book misprices REITs"
                           if ffo_val is not None else
+                          "N/A — a financials/REIT engine; book equity understates value for "
+                          "buyback-heavy / asset-light firms, so not weighted for standard companies"
+                          if eff_arch == "standard" else
                           "N/A — book value buyback-distorted or ROE implausible")},
                 *([{"key": "ffo", "name": "P/FFO", "value": _r2(ffo_val),
                     "applicable": ffo_val is not None,
@@ -842,8 +877,11 @@ def main(universe_id=ACTIVE):
                  "applicable": warr_ps is not None,
                  "note": GATED_NOTE.get(arch) if not gates["Warranted"] else
                          f"{r['wbucket']}-median EV/EBIT anchor, adjusted for growth/margin"},
-                {"key": "ddm", "name": "DDM", "value": None, "applicable": False,
-                 "note": "replaced by warranted multiple for this universe (few payers)"},
+                {"key": "ddm", "name": "DDM", "value": _r2(ddm_ps), "applicable": ddm_ps is not None,
+                 "note": (f"dividend ${div0_ps:.2f}/sh grown to terminal g, discounted at "
+                          f"Re {r['re_']*100:.1f}%" if ddm_ps is not None else
+                          "N/A — no dividend paid" if not div0_ps else
+                          "N/A — payout not covered by earnings (unsustainable to project)")},
             ],
         }
         out.append(rec)

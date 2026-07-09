@@ -12,8 +12,33 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from common import ev_present_value, effective_tax, cost_of_debt
-from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim,
+from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim, ddm,
                      warranted_fit, warranted_value, triangulate)
+
+
+class TestDDM(unittest.TestCase):
+    def test_gordon_zero_growth(self):
+        # g=0, no fade (stage1=horizon): PV of a flat perpetuity-ish stream + Gordon TV.
+        # For a flat $1 dividend at Re=10%, term_g=0: value → D/Re = $10 as horizon→∞.
+        v = ddm(1.0, 0.10, 0.0, 0.0, 120, 120)
+        self.assertAlmostEqual(v, 10.0, places=1)
+
+    def test_none_without_dividend(self):
+        self.assertIsNone(ddm(0.0, 0.10, 0.025, 0.05, 10, 5))
+        self.assertIsNone(ddm(None, 0.10, 0.025, 0.05, 10, 5))
+
+    def test_none_when_re_not_above_terminal_g(self):
+        self.assertIsNone(ddm(2.0, 0.03, 0.025, 0.02, 10, 5))   # Re−term_g < 0.5%
+
+    def test_higher_growth_raises_value(self):
+        lo = ddm(2.0, 0.09, 0.025, 0.02, 10, 5)
+        hi = ddm(2.0, 0.09, 0.025, 0.06, 10, 5)
+        self.assertGreater(hi, lo)
+
+    def test_lower_discount_raises_value(self):
+        cheap = ddm(2.0, 0.07, 0.025, 0.03, 10, 5)
+        dear = ddm(2.0, 0.11, 0.025, 0.03, 10, 5)
+        self.assertGreater(cheap, dear)
 
 
 class TestRates(unittest.TestCase):

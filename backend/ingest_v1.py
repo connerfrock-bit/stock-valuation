@@ -53,7 +53,12 @@ CONCEPTS = {
     "re_impair":   ["ImpairmentOfRealEstate"],            # FFO adds RE impairments back
                                                           # (CCI's fiber writedown proved it)
     "sbc":         ["ShareBasedCompensation", "AllocatedShareBasedCompensationExpense"],
-    "dividends":   ["PaymentsOfDividendsCommonStock", "PaymentsOfDividends"],
+    # common-dividend tags first (some filers — BAC — drop PaymentsOfDividendsCommonStock
+    # after ~2013 and report DividendsCommonStockCash; without it DDM runs on a stale
+    # dividend). PaymentsOfOrdinaryDividends is deliberately NOT here — it bundles
+    # preferred, which would overstate the common dividend the DDM discounts.
+    "dividends":   ["PaymentsOfDividendsCommonStock", "DividendsCommonStockCash",
+                    "PaymentsOfDividends"],
     "equity":      ["StockholdersEquity",
                     "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
     "long_debt":   ["LongTermDebtNoncurrent", "LongTermDebt",

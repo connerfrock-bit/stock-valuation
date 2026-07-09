@@ -1,7 +1,7 @@
-import { C, MONO, upColor, qColor, confColor, hexA, agreement } from '../theme';
+import { C, MONO, upColor, qColor, hexA, agreement } from '../theme';
 import { fmtPrice, fmtPct, fmtMcapB, na } from '../format';
 import { RangeBar } from '../components/RangeBar';
-import { ConfMeter, BigGauge, RatioBar } from '../components/Meters';
+import { BigGauge, RatioBar } from '../components/Meters';
 import { SectorTag } from '../components/SectorTag';
 import { Sparkline } from '../components/Sparkline';
 import type { Company, Meta } from '../types';
@@ -46,7 +46,7 @@ export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: 
     (c.upside > 0.04 ? `Undervalued ~${Math.abs(Math.round(c.upside * 100))}% to mid`
       : c.upside < -0.04 ? `Overvalued ~${Math.abs(Math.round(c.upside * 100))}% to mid`
       : 'Fairly valued')
-    + ' · ' + (agree.single ? 'single method (by design)' : agree.word + ' agreement');
+    + ' · ' + (agree.single ? 'single method (by design)' : agree.detail);
 
   // ----- reverse-DCF callout -----
   const ig = c.impliedGrowth, tg = c.trailingG;
@@ -363,16 +363,16 @@ export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: 
                   to this business — the other engines are N/A by design (see the method notes), so there is no
                   cross-engine agreement to measure. The number rests on that single method's own assumptions.</>
               ) : (
-                <>{c.within} of {growthApplicable.length} growth engines within ±10% of mid — {agree.word} agreement.</>
+                <><b style={{ color: C.sec }}>{c.within} of {growthApplicable.length}</b> applicable engines land within
+                  ±10% of the mid. Agreement is judged against the methods that apply to this business — not a fixed five.</>
               )}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {agree.single
-                ? <span style={{ fontSize: 13, fontWeight: 600, color: C.mid }}>Single method · by design</span>
-                : <><ConfMeter score={c.conf} size={7} />
-                    <span style={{ fontSize: 13, fontWeight: 600, color: confColor(c.conf) }}>
-                      {agree.word[0].toUpperCase() + agree.word.slice(1) + ' · ' + c.conf + '/5'}
-                    </span></>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{
+                fontSize: 12.5, fontWeight: 700, padding: '4px 11px', borderRadius: 6,
+                color: agree.color, background: hexA(agree.color, 0.13),
+              }}>{agree.word}</span>
+              <span style={{ fontSize: 12, color: C.dim }}>{agree.single ? 'by design' : agree.detail}</span>
             </div>
           </div>
 
@@ -455,7 +455,10 @@ export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: 
                     {fmtPct(p.upside)}
                   </span>
                   <span style={{ width: 42, textAlign: 'right', fontFamily: MONO, color: C.dim3 }}>Q{p.quality}</span>
-                  <ConfMeter score={p.conf} size={3} />
+                  {(() => { const a = agreement(p.conf, p.nMethods); return (
+                    <span title={a.single ? 'single method (by design)' : `${a.word} — ${a.detail}`}
+                      style={{ width: 9, height: 9, borderRadius: '50%', background: a.color, flexShrink: 0 }} />
+                  ); })()}
                 </button>
               ))}
               {peers.length === 0 && <div style={{ fontSize: 11.5, color: C.dim }}>No covered peers in this sector.</div>}

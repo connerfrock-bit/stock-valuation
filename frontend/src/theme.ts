@@ -63,13 +63,16 @@ export const confColor = (c: number) => (c >= 4 ? C.green : c >= 2 ? C.amber : C
 // must not be shown as a misleading "2/5". Only score low/moderate/high when >=2
 // growth engines actually triangulate.
 export function agreement(conf: number, nMethods?: number): {
-  word: string; short: string; color: string; single: boolean;
+  word: string; detail: string; color: string; single: boolean;
 } {
-  if ((nMethods ?? 2) <= 1)
-    return { word: 'single method', short: '1 method', color: C.mid, single: true };
-  if (conf >= 4) return { word: 'high', short: `${conf}/5`, color: C.green, single: false };
-  if (conf >= 3) return { word: 'moderate', short: `${conf}/5`, color: C.amber, single: false };
-  return { word: 'low', short: `${conf}/5`, color: C.red, single: false };
+  const n = nMethods ?? 2;
+  // Never "/5" — the denominator is the APPLICABLE method set, not a fixed 5. A name
+  // valued on its by-design set that agree is strong, not "2 of 5, low".
+  if (n <= 1)
+    return { word: 'Single method', detail: 'by design', color: C.mid, single: true };
+  if (conf >= 4) return { word: 'Strong', detail: `${n} methods agree`, color: C.green, single: false };
+  if (conf >= 3) return { word: 'Fair', detail: `${n} methods, partial`, color: C.amber, single: false };
+  return { word: 'Wide range', detail: `${n} methods diverge`, color: C.amber, single: false };
 }
 
 // Flags matching this pattern render red (distress-type); others amber.

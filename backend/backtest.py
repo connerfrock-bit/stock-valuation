@@ -10,7 +10,9 @@ import json, sqlite3, statistics, sys
 from datetime import date
 from common import DB_PATH, CFG, cagr
 from engines import (cost_of_equity, wacc_of, dcf, reverse_dcf,
-                     epv, rim, warranted_fit, warranted_value, triangulate)
+                     epv, rim, ddm, warranted_fit, warranted_value, triangulate)
+
+FIN_SECTORS = {"Financials", "Real Estate"}   # RIM stays here; DDM-REIT exemption uses Real Estate
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -169,6 +171,19 @@ def signal(t, D, month, pit, px, adj, spl, sectors, rf, adj_mkt):
     if (book_ps and roe is not None and roe <= 0.40 and book_ps / price >= 0.15):
         rim_ps = rim(book_ps, roe, re_, 10)
 
+    # DDM (Phase 3.1) — PIT dividend, same guards as live: meaningful yield (≥1%),
+    # payout covered by earnings (Real Estate exempt — pays from FFO), dividend growth
+    # clamped to a sane [0,8%] band. compose() decides per-variant whether to use it.
+    div_s = series_asof(pt, "dividends", D)
+    div_now = latest(div_s)
+    div0_ps = (div_now / shares) if div_now else None
+    ni_now_d = latest(ni)
+    ddm_ps = None
+    if div0_ps and div0_ps / price >= 0.01 and (
+            sectors.get(t) == "Real Estate"
+            or (ni_now_d and ni_now_d > 0 and div_now <= ni_now_d * 1.5)):
+        ddm_ps = ddm(div0_ps, re_, term_g, max(0.0, min(0.08, g1)), 10, 5)
+
     flags = 0        # penalized traps: declining rev · neg FCF · leverage · accruals
     ry = sorted(rev)
     if len(ry) >= 4 and rev[ry[-1]] < rev[ry[-4]]:
@@ -196,7 +211,7 @@ def signal(t, D, month, pit, px, adj, spl, sectors, rf, adj_mkt):
     return dict(t=t, price=price, shares=shares, mcap=mcap, sector=sectors.get(t),
                 g1=g1, g_tr=g_tr, om=om, roe=roe, lev=lev, fcf_margin=fcf_margin,
                 ebit_now=ebit_now, debt=debt, cash=cash, dcf=dcf_ps, epv=epv_ps,
-                rim=rim_ps, impl=impl, flags=flags, cyc=cyc, mom=mom)
+                rim=rim_ps, ddm=ddm_ps, impl=impl, flags=flags, cyc=cyc, mom=mom)
 
 
 def pct_rank(sorted_vals, v):
@@ -248,12 +263,24 @@ VARIANTS = {
                 l7={"V": 1 / 3, "Q": 1 / 3, "M": 1 / 3}),
     "v3m": dict(weights=V2_WEIGHTS, q_dims=Q_DIMS_V2, flag_decay=True, gap_w=0.0,
                 l7={"V": 0.25, "Q": 0.25, "M": 0.50}),
+    # Phase 3.1 — RIM scoped to financials (a bank engine off standard names) and DDM
+    # reactivated for dividend payers. v2r isolates the RIM-scope; v2rd adds DDM. The
+    # question: does making the valuations SENSIBLE also hold up as a ranking signal?
+    "v2r":  dict(weights=V2_WEIGHTS, q_dims=Q_DIMS_V2, flag_decay=True, gap_w=0.0,
+                 rim_fin_only=True),
+    "v2rd": dict(weights={"DCF": 0.10, "RIM": 0.35, "Warranted": 0.30, "FFO": 0.30, "DDM": 0.10},
+                 q_dims=Q_DIMS_V2, flag_decay=True, gap_w=0.0, rim_fin_only=True, ddm=True),
 }
 # ADOPTION (2026-07-02, both universes): v2w beats v1 in 5 of 6 window/universe cells
 # (ndx full −5.27 → −0.99pp). v2's gap blend wins the 2022-26 holdout but LOSES to v1
 # on the 2016-21 window (ndx −6.94pp) — that's the value-factor regime, not signal.
 # Rejected; the reverse-DCF gap stays displayed, not scored.
-ADOPTED = "v2w"                    # the variant the published curve/stats are built from
+ADOPTED = "v2rd"                   # the variant the published curve/stats are built from
+# Phase 3.1: switched v2w → v2rd to MATCH the shipped live model (RIM scoped to
+# financials + DDM). v2rd backtests ~1pp under v2w on the full window — kept anyway:
+# the composite is not an alpha signal (Phase 1.4), the gap is inside the survivorship
+# band, and v2w's edge was a garbage-low-RIM cheapness proxy. Honesty over the prettier
+# curve; the forward ledger is the real arbiter. (v2w stays above for the comparison.)
 
 
 def _winsor(pairs, p=0.05):
@@ -302,8 +329,15 @@ def compose(sigs, variant):
             for k in variant["q_dims"]}
     rows = []
     for s in sigs:
-        tri = triangulate({"DCF": s["dcf"], "RIM": s["rim"], "Warranted": s["warr"]},
-                          s["epv"], s["price"], weights=variant["weights"])
+        # Phase 3.1 (variant-gated so v2w baseline is untouched): RIM is a financials/REIT
+        # engine — drop it from the mid for non-financials; DDM added for dividend payers.
+        rim_val = s["rim"]
+        if variant.get("rim_fin_only") and s["sector"] not in FIN_SECTORS:
+            rim_val = None
+        growth = {"DCF": s["dcf"], "RIM": rim_val, "Warranted": s["warr"]}
+        if variant.get("ddm"):
+            growth["DDM"] = s.get("ddm")
+        tri = triangulate(growth, s["epv"], s["price"], weights=variant["weights"])
         if not tri:
             continue
         ps = [pct_rank(dims[k], s[k]) for k in dims]

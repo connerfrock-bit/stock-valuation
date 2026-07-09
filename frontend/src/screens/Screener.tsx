@@ -3,7 +3,7 @@ import { C, MONO, upColor, agreement } from '../theme';
 import { fmtPrice, fmtPct, fmtMcapB, na } from '../format';
 import { FilterRail } from '../components/FilterRail';
 import { RangeBar } from '../components/RangeBar';
-import { ConfMeter, QualityGauge } from '../components/Meters';
+import { QualityGauge } from '../components/Meters';
 import { FlagChips } from '../components/FlagChips';
 import { SectorTag } from '../components/SectorTag';
 import type { Company, Filters, SortKey } from '../types';
@@ -211,9 +211,13 @@ export function Screener(props: {
                       {fmtPct(c.upside)}
                     </td>
                     <td style={{ padding: '7px 12px' }}>
-                      {agreement(c.conf, c.nMethods).single
-                        ? <span style={{ fontFamily: MONO, fontSize: 10.5, color: C.dim }} title="single valuation method applies (by design) — no cross-engine agreement to measure">1 method</span>
-                        : <ConfMeter score={c.conf} />}
+                      {(() => { const a = agreement(c.conf, c.nMethods); return (
+                        <span title={a.single ? 'single valuation method applies (by design) — no cross-engine agreement to measure' : a.detail}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, color: a.color }}>
+                          <span style={{ width: 7, height: 7, borderRadius: '50%', background: a.color, flexShrink: 0 }} />
+                          {a.single ? 'Single' : a.word}
+                        </span>
+                      ); })()}
                     </td>
                     <td style={{ padding: '7px 12px', width: 96 }}><QualityGauge q={c.quality} /></td>
                     <td style={{ padding: '7px 12px', textAlign: 'right', fontFamily: MONO, fontWeight: 600,

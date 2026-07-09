@@ -137,6 +137,24 @@ def warranted_value(fit, sector, g, margin, ebit, cash, debt, shares):
     return (mult * ebit - debt + cash) / shares
 
 
+def ddm(div0_ps, re_, term_g, g1, horizon, stage1):
+    """Multi-stage dividend discount value/share: D0 grown at g1 (linear fade to term_g
+       over the horizon), discounted at the cost of EQUITY, Gordon terminal. The classic
+       model for dividend-anchored businesses (banks, REITs) and a real second opinion for
+       any dividend payer. None when there is no dividend or Re ≤ term_g (TV undefined).
+       g1 is the same growth the DCF uses (capped upstream) so an unsustainable payout
+       can't compound to a silly number; the caller also gates on payout coverage."""
+    if not div0_ps or div0_ps <= 0 or re_ - term_g < 0.005:
+        return None
+    pv, d = 0.0, div0_ps
+    for t in range(1, horizon + 1):
+        g = g1 if t <= stage1 else g1 + (term_g - g1) * (t - stage1) / (horizon - stage1)
+        d *= (1 + g)
+        pv += d / (1 + re_) ** t
+    tv = d * (1 + term_g) / (re_ - term_g)
+    return pv + tv / (1 + re_) ** horizon
+
+
 # ---------- §L8 Triangulate -> range + confidence ----------
 # EPV is a no-growth FLOOR, not a central estimate — it sets the low bound and is shown
 # separately, never averaged into the mid. The mid is a weight-blended central value from
@@ -144,7 +162,9 @@ def warranted_value(fit, sector, g, margin, ebit, cash, debt, shares):
 # Plan 3 (split-validated, both universes — see WORKLOG.md): DCF demoted, RIM/Warranted
 # promoted — the engines the backtest ranked most reliable. The old weights (DCF .25,
 # RIM .20, W .25) live on in backtest.py's V1_WEIGHTS for the variant comparison.
-CENTRAL_WEIGHTS = {"DCF": 0.10, "RIM": 0.35, "Warranted": 0.30, "DDM": 0.10}
+# Phase 3.1: FFO is the REIT anchor; DDM reactivated for dividend payers (banks/REITs get
+# a real 2nd method). RIM is scoped to financials/REITs in value.py (a bank engine).
+CENTRAL_WEIGHTS = {"DCF": 0.10, "RIM": 0.35, "Warranted": 0.30, "FFO": 0.30, "DDM": 0.10}
 
 def triangulate(growth, floor, price, weights=None):
     """growth: {engine_name: per-share value} for applicable growth engines.

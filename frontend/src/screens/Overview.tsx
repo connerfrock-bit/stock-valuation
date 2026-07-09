@@ -246,9 +246,9 @@ function Scatter({ list, openDeep }: { list: Company[]; openDeep: (t: string) =>
                   { label: 'Fair (mid)', val: fmtPrice(c.mid), color: '#fff' },
                   { label: 'Upside', val: fmtPct(c.upside), color: upColor(c.upside) },
                   { label: 'Quality', val: String(c.quality), color: qColor(c.quality) },
-                  agreement(c.conf, c.nMethods).single
-                    ? { label: 'Agreement', val: 'single method', color: C.mid }
-                    : { label: 'Agreement', val: `${c.conf}/5`, color: C.mid },
+                  { label: 'Agreement',
+                    val: agreement(c.conf, c.nMethods).single ? 'single method' : agreement(c.conf, c.nMethods).detail,
+                    color: agreement(c.conf, c.nMethods).color },
                 ],
                 foot: c.flags.length ? '⚠ ' + c.flags.join(' · ') : 'No trap flags — clean.',
               });
