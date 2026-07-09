@@ -1076,3 +1076,39 @@ EPV floor. One-line change in `triangulate` + honest note updates. Verified: **0
 have a synthetic low below every real engine**; the value-destroyers where a real DCF sits
 below EPV (ROIC < WACC — FANG DCF $32 vs EPV $131) correctly keep that real low. Tests +1
 (139 → 140). Model v2.8.1. Backtest unaffected (it calls triangulate without the band).
+
+## Phase 3.3 — Tier 3: scenarios + capital panel (2026-07-09, model v2.9)
+
+The reviewers' "favorite addition" (three numbers, not one) plus the capital-efficiency
+panel. Both are **additive display fields** — `mid`/`upside`/`conf`/`quality`/`score` are
+byte-for-byte v2.8.1, so the ranking and the backtest are untouched.
+
+**Bear/Base/Bull scenario engine.** Base = the triangulated mid (the headline number).
+Bull/Bear re-run the DCF with growth/margin/WACC shifted, and scale the mid by the DCF's
+fundamental sensitivity (`dcf_bull/dcf_base`, `dcf_bear/dcf_base`). Plus a probability-
+weighted fair value (25/50/25) and an annualized expected return (~5y convergence).
+
+**The taming story (the real lesson).** First cut *exploded* — PEP bull 8× price, MU bull
+$3,987. Cause: raising margin lifted ROIC, and higher ROIC collapses the `g/ROIC`
+reinvestment term, so the convex value-driver DCF ran away. Fixes, in order of impact:
+(1) **hold ROIC fixed** in scenarios — shift the NOPAT *level* only, not the reinvestment
+driver; (2) small assumption deltas (±1.5pp growth, ±1pp margin, ±0.4pp WACC) scaled
+1×–2× by the predictability band; (3) cone caps (bull ≤ 1.65×, bear ≥ 0.55×) as a backstop;
+(4) bear floored at the EPV no-growth value (consistent with v2.8.1). Result: cones widen
+cleanly with risk — **q80+ [0.78, 1.30], q55–79 [0.71, 1.44], q<55 [0.65, 1.65]** — median
+bull +45% / bear −29%, only 19/71 at a cap. All deltas/caps/probs are config in assumptions.toml.
+
+**Capital-efficiency panel.** ROIC, economic spread (ROIC − WACC — is growth creating or
+destroying value?), the DCF's reinvestment assumption (g/ROIC), and incremental ROIC
+(ΔNOPAT/Δinvested-capital — return on the last dollars deployed; `null` for net capital
+returners like AAPL, where invested capital shrank — shown as such, not blanked). Sanity
+checks landed: NVDA incROIC 87% (the AI ramp), TXN −24% (fab buildout not yet earning),
+AMZN ROIC 10% ≈ WACC. Standard names only; N/A for financials/REITs (no DCF).
+
+**Frontend** (`ScenarioCone.tsx`, `CapitalPanel.tsx`, wired into DeepDive.tsx) built by a
+**Fable 5 subagent** against a fixed data contract (`types.ts` `Scenario`/`Capital`). The
+cone card mirrors RangeBar's visual language and sits directly under the fair-value range;
+the capital panel is a 2×2 stat grid between Quality & safety and Method agreement. Both
+self-guard on null (financials/REITs render nothing). Verified in the preview (MSFT both
+panels, a financial correctly omits, AAPL incROIC "n/a — net capital returner"), tsc + vite
+build clean, no console errors. Tests 144 (blend_scenarios goldens). Model v2.9.

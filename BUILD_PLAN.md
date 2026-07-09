@@ -363,10 +363,22 @@ Honesty rules: never a single fair value without its range · agreement always b
       `beta_default` "PLACEHOLDER" comment, the false DDM "replaced" card, DCF/EPV cards. These
       ship under the standing-rule carve-out (correctness/sensibility fix, no real edge to
       protect). Tests 115 → 139.
-- [ ] **Tier 3 (queued, not started):** Bear/Base/Bull scenarios + sensitivity tables (the
-      reviewers' three-number ask — a real assumption-scenario range, distinct from today's
-      engine-dispersion range) · capital-efficiency panel (ROIC / incremental ROIC / reinvest
-      % / economic spread). Bigger builds; communication value.
+### Phase 3.3 — Tier 3: scenarios + capital panel (2026-07-09, model v2.9)
+- [x] **Bear/Base/Bull scenario engine** ✅ — Base = the mid; Bull/Bear re-run the DCF with
+      growth/margin/WACC shifted, scaled by the predictability band, capped 1.65×/0.55×, bear
+      floored at EPV. + probability-weighted fair value (25/50/25) and annualized expected
+      return. Key fix: HOLD ROIC FIXED (letting margin lift ROIC collapsed the g/ROIC
+      reinvestment term and the convex DCF exploded — PEP bull 8× price). Cones widen with
+      risk: q80+ [0.78,1.30] → q<55 [0.65,1.65]. Config in assumptions.toml. See WORKLOG.
+- [x] **Capital-efficiency panel** ✅ — ROIC, economic spread (ROIC−WACC), reinvestment
+      (g/ROIC), incremental ROIC (ΔNOPAT/Δcapital; null for net capital returners). Standard
+      names only. Sanity: NVDA incROIC 87% (AI ramp), TXN −24% (fab buildout).
+- [x] **Frontend** ✅ — ScenarioCone + CapitalPanel components (built by a Fable 5 subagent),
+      wired into the deep-dive; both self-guard on null. tsc + build clean, verified in preview.
+- [x] **Additive only** ✅ — mid/upside/conf/quality/score are byte-for-byte v2.8.1; ranking
+      and backtest untouched. Model v2.9, tests 144.
+- [ ] **Tier 3 remainder (queued):** per-assumption sensitivity tables (WACC ±1%, g ±1%,
+      margin) — the reviewers also asked for these alongside the scenarios; not yet built.
 
 ### Standing rules
 - No new valuation engines (seven triangulate; an eighth is procrastination).
