@@ -11,7 +11,7 @@ stdlib only.  Run after ingest_v1.py and betas.py:   python value.py
 import datetime, json, re, sqlite3, statistics, sys
 from common import (CFG, OVERRIDES, SUBSECTOR_BY_SIC, UNIVERSES, ACTIVE, resolve_universe,
                     DB_PATH, fetch_risk_free, load_company, latest, cagr, avg_margin, avg_roe,
-                    effective_tax, roe_stability, equity_to_assets, cost_of_debt,
+                    effective_tax, roe_stability, equity_to_assets, cost_of_debt, size_premium,
                     money, pct)
 from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim, ddm,
                      warranted_fit, warranted_value, triangulate, CENTRAL_WEIGHTS)
@@ -145,8 +145,15 @@ def collect(con, rf, erp, tax_fallback, betas, universe_id):
         def nv(c, fb=None):
             return nowd[c][0] if c in nowd else fb
 
+        # Normalization window: cyclicals (industrials/energy/materials/semis) need a full
+        # cycle averaged, or the "normal" margin is just wherever the last 5 years landed on
+        # the curve. Tie the window to the SAME volatility detector that raises the Cyclical
+        # flag (one threshold, no second definition): 10y when cyclical, else 5y.
+        _vol = _rev_vol(rev)
+        nyrs = 10 if (_vol is not None and _vol > CYCLICAL_VOL) else 5
+
         # per-year FCF (SBC expensed) and FCF margins over the overlap window
-        yrs = sorted(set(rev) & set(cfo_s) & set(cap_s))[-5:]
+        yrs = sorted(set(rev) & set(cfo_s) & set(cap_s))[-nyrs:]
         fcf_by_year = {y: cfo_s[y] - cap_s[y] - sbc_s.get(y, 0.0) for y in yrs}
         margins = [fcf_by_year[y] / rev[y] for y in yrs if rev[y]]
         fcf_margin = sum(margins) / len(margins) if margins else None
@@ -159,7 +166,7 @@ def collect(con, rf, erp, tax_fallback, betas, universe_id):
 
         ebit_s = f.get("ebit", {})
         ebit_now = nv("ebit", latest(ebit_s))
-        om = avg_margin(ebit_s, rev, years=5)
+        om = avg_margin(ebit_s, rev, years=nyrs)
         ni_s, eq_s = f.get("net_income", {}), f.get("equity", {})
         # Plan 2: valuation debt = ALL borrowings (long + previously-missing short/current).
         # Operating leases go in debt_risk only — every engine discounts post-rent flows
@@ -179,7 +186,8 @@ def collect(con, rf, erp, tax_fallback, betas, universe_id):
         mcap = price * shares
         g_trail = cagr(rev)                                # honest trailing growth (uncapped)
         g1 = min(max(g_trail or 0.0, CFG["initial_growth_floor"]), CFG["initial_growth_cap"])
-        re_ = cost_of_equity(rf, beta, erp)
+        size_prem = size_premium(mcap, CFG.get("size_premium_bands", []))
+        re_ = cost_of_equity(rf, beta, erp, size_prem=size_prem)
         rd = cost_of_debt(nv("interest_exp", latest(f.get("interest_exp", {}))), borrowings,
                           rf, CFG["cost_of_debt_spread"], CFG["cost_of_debt_cap"])
         tax_r = effective_tax(f.get("tax_exp", {}), f.get("pretax", {}),
@@ -200,6 +208,14 @@ def collect(con, rf, erp, tax_fallback, betas, universe_id):
         inv_cap = (equity_now or 0.0) + debt - cash
         roic = (ebit_now * (1 - tax_r) / inv_cap
                 if (ebit_now is not None and inv_cap > 0) else None)
+        # DCF base = normalized NOPAT (normalized operating margin × revenue, after tax) —
+        # the SAME earnings power EPV values, so the two engines now share a base and the
+        # DCF only adds growth + the reinvestment it requires (g/ROIC). This replaces
+        # trailing FCF-margin × revenue, which counts growth capex as lost cash and so
+        # understates any reinvestor (Amazon). roic_dcf drives the reinvestment rate; when
+        # either is unusable the engines fall back to the old FCF base (nothing breaks).
+        nopat_norm = (om * rev_now * (1 - tax_r)) if (om is not None and rev_now) else None
+        roic_dcf = (nopat_norm / inv_cap) if (nopat_norm is not None and inv_cap > 0) else None
 
         rows.append(dict(
             t=t, name=name, sector=sector, arch=arch, fin_ccy=fin_ccy or "USD", cik=cik,
@@ -207,6 +223,7 @@ def collect(con, rf, erp, tax_fallback, betas, universe_id):
             price=price, shares=shares, mcap=mcap,
             beta=beta, re_=re_, wacc=wacc, rev=rev, rev_now=rev_now,
             fcf_norm=fcf_norm, fcf_last=fcf_last, fcf_margin=fcf_margin,
+            nopat_norm=nopat_norm, roic_dcf=roic_dcf, cyclical=(nyrs == 10),
             ebit_now=ebit_now, om=om, ni_s=ni_s, eq_s=eq_s, debt=debt, cash=cash,
             debt_risk=debt_risk, rd=rd, tax_r=tax_r, capex_now=nv("capex", latest(cap_s)),
             dna=dna, div=div, g_trail=g_trail, g1=g1, roic=roic,
@@ -307,15 +324,21 @@ def piotroski(r):
     return (score if n >= 5 else None), n
 
 
-def rev_volatility(r):
-    """Stdev of YoY revenue growth (≤6 obs) — the data-driven cyclicality detector."""
-    s = r["rev"]
-    ys = sorted(s)
-    gr = [s[ys[i]] / s[ys[i - 1]] - 1 for i in range(1, len(ys)) if s[ys[i - 1]]][-6:]
+CYCLICAL_VOL = 0.18       # stdev of YoY revenue growth above this = cyclical (the normalization
+                          # window AND the trap flag share this one threshold — no drift)
+
+def _rev_vol(rev):
+    """Stdev of YoY revenue growth (≤6 obs) from a raw revenue series, or None (<3 obs)."""
+    ys = sorted(rev)
+    gr = [rev[ys[i]] / rev[ys[i - 1]] - 1 for i in range(1, len(ys)) if rev[ys[i - 1]]][-6:]
     if len(gr) < 3:
         return None
     m = sum(gr) / len(gr)
     return (sum((x - m) ** 2 for x in gr) / len(gr)) ** 0.5
+
+def rev_volatility(r):
+    """Stdev of YoY revenue growth (≤6 obs) — the data-driven cyclicality detector."""
+    return _rev_vol(r["rev"])
 
 
 def ffo_series(ni, dna, gains, impair=None):
@@ -360,6 +383,31 @@ def hygiene_reason(ticker, name, price, sic):
     if name and _INSTRUMENT_NAME.search(name):
         return "non-common instrument (warrant/right/preferred)"
     return None
+
+
+def _warr_roic(r):
+    """Normalized ROIC for the warranted multiple's ROIC driver — the cyclical-window
+       NOPAT-based roic (roic_dcf) when available, else the current-EBIT roic, else 0."""
+    return r["roic_dcf"] if r["roic_dcf"] is not None else (r["roic"] or 0.0)
+
+
+# Range widening (Tier 2): the low↔high band is never narrower than this half-width, so a
+# volatile / low-quality business shows a wider fair-value range even when the engines agree.
+# This is BUSINESS predictability — a separate axis from confidence (engine agreement), which
+# is left untouched. Reviewer's point: heavy dilution + volatile cash flows deserve a wider band.
+RANGE_BASE_BAND = 0.10        # even a pristine compounder carries ±10% valuation uncertainty
+RANGE_QUALITY_SCALE = 0.30    # the lowest-quality name adds up to ±30% more
+RANGE_CYCLICAL_ADDER = 0.10   # cyclical revenue adds a further ±10%
+
+def quality_band(quality, cyclical):
+    """Minimum half-width of the fair-value range, from quality (0–100) + cyclicality.
+       ±10% for a top-quality steady name → ~±50% for a low-quality cyclical. Constants are
+       config-overridable (assumptions.toml [global]); the module defaults are the fallback."""
+    base = CFG.get("range_base_band", RANGE_BASE_BAND)
+    scale = CFG.get("range_quality_scale", RANGE_QUALITY_SCALE)
+    cyc_add = CFG.get("range_cyclical_adder", RANGE_CYCLICAL_ADDER)
+    q = (quality if quality is not None else 50) / 100.0
+    return base + (1 - q) * scale + (cyc_add if cyclical else 0.0)
 
 
 def _resolved_bucket(r, sub_ovr):
@@ -496,7 +544,7 @@ def trap_flags(r, z=None, fscore=None, min_mcap=0.0, ffo_priced=False):
     if fscore is not None and fscore <= 3:
         flags.append(f"Piotroski {fscore}/9")
     vol = rev_volatility(r)
-    if vol is not None and vol > 0.18:
+    if vol is not None and vol > CYCLICAL_VOL:
         flags.append("Cyclical revenue")
     if r["t"] in ADR_STRUCTURE_RISK:
         flags.append("VIE/ADR structure")
@@ -510,7 +558,25 @@ def trap_flags(r, z=None, fscore=None, min_mcap=0.0, ffo_priced=False):
 
 
 # ---------------- snapshot history (append-only) ----------------
-MODEL_VERSION = "v2.6"        # frozen model tag — bump whenever scoring/engine logic changes
+MODEL_VERSION = "v2.8"        # frozen model tag — bump whenever scoring/engine logic changes
+# v2.8 (Tier 2): three adaptivity upgrades. (1) Size premium added to Re (rf + beta·ERP +
+#        size_prem) from CRSP-decile bands in assumptions.toml — ~0 for the Nasdaq-100 (all
+#        mega/large), bites S&P 1500 small caps. (2) ROIC is now a third within-bucket driver
+#        of the warranted multiple (sign-guarded positive) — a 35%-ROIC name earns a higher
+#        multiple than an 8%-ROIC peer; in practice ROIC absorbed the margin signal (the better
+#        value driver). (3) The low↔high range is widened by a quality/cyclicality band
+#        (±10% pristine → ~±50% low-quality cyclical); confidence (engine agreement) is left
+#        untouched — business predictability is a separate axis. backtest.py synced to the v2.7
+#        NOPAT base + size premium (no-op on its large-cap universes).
+# v2.7 (Tier 1): DCF/reverse-DCF base = normalized NOPAT − g/ROIC reinvestment (McKinsey
+#        value-driver), replacing trailing FCF-margin × revenue that counted growth capex as
+#        lost cash and undervalued reinvestors (AMZN had no DCF at all; semis showed DCF as
+#        an absurd low outlier w/ ~40% implied growth). DCF now shares EPV's earnings base.
+#        + cyclical-aware normalization: 10y margin/FCF window when rev-vol > 0.18 (the same
+#        threshold that raises the Cyclical flag), else 5y — so mid-cycle earnings power isn't
+#        set wherever the last 5 years landed on the curve. Falls back to the old FCF base
+#        when NOPAT/ROIC unusable (nothing breaks). backtest.py DCF is unchanged (separate
+#        variant harness — the forward ledger arbitrates, per the standing rule).
 # v2.6 (Phase 3.1): RIM scoped to financials/REITs (a book engine off standard names);
 # DDM reactivated for dividend payers (banks/REITs triangulate; single-method 26%→11%).
 # Ships despite backtesting ~1pp under v2.5 — the composite is an expectations meter, not
@@ -692,14 +758,14 @@ def main(universe_id=ACTIVE):
     if split_counts:
         print("Anchor split: " + " · ".join(f"{b} {c}" for b, c in sorted(split_counts.items())))
     fit_rows = [(r["wbucket"], (r["mcap"] + r["debt"] - r["cash"]) / r["ebit_now"],
-                 r["g1"], r["om"] or 0.0)
+                 r["g1"], r["om"] or 0.0, _warr_roic(r))
                 for r in rows if _fit_ok(r)]
     wfit = warranted_fit(fit_rows)
     if wfit:
         smeans, gmean, coef = wfit
         print(f"Warranted v2 fit on {len(fit_rows)} names · {len(smeans)} sector anchors "
               f"(global mean EV/EBIT {gmean[0]:.1f}) · within-sector: "
-              f"+{coef[0]:.1f}·Δg +{coef[1]:.1f}·Δmargin\n")
+              f"+{coef[0]:.1f}·Δg +{coef[1]:.1f}·Δmargin +{coef[2]:.1f}·ΔROIC\n")
     else:
         print("Warranted v2 fit FAILED — engine disabled\n")
 
@@ -721,7 +787,10 @@ def main(universe_id=ACTIVE):
         base_fcf = r["fcf_norm"] if (r["fcf_norm"] or 0) > 0 else r["fcf_last"]
         ndebt = r["debt"] - r["cash"]
 
-        dcf_ps = dcf(base_fcf, r["wacc"], term_g, ndebt, r["shares"], r["g1"], H, S1)
+        dcf_ps = dcf(base_fcf, r["wacc"], term_g, ndebt, r["shares"], r["g1"], H, S1,
+                     nopat0=r["nopat_norm"], roic=r["roic_dcf"])
+        dcf_nopat = bool(r["nopat_norm"] and r["nopat_norm"] > 0
+                         and r["roic_dcf"] and r["roic_dcf"] > 0)
         epv_ps = epv((r["om"] or 0) * (r["rev_now"] or 0), r["tax_r"], r["wacc"], r["cash"],
                      r["debt"], r["shares"], r["dna"], r["capex_now"])
         book_ps, roe, rim_ok = r["book_ps"], r["roe_avg"], r["rim_ok"]
@@ -739,7 +808,7 @@ def main(universe_id=ACTIVE):
         if ffo_val is not None:
             rim_ps = None    # FFO REPLACES RIM-on-book (historical-cost book misprices REITs)
         warr_ps = warranted_value(wfit, r["wbucket"], r["g1"], r["om"] or 0.0,
-                                  r["ebit_now"], r["cash"], r["debt"], r["shares"])
+                                  _warr_roic(r), r["ebit_now"], r["cash"], r["debt"], r["shares"])
         # DDM (Phase 3.1) — a real second method for dividend payers. REITs pay from FFO
         # (allow regardless of NI); everyone else needs the payout covered by earnings
         # (div ≤ 1.5× NI, NI > 0) or projecting a doomed dividend inflates the value.
@@ -760,7 +829,8 @@ def main(universe_id=ACTIVE):
         ddm_g = max(0.0, min(0.08, r["g1"] or 0.0))
         ddm_ps = (ddm(div0_ps, r["re_"], term_g, ddm_g, H, S1)
                   if (div0_ps and ddm_ok) else None)
-        impl, op = reverse_dcf(base_fcf, r["wacc"], term_g, ndebt, r["mcap"], H, S1)
+        impl, op = reverse_dcf(base_fcf, r["wacc"], term_g, ndebt, r["mcap"], H, S1,
+                               nopat0=r["nopat_norm"], roic=r["roic_dcf"])
 
         # L5 router (Plan A) — the ONE enforcement seam. Forcing a gated engine to None
         # simultaneously (a) removes it from triangulate's mid, (b) flips methods[].applicable
@@ -786,7 +856,8 @@ def main(universe_id=ACTIVE):
         # so JPM can never again wear a "Piotroski 2/9" trap flag it didn't earn
         fscore, fn = piotroski(r) if eff_arch == "standard" else (None, 0)
         tri = triangulate({"DCF": dcf_ps, "RIM": rim_ps, "Warranted": warr_ps,
-                           "FFO": ffo_val, "DDM": ddm_ps}, epv_ps, r["price"])
+                           "FFO": ffo_val, "DDM": ddm_ps}, epv_ps, r["price"],
+                          min_band=quality_band(r["quality"], r["cyclical"]))
         flags = trap_flags(r, z, fscore, min_mcap, ffo_priced=ffo_val is not None)
         if not tri:
             reason = {"financial": "financial: RIM only, and book value/ROE not usable "
@@ -852,7 +923,11 @@ def main(universe_id=ACTIVE):
                 {"key": "dcf", "name": "DCF", "value": _r2(dcf_ps),
                  "applicable": dcf_ps is not None,
                  "note": GATED_NOTE.get(arch) if not gates["DCF"] else
-                         f"normalized FCF · g₁ {r['g1']*100:.0f}% capped · WACC {r['wacc']*100:.1f}%"},
+                         (("normalized NOPAT − g/ROIC reinvestment" if dcf_nopat else
+                           "normalized FCF")
+                          + (f" · {r['cyclical'] and '10y' or '5y'}-normalized"
+                             if r["cyclical"] else "")
+                          + f" · g₁ {r['g1']*100:.0f}% capped · WACC {r['wacc']*100:.1f}%")},
                 {"key": "rim", "name": "RIM", "value": _r2(rim_ps), "applicable": rim_ps is not None,
                  "note": ("book + PV excess ROE · ω 0.62"
                           + (" · the anchor for this archetype" if arch != "standard" else ""))
@@ -872,11 +947,14 @@ def main(universe_id=ACTIVE):
                 {"key": "epv", "name": "EPV (floor)", "value": _r2(epv_ps),
                  "applicable": epv_ps is not None,
                  "note": GATED_NOTE.get(arch) if not gates["EPV"] else
-                         "no-growth NOPAT / WACC — sets the LOW bound, never in mid"},
+                         ("no-growth NOPAT / WACC — ABOVE the growth cases here: at ROIC < WACC "
+                          "growth destroys value, so this is a ceiling, not a floor"
+                          if (epv_ps is not None and epv_ps > tri["mid"]) else
+                          "no-growth NOPAT / WACC — sets the LOW bound, never in mid")},
                 {"key": "warranted", "name": "Warranted mult.", "value": _r2(warr_ps),
                  "applicable": warr_ps is not None,
                  "note": GATED_NOTE.get(arch) if not gates["Warranted"] else
-                         f"{r['wbucket']}-median EV/EBIT anchor, adjusted for growth/margin"},
+                         f"{r['wbucket']}-median EV/EBIT anchor, adjusted for growth/margin/ROIC"},
                 {"key": "ddm", "name": "DDM", "value": _r2(ddm_ps), "applicable": ddm_ps is not None,
                  "note": (f"dividend ${div0_ps:.2f}/sh grown to terminal g, discounted at "
                           f"Re {r['re_']*100:.1f}%" if ddm_ps is not None else

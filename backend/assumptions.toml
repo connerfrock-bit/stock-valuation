@@ -7,7 +7,8 @@ active_universe = "ndx"
 
 [global]
 equity_risk_premium  = 0.050    # Damodaran implied ERP (single most consequential input)
-beta_default         = 1.00     # PLACEHOLDER until Blume-adjusted regression / Damodaran industry betas (Phase 3)
+beta_default         = 1.00     # per-name Blume-adjusted 5y betas are LIVE (betas.py); this is the
+                                # fallback only when a name lacks ≥24 months of overlap for the regression
 beta_floor           = 0.50
 beta_cap             = 2.00
 tax_rate             = 0.21     # FALLBACK only — effective rate from filings preferred (Plan 2)
@@ -24,6 +25,21 @@ initial_growth_cap   = 0.20
 initial_growth_floor = 0.00
 sbc_treatment        = "expense"  # Nasdaq-100 default: subtract SBC from FCF
 min_wacc_minus_g     = 0.015    # clamp/skip when WACC - g is below this (TV explodes)
+
+# Size premium added to Re (rf + beta·ERP + size_prem): [min_mcap, premium], largest
+# threshold first, first one cleared wins. CRSP-decile size premia (Kroll/Duff & Phelps)
+# scaled DOWN because beta already captures part of the small-cap effect — this is the
+# INCREMENTAL premium. ~0 for the Nasdaq-100 (all mega/large); bites on the S&P 1500
+# small/mid caps where the cross-sectional value evidence actually lives.
+size_premium_bands   = [[10e9, 0.000], [2e9, 0.003], [0.5e9, 0.008], [0.0, 0.015]]
+
+# Fair-value RANGE widening (display only — never touches mid, score, or confidence). The
+# low↔high band is at least this half-width, from quality (0–100) + cyclicality: business
+# predictability, a SEPARATE axis from engine agreement (confidence). ±10% for a pristine
+# steady compounder → ~±50% for a low-quality cyclical. Engine dispersion still wins when wider.
+range_base_band      = 0.10     # floor uncertainty even for the best names
+range_quality_scale  = 0.30     # the lowest-quality name adds up to ±30% more
+range_cyclical_adder = 0.10     # cyclical revenue adds a further ±10%
 
 # risk_free is pulled LIVE from FRED DGS10 — never hardcoded. Fallback only if the fetch fails.
 risk_free_fallback   = 0.043

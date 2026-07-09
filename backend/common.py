@@ -139,6 +139,19 @@ def effective_tax(tax_s, pretax_s, years=3, floor=0.10, cap=0.35, fallback=0.21)
         return fallback
     return max(floor, min(cap, sum(rs) / len(rs)))
 
+def size_premium(mcap, bands):
+    """Incremental cost-of-equity premium for smaller companies (added to rf + beta·ERP).
+       bands = [[min_mcap, premium], ...]; returns the premium of the first band (largest
+       min_mcap first) whose threshold mcap clears. 0 when no bands or no mcap. CRSP-decile
+       size premia scaled down — beta already captures part of the small-cap effect."""
+    if not mcap or not bands:
+        return 0.0
+    for min_mcap, prem in sorted(bands, key=lambda b: -b[0]):
+        if mcap >= min_mcap:
+            return prem
+    return 0.0
+
+
 def cost_of_debt(interest, debt, rf, spread, cap=0.15):
     """Effective Rd = interest expense / total borrowings, floored at rf+0.5% and
        capped (the ratio explodes when debt shrank mid-year). Falls back to
@@ -157,6 +170,28 @@ def ev_present_value(fcf0, wacc, term_g, g1, horizon, stage1):
         fcf *= (1 + g)
         pv += fcf / (1 + wacc) ** t
     tv = fcf * (1 + term_g) / (wacc - term_g)
+    return pv + tv / (1 + wacc) ** horizon
+
+
+REINVEST_CAP = 0.90        # reinvestment can't exceed 90% of NOPAT — stream stays FCF-positive
+
+def ev_present_value_nopat(nopat0, roic, wacc, term_g, g1, horizon, stage1):
+    """Enterprise PV of a value-DRIVER FCFF stream (McKinsey form): each year's FCFF is
+       normalized NOPAT grown at g_t MINUS the reinvestment that growth requires,
+       rr = g/ROIC. Reinvestment falls as growth fades to term_g, so a heavy reinvestor is
+       no longer valued as if its depressed current FCF margin were permanent (the Amazon
+       problem: trailing FCF-margin × revenue counts growth capex as if it were lost cash).
+       rr is clamped to [0, REINVEST_CAP] so the stream stays FCF-positive and a low-ROIC,
+       high-growth name can't imply a negative perpetual cash flow. ROIC must be > 0 and
+       wacc − term_g > 0 (caller-guarded)."""
+    pv, nopat = 0.0, nopat0
+    for t in range(1, horizon + 1):
+        g = g1 if t <= stage1 else g1 + (term_g - g1) * (t - stage1) / (horizon - stage1)
+        nopat *= (1 + g)
+        rr = max(0.0, min(REINVEST_CAP, g / roic))
+        pv += nopat * (1 - rr) / (1 + wacc) ** t
+    rr_t = max(0.0, min(REINVEST_CAP, term_g / roic))
+    tv = nopat * (1 + term_g) * (1 - rr_t) / (wacc - term_g)
     return pv + tv / (1 + wacc) ** horizon
 
 

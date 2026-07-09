@@ -1,11 +1,22 @@
 """Valuation engines (VALUATION_DEFAULTS_SPEC). Each returns a fair value PER SHARE,
 except reverse_dcf which returns the market-IMPLIED growth. stdlib only."""
 import statistics
-from common import CFG, ev_present_value
+from common import CFG, ev_present_value, ev_present_value_nopat
 
 
-def cost_of_equity(rf, beta, erp):
-    return rf + beta * erp
+def cost_of_equity(rf, beta, erp, size_prem=0.0):
+    return rf + beta * erp + size_prem
+
+
+def _dcf_ev(fcf0, wacc, term_g, g1, H, S1, nopat0, roic):
+    """Enterprise PV via the value-driver kernel (normalized NOPAT − g/ROIC reinvestment)
+       when a positive NOPAT base + ROIC are supplied, else the trailing-FCF kernel.
+       -> EV, or None when neither base is usable."""
+    if nopat0 is not None and roic is not None and nopat0 > 0 and roic > 0:
+        return ev_present_value_nopat(nopat0, roic, wacc, term_g, g1, H, S1)
+    if fcf0 is not None and fcf0 > 0:
+        return ev_present_value(fcf0, wacc, term_g, g1, H, S1)
+    return None
 
 def wacc_of(equity, debt, re_, rd, tax):
     v = equity + debt
@@ -13,12 +24,29 @@ def wacc_of(equity, debt, re_, rd, tax):
 
 
 # ---------- §3 Reverse DCF (the anchor) ----------
-def reverse_dcf(fcf0, wacc, term_g, net_debt, target_equity, H, S1, lo=-0.30, hi=0.80):
-    if fcf0 is None or fcf0 <= 0 or wacc - term_g < CFG["min_wacc_minus_g"]:
+def reverse_dcf(fcf0, wacc, term_g, net_debt, target_equity, H, S1, lo=-0.30, hi=0.80,
+                nopat0=None, roic=None):
+    """Solve for the growth today's price implies. Uses the same value-driver base as the
+       forward DCF when NOPAT + ROIC are supplied (so a heavy reinvestor's implied growth
+       is no longer inflated by a depressed FCF base), else the trailing-FCF base."""
+    if wacc - term_g < CFG["min_wacc_minus_g"]:
         return None, None
-    eq = lambda g: ev_present_value(fcf0, wacc, term_g, g, H, S1) - net_debt
-    if eq(lo) > target_equity: return lo, "<"
-    if eq(hi) < target_equity: return hi, ">"
+    # On the value-driver base, growth only CREATES value when ROIC > WACC; at ROIC ≤ WACC
+    # the EV(g) curve isn't monotone (capped reinvestment makes it fall then rise), so
+    # "what growth justifies today's price" is degenerate — report n/a rather than a number
+    # bisection happened to land on.
+    if nopat0 is not None and roic is not None and nopat0 > 0 and roic > 0 and roic <= wacc:
+        return None, None
+    def eq(g):
+        ev = _dcf_ev(fcf0, wacc, term_g, g, H, S1, nopat0, roic)
+        return None if ev is None else ev - net_debt
+    e_lo, e_hi = eq(lo), eq(hi)
+    if e_lo is None or e_hi is None:                     # no usable base
+        return None, None
+    if e_hi <= e_lo:                                     # defensive: any residual non-monotone
+        return None, None                                # endpoint inversion → n/a
+    if e_lo > target_equity: return lo, "<"
+    if e_hi < target_equity: return hi, ">"
     for _ in range(64):
         mid = (lo + hi) / 2
         if eq(mid) > target_equity: hi = mid
@@ -31,13 +59,19 @@ def reverse_dcf(fcf0, wacc, term_g, net_debt, target_equity, H, S1, lo=-0.30, hi
 # narrow band around the point estimate but never the FCF base — the dominant
 # uncertainty — so its P50 tracked the deterministic value while implying a rigor the
 # backtest never rewarded (DCF degraded most of all engines). The honest range is L8's.
-def dcf(fcf0, wacc, term_g, net_debt, shares, g1, H, S1):
-    """Deterministic 2-stage FCFF DCF -> fair value per share (None when inapplicable)."""
-    if fcf0 is None or fcf0 <= 0 or not shares:
+def dcf(fcf0, wacc, term_g, net_debt, shares, g1, H, S1, nopat0=None, roic=None):
+    """Deterministic 2-stage FCFF DCF -> fair value per share (None when inapplicable).
+       Prefers the value-driver base (normalized NOPAT − g/ROIC reinvestment) when a
+       positive NOPAT + ROIC are supplied; falls back to trailing normalized FCF."""
+    if not shares:
         return None
     if wacc - term_g < CFG["min_wacc_minus_g"]:          # TV explodes — refuse, don't emit
         return None
-    return (ev_present_value(fcf0, wacc, term_g, g1, H, S1) - net_debt) / shares
+    ev = _dcf_ev(fcf0, wacc, term_g, g1, H, S1, nopat0, roic)
+    if ev is None:
+        return None
+    ps = (ev - net_debt) / shares
+    return ps if ps > 0 else None    # net debt swamps modeled ops → no positive equity value → N/A
 
 
 # ---------- §5 EPV (Earnings Power Value — no-growth floor) ----------
@@ -90,18 +124,21 @@ def ols(X, y):
     return [A[i][k] / A[i][i] for i in range(k)]
 
 
-def _wclamp(y, g, m):
-    return (max(5.0, min(60.0, y)), max(0.0, min(0.30, g)), max(0.0, min(0.60, m)))
+def _wclamp(y, g, m, r):
+    return (max(5.0, min(60.0, y)), max(0.0, min(0.30, g)),
+            max(0.0, min(0.60, m)), max(0.0, min(0.50, r)))
 
 
 def warranted_fit(rows, min_sector=3):
-    """rows: (sector, ev_ebit, growth, margin). Fixed-effects fit: center within sector
+    """rows: (sector, ev_ebit, growth, margin, roic). Fixed-effects fit: center within sector
        (global anchors for sectors with < min_sector names), regress the residual multiple
-       on centered growth/margin, zero any coefficient that violates the economic prior.
-       Anchors are MEDIANS — a mean anchor gets dragged by the winsorize-capped rich tail
-       (semis at 60×) and then inflates every name that falls back to the global anchor.
-       -> (sector_medians, global_medians, coefs)"""
-    data = [(s,) + _wclamp(y, g, m) for s, y, g, m in rows]
+       on centered growth/margin/ROIC, zero any coefficient that violates the economic prior
+       (all three RAISE the warranted multiple — a 35%-ROIC name deserves a higher multiple
+       than an 8%-ROIC peer in the same bucket). Anchors are MEDIANS — a mean anchor gets
+       dragged by the winsorize-capped rich tail (semis at 60×) and then inflates every name
+       that falls back to the global anchor. -> (sector_medians, global_medians, coefs);
+       each *_medians tuple is (ev_ebit, growth, margin, roic)."""
+    data = [(s,) + _wclamp(y, g, m, r) for s, y, g, m, r in rows]
     if not data:
         return None
     # Anchor cap: a "warranted" multiple must not inherit market froth — when the whole
@@ -109,30 +146,31 @@ def warranted_fit(rows, min_sector=3):
     ANCHOR_CAP = 28.0
     med = lambda v: statistics.median(v)
     cap = lambda t: (min(t[0], ANCHOR_CAP),) + t[1:]
-    cols = list(zip(*[(y, g, m) for _, y, g, m in data]))
+    cols = list(zip(*[(y, g, m, r) for _, y, g, m, r in data]))
     gmed = cap(tuple(med(list(c)) for c in cols))
     by = {}
-    for s, y, g, m in data:
-        by.setdefault(s, []).append((y, g, m))
+    for s, y, g, m, r in data:
+        by.setdefault(s, []).append((y, g, m, r))
     smeds = {s: cap(tuple(med(list(c)) for c in zip(*v)))
              for s, v in by.items() if len(v) >= min_sector}
     X, Y = [], []
-    for s, y, g, m in data:
-        my, mg, mm = smeds.get(s, gmed)
-        X.append([g - mg, m - mm]); Y.append(y - my)
-    coef = ols(X, Y) or [0.0, 0.0]
-    coef = [max(0.0, c) for c in coef]                    # sign guard (prior: positive)
+    for s, y, g, m, r in data:
+        my, mg, mm, mr = smeds.get(s, gmed)
+        X.append([g - mg, m - mm, r - mr]); Y.append(y - my)
+    coef = ols(X, Y) or [0.0, 0.0, 0.0]
+    coef = [max(0.0, c) for c in coef]                    # sign guard (prior: all positive)
     return smeds, gmed, coef
 
 
-def warranted_value(fit, sector, g, margin, ebit, cash, debt, shares):
-    """Sector-anchored 'justified' EV/EBIT applied to this company's EBIT -> $/share."""
+def warranted_value(fit, sector, g, margin, roic, ebit, cash, debt, shares):
+    """Sector-anchored 'justified' EV/EBIT (adjusted for within-bucket growth/margin/ROIC)
+       applied to this company's EBIT -> $/share."""
     if not fit or ebit is None or ebit <= 0 or not shares:
         return None
     smeans, gmean, coef = fit
-    my, mg, mm = smeans.get(sector, gmean)
-    _, gc, mc = _wclamp(0, g, margin)
-    mult = my + coef[0] * (gc - mg) + coef[1] * (mc - mm)
+    my, mg, mm, mr = smeans.get(sector, gmean)
+    _, gc, mc, rc = _wclamp(0, g, margin, roic or 0.0)
+    mult = my + coef[0] * (gc - mg) + coef[1] * (mc - mm) + coef[2] * (rc - mr)
     mult = max(4.0, min(40.0, mult))
     return (mult * ebit - debt + cash) / shares
 
@@ -166,10 +204,15 @@ def ddm(div0_ps, re_, term_g, g1, horizon, stage1):
 # a real 2nd method). RIM is scoped to financials/REITs in value.py (a bank engine).
 CENTRAL_WEIGHTS = {"DCF": 0.10, "RIM": 0.35, "Warranted": 0.30, "FFO": 0.30, "DDM": 0.10}
 
-def triangulate(growth, floor, price, weights=None):
+def triangulate(growth, floor, price, weights=None, min_band=0.0):
     """growth: {engine_name: per-share value} for applicable growth engines.
        floor:  EPV per-share value (or None). weights: override CENTRAL_WEIGHTS
-       (the backtest's variant harness passes historical weight sets)."""
+       (the backtest's variant harness passes historical weight sets).
+       min_band: minimum half-width of the low↔high range as a fraction of mid, applied
+       AFTER engine dispersion — so a low-quality / cyclical business shows a wider range
+       even when the engines happen to agree. It never NARROWS a genuinely wider engine
+       spread, and never touches within/conf: agreement stays a pure function of engine
+       dispersion; this widens only the displayed range for business unpredictability."""
     W  = weights or CENTRAL_WEIGHTS
     g  = {k: v for k, v in growth.items() if v is not None and v > 0}
     fl = floor if (floor is not None and floor > 0) else None
@@ -187,5 +230,8 @@ def triangulate(growth, floor, price, weights=None):
     frac       = within / n if n else 0
     conf = (2 if n < 2 else               # a single engine can't demonstrate agreement
             5 if frac >= 0.99 else 4 if frac >= 0.66 else 3 if frac >= 0.5 else 2)
+    if min_band > 0:                      # widen (never narrow) the range for unpredictability
+        low  = min(low,  mid * (1 - min_band))
+        high = max(high, mid * (1 + min_band))
     return {"low": low, "mid": mid, "high": high, "upside": mid / price - 1,
             "within": within, "n": n, "conf": conf, "floor": fl}

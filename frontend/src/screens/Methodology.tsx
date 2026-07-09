@@ -83,17 +83,17 @@ interface Engine {
 const ENGINES: Engine[] = [
   {
     name: 'DCF', discount: 'WACC',
-    answers: 'Intrinsic value from projected free cash flow, on a NORMALIZED FCF base. Deterministic — the Monte Carlo was retired (it never varied the FCF base, the real uncertainty) and the backtest demoted DCF to the lowest engine weight.',
-    formula: ['FCFF = CFO − Capex − SBC   (normalized: avg 5y FCF margin × revenue)',
-      'TV = FCF₁₀·(1+g) / (WACC − g)',
-      'Value = Σ FCFₜ /(1+WACC)ᵗ + PV(TV) − NetDebt'],
-    gotcha: 'Terminal value is 60–80% of the answer; growth is trailing CAGR capped at 20% — deliberately conservative.',
+    answers: 'Intrinsic value on a NORMALIZED NOPAT base — earnings power grown at g, minus the reinvestment that growth requires (g / ROIC, the McKinsey value-driver form). This replaced a trailing-FCF-margin base that counted growth capex as lost cash and undervalued reinvestors (Amazon literally got no DCF). Deterministic; the backtest demoted DCF to the lowest engine weight.',
+    formula: ['NOPAT = normalized op margin × revenue × (1 − tax)',
+      'FCFFₜ = NOPATₜ · (1 − gₜ/ROIC)   — reinvestment fades as g fades',
+      'Value = Σ FCFFₜ /(1+WACC)ᵗ + PV(TV) − NetDebt'],
+    gotcha: 'Terminal value is 60–80% of the answer; growth is trailing CAGR capped at 20%. Falls back to the trailing-FCF base when ROIC is unusable. When ROIC < WACC growth destroys value, so the DCF can fall below the no-growth EPV — that inversion is itself the signal.',
   },
   {
     name: 'Reverse DCF', discount: 'WACC held', bestFor: 'the anchor',
     answers: 'Inverts the DCF — what stage-1 growth does today’s price already imply?',
     formula: ['Solve  g₁  such that', '     DCF(g₁) = Current Price', '(WACC, horizon, terminal g held at defaults)'],
-    gotcha: 'The only assumption-light engine — and the curve-fit guard for every manual override.',
+    gotcha: 'The only assumption-light engine — and the curve-fit guard for every manual override. Implied growth is N/A when ROIC ≤ WACC: growth destroys value there, so the solve is degenerate rather than a number worth trusting.',
   },
   {
     name: 'RIM — Residual Income', discount: 'Re', bestFor: 'banks · financials',
@@ -104,20 +104,20 @@ const ENGINES: Engine[] = [
   {
     name: 'EPV — Earnings Power', discount: 'WACC',
     answers: 'Value of current earnings power assuming zero growth — the explicit FLOOR of the range, never averaged into the mid.',
-    formula: ['Normalized EBIT = avg margin(5y) × revenue', 'EPV(ops) = NOPAT / WACC', 'EPV(equity) = EPV(ops) + Cash − Debt'],
-    gotcha: 'EPV < current EV means the market is paying for growth — the gap is itself the signal.',
+    formula: ['Normalized EBIT = avg margin (5y · 10y for cyclicals) × revenue', 'EPV(ops) = NOPAT / WACC', 'EPV(equity) = EPV(ops) + Cash − Debt'],
+    gotcha: 'EPV < current EV means the market is paying for growth — the gap is itself the signal. When ROIC < WACC the no-growth EPV can sit ABOVE the growth cases: there it is a ceiling, not a floor (shown on the card).',
   },
   {
     name: 'Warranted multiple v2', discount: 'relative',
-    answers: 'Bucket-median EV/EBIT anchor (fixed-effects), adjusted within bucket, applied to this company’s EBIT. TECH splits into semis / software / hardware (hand-mapped override table; ≥8 fitted names per bucket or it rolls back to the sector).',
-    formula: ['anchor = bucket median EV/EBIT, capped at 28×', 'mult = anchor + b·(g − ḡ_bucket)   (sign-guarded)', 'Value = (mult × EBIT − Debt + Cash) / shares'],
-    gotcha: 'The 28× cap stops the relative engine from inheriting market froth (semis and hardware both sit AT the cap in the current tape — the AI bid is real). The big split win is IT services: ACN/IBM/CTSH now anchor at their own ~14× median instead of whole-TECH froth. Overrides live in assumptions.toml; unmapped names stay in the parent bucket on purpose.',
+    answers: 'Bucket-median EV/EBIT anchor (fixed-effects), adjusted within bucket for growth, margin AND ROIC, applied to this company’s EBIT. TECH splits into semis / software / hardware (hand-mapped override table; ≥8 fitted names per bucket or it rolls back to the sector).',
+    formula: ['anchor = bucket median EV/EBIT, capped at 28×', 'mult = anchor + b_g·Δg + b_m·Δmargin + b_r·ΔROIC   (all sign-guarded ≥ 0)', 'Value = (mult × EBIT − Debt + Cash) / shares'],
+    gotcha: 'A 35%-ROIC name earns a higher multiple than an 8%-ROIC peer in the same bucket — in the live fit ROIC absorbed the margin signal (it is the better value driver). The 28× cap stops the anchor from inheriting market froth (semis and hardware sit AT the cap — the AI bid is real). Overrides live in assumptions.toml; unmapped names stay in the parent bucket on purpose.',
   },
   {
     name: 'DDM — Dividend Discount', discount: 'Re',
     answers: 'Value of the dividend stream, as a multi-stage Gordon model.',
     formula: ['V = Σ PV(Dₜ) + PV(terminal)', 'dividend growth faded to terminal g'],
-    gotcha: 'Consciously replaced by the warranted multiple for this universe — too few Nasdaq-100 names pay meaningful dividends.',
+    gotcha: 'Live for meaningful dividend payers (yield ≥ 1%, payout covered by earnings; REITs exempt — they pay from FFO). Stage-1 growth is clamped to a [0, 8%] dividend band so an unsustainable payout can’t compound to a silly number.',
   },
   {
     name: 'P/FFO', discount: 'relative', bestFor: 'REITs',
@@ -187,6 +187,8 @@ export function Methodology({ meta }: { meta: Meta }) {
     { label: 'Forecast horizon', value: '10 yr', src: '2-stage fade' },
     { label: 'SBC treatment', value: 'Expensed', src: 'subtract from FCF' },
     { label: 'Beta', value: 'Blume-adj', src: '5y monthly vs S&P 500' },
+    { label: 'Size premium', value: 'CRSP bands', src: '+0–1.5% to Re, small caps only' },
+    { label: 'Range width', value: 'quality-scaled', src: '±10% top-q → ±50% low-q cyclical' },
     { label: 'Share counts', value: 'xchecked', src: 'Yahoo mcap, >15% patched' },
   ];
 

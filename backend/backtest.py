@@ -8,7 +8,7 @@ stdlib only.  Run after membership.py, prices.py, pit.py:   python backtest.py
 """
 import json, sqlite3, statistics, sys
 from datetime import date
-from common import DB_PATH, CFG, cagr
+from common import DB_PATH, CFG, cagr, size_premium
 from engines import (cost_of_equity, wacc_of, dcf, reverse_dcf,
                      epv, rim, ddm, warranted_fit, warranted_value, triangulate)
 
@@ -136,28 +136,43 @@ def signal(t, D, month, pit, px, adj, spl, sectors, rf, adj_mkt):
         return s[max(s)] if s else None
 
     rev_now = latest(rev)
-    yrs = sorted(set(rev) & set(cfo) & set(cap))[-5:]
+    # cyclical-aware normalization window (v2.7, mirrors value.py): 10y when revenue is
+    # cyclical (stdev of YoY growth > 0.18), else 5y — for BOTH FCF margin and op margin.
+    ry0 = sorted(rev)
+    gr0 = [rev[ry0[i]] / rev[ry0[i - 1]] - 1 for i in range(1, len(ry0)) if rev[ry0[i - 1]]][-6:]
+    _cyc = len(gr0) >= 3 and (
+        sum((x - sum(gr0) / len(gr0)) ** 2 for x in gr0) / len(gr0)) ** 0.5 > 0.18
+    nyrs = 10 if _cyc else 5
+    yrs = sorted(set(rev) & set(cfo) & set(cap))[-nyrs:]
     if not yrs:
         return None
     margins = [(cfo[y] - cap[y] - sbc.get(y, 0.0)) / rev[y] for y in yrs if rev[y]]
     fcf_margin = sum(margins) / len(margins) if margins else None
     fcf_norm = fcf_margin * rev_now if fcf_margin is not None else None
-    om_yrs = sorted(set(ebit) & set(rev))[-5:]
+    om_yrs = sorted(set(ebit) & set(rev))[-nyrs:]
     om = (sum(ebit[y] / rev[y] for y in om_yrs if rev[y]) / len(om_yrs)) if om_yrs else None
 
     mcap = price * shares
     debt, cash = latest(debt_s) or 0.0, latest(cash_s) or 0.0
     ndebt = debt - cash
     beta = rolling_beta(adj.get(t, {}), adj_mkt, month)
-    re_ = cost_of_equity(rf, beta, ERP)
+    re_ = cost_of_equity(rf, beta, ERP, size_prem=size_premium(mcap, CFG.get("size_premium_bands", [])))
     wacc = wacc_of(mcap, max(debt, 0.0), re_, rf + 0.01, TAX)
     term_g = min(CFG["terminal_growth"], rf) if rf > 0.005 else 0.005
     g_tr = cagr(rev)
     g1 = min(max(g_tr or 0.0, 0.0), CFG["initial_growth_cap"])
 
-    dcf_ps = dcf(fcf_norm, wacc, term_g, ndebt, shares, g1, 10, 5)
+    # v2.7 DCF base: normalized NOPAT − g/ROIC reinvestment (same as live). dcf()/reverse_dcf()
+    # fall back to the trailing-FCF base internally when NOPAT/ROIC are unusable.
+    inv_cap = (latest(eq) or 0.0) + debt - cash
+    nopat_norm = (om * rev_now * (1 - TAX)) if (om is not None and rev_now) else None
+    roic_dcf = (nopat_norm / inv_cap) if (nopat_norm is not None and inv_cap > 0) else None
+
+    dcf_ps = dcf(fcf_norm, wacc, term_g, ndebt, shares, g1, 10, 5,
+                 nopat0=nopat_norm, roic=roic_dcf)
     epv_ps = epv((om or 0) * rev_now, TAX, wacc, cash, debt, shares)
-    impl, _op = reverse_dcf(fcf_norm, wacc, term_g, ndebt, mcap, 10, 5)
+    impl, _op = reverse_dcf(fcf_norm, wacc, term_g, ndebt, mcap, 10, 5,
+                            nopat0=nopat_norm, roic=roic_dcf)
 
     ebit_now = latest(ebit)
     # quality raw dims (percentiled cross-sectionally by the caller)
@@ -195,12 +210,7 @@ def signal(t, D, month, pit, px, adj, spl, sectors, rf, adj_mkt):
     ni_now, cfo_now = latest(ni), latest(cfo)
     if ni_now and cfo_now and ni_now > cfo_now * 1.2:
         flags += 1
-    cyc = 0          # cyclical revenue — informational; the scoring variant decides penalty
-    gr = [rev[ry[i]] / rev[ry[i - 1]] - 1 for i in range(1, len(ry)) if rev[ry[i - 1]]][-6:]
-    if len(gr) >= 3:
-        m = sum(gr) / len(gr)
-        if (sum((x - m) ** 2 for x in gr) / len(gr)) ** 0.5 > 0.18:
-            cyc = 1
+    cyc = 1 if _cyc else 0    # cyclical revenue — informational; the scoring variant decides penalty
 
     # 12-1 momentum (Plan 6): return from t−12m to t−1m, skipping the latest month
     # (the classic short-term-reversal skip). adjclose ⇒ splits+dividends handled.
@@ -210,7 +220,7 @@ def signal(t, D, month, pit, px, adj, spl, sectors, rf, adj_mkt):
 
     return dict(t=t, price=price, shares=shares, mcap=mcap, sector=sectors.get(t),
                 g1=g1, g_tr=g_tr, om=om, roe=roe, lev=lev, fcf_margin=fcf_margin,
-                ebit_now=ebit_now, debt=debt, cash=cash, dcf=dcf_ps, epv=epv_ps,
+                roic=roic_dcf, ebit_now=ebit_now, debt=debt, cash=cash, dcf=dcf_ps, epv=epv_ps,
                 rim=rim_ps, ddm=ddm_ps, impl=impl, flags=flags, cyc=cyc, mom=mom)
 
 
@@ -233,12 +243,13 @@ def build_quarter(D, month, members, pit, px, adj, spl, sectors, rf, adj_mkt):
     if len(sigs) < 20:
         return []
     fit_rows = [(s["sector"] or "UNKNOWN", (s["mcap"] + s["debt"] - s["cash"]) / s["ebit_now"],
-                 s["g1"], s["om"] or 0.0)
+                 s["g1"], s["om"] or 0.0, s["roic"] if s["roic"] is not None else 0.0)
                 for s in sigs if s["ebit_now"] and s["ebit_now"] > 0
                 and (s["mcap"] + s["debt"] - s["cash"]) > 0]
     wfit = warranted_fit(fit_rows)
     for s in sigs:
         s["warr"] = warranted_value(wfit, s["sector"] or "UNKNOWN", s["g1"], s["om"] or 0.0,
+                                    s["roic"] if s["roic"] is not None else 0.0,
                                     s["ebit_now"], s["cash"], s["debt"], s["shares"])
     return sigs
 

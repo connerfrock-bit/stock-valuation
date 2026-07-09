@@ -11,9 +11,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from common import ev_present_value, effective_tax, cost_of_debt
+from common import (ev_present_value, ev_present_value_nopat, effective_tax, cost_of_debt,
+                    size_premium)
 from engines import (cost_of_equity, wacc_of, reverse_dcf, dcf, epv, rim, ddm,
                      warranted_fit, warranted_value, triangulate)
+from value import quality_band
+
+BANDS = [[10e9, 0.000], [2e9, 0.003], [0.5e9, 0.008], [0.0, 0.015]]
 
 
 class TestDDM(unittest.TestCase):
@@ -44,6 +48,26 @@ class TestDDM(unittest.TestCase):
 class TestRates(unittest.TestCase):
     def test_capm(self):
         self.assertAlmostEqual(cost_of_equity(0.04, 1.2, 0.05), 0.10)
+
+    def test_capm_with_size_premium(self):
+        self.assertAlmostEqual(cost_of_equity(0.04, 1.2, 0.05, size_prem=0.008), 0.108)
+
+
+class TestSizePremium(unittest.TestCase):
+    def test_bands(self):
+        self.assertAlmostEqual(size_premium(50e9, BANDS), 0.000)   # mega
+        self.assertAlmostEqual(size_premium(5e9, BANDS), 0.003)    # mid ($2–10B)
+        self.assertAlmostEqual(size_premium(1e9, BANDS), 0.008)    # small ($0.5–2B)
+        self.assertAlmostEqual(size_premium(0.3e9, BANDS), 0.015)  # micro
+
+    def test_boundaries_inclusive(self):
+        self.assertAlmostEqual(size_premium(10e9, BANDS), 0.000)   # exactly at a threshold
+        self.assertAlmostEqual(size_premium(2e9, BANDS), 0.003)
+
+    def test_zero_without_bands_or_mcap(self):
+        self.assertEqual(size_premium(5e9, []), 0.0)
+        self.assertEqual(size_premium(None, BANDS), 0.0)
+        self.assertEqual(size_premium(0, BANDS), 0.0)
 
     def test_wacc_weighted(self):
         # 80/20 split: 0.8*0.10 + 0.2*0.05*(1-0.21) = 0.0879
@@ -112,6 +136,55 @@ class TestPresentValueKernel(unittest.TestCase):
         vals = [ev_present_value(100, 0.10, 0.025, g, 10, 5)
                 for g in (0.00, 0.05, 0.10, 0.15)]
         self.assertEqual(vals, sorted(vals))
+
+
+class TestNopatKernel(unittest.TestCase):
+    def test_high_roic_reinvestment_is_cheap(self):
+        # As ROIC → ∞ the reinvestment rate → 0, so the NOPAT stream approaches a pure
+        # FCFF stream of size NOPAT: ev_present_value_nopat ≈ ev_present_value(nopat0).
+        big = ev_present_value_nopat(100, 1e6, 0.10, 0.025, 0.08, 10, 5)
+        pure = ev_present_value(100, 0.10, 0.025, 0.08, 10, 5)
+        self.assertAlmostEqual(big, pure, places=3)
+
+    def test_reinvestment_lowers_value(self):
+        # Same NOPAT + growth, lower ROIC = more reinvestment = less free cash = lower EV.
+        hi_roic = ev_present_value_nopat(100, 0.40, 0.10, 0.025, 0.08, 10, 5)
+        lo_roic = ev_present_value_nopat(100, 0.12, 0.10, 0.025, 0.08, 10, 5)
+        self.assertGreater(hi_roic, lo_roic)
+
+    def test_reinvestment_capped_keeps_stream_positive(self):
+        # ROIC far below growth would imply rr > 1 (negative FCFF); the 0.90 cap keeps
+        # every year's contribution non-negative, so EV stays > 0.
+        ev = ev_present_value_nopat(100, 0.05, 0.10, 0.025, 0.20, 10, 5)
+        self.assertGreater(ev, 0)
+
+
+class TestDCFNopatPath(unittest.TestCase):
+    def test_prefers_nopat_when_supplied(self):
+        expected = (ev_present_value_nopat(80, 0.30, 0.10, 0.02, 0.06, 10, 5) - 50) / 10
+        got = dcf(999, 0.10, 0.02, 50, 10, 0.06, 10, 5, nopat0=80, roic=0.30)
+        self.assertAlmostEqual(got, expected)                # fcf0=999 ignored in favor of NOPAT
+
+    def test_falls_back_to_fcf_when_nopat_unusable(self):
+        # nopat0 <= 0 or roic <= 0 → old FCF path exactly (backward compatible).
+        expected = dcf(100, 0.10, 0.02, 50, 10, 0.05, 10, 5)
+        self.assertAlmostEqual(dcf(100, 0.10, 0.02, 50, 10, 0.05, 10, 5, nopat0=-5, roic=0.3),
+                               expected)
+        self.assertAlmostEqual(dcf(100, 0.10, 0.02, 50, 10, 0.05, 10, 5, nopat0=80, roic=0),
+                               expected)
+
+    def test_reverse_dcf_nopat_inverts(self):
+        g_true, ndebt = 0.06, 40.0
+        target = ev_present_value_nopat(90, 0.35, 0.09, 0.025, g_true, 10, 5) - ndebt
+        impl, op = reverse_dcf(None, 0.09, 0.025, ndebt, target, 10, 5,
+                               nopat0=90, roic=0.35)
+        self.assertEqual(op, "=")
+        self.assertAlmostEqual(impl, g_true, places=5)
+
+    def test_reverse_dcf_na_when_growth_destroys_value(self):
+        # ROIC < WACC → EV is non-increasing in g → implied-growth solve is degenerate → n/a.
+        self.assertEqual(reverse_dcf(None, 0.10, 0.025, 0, 500, 10, 5,
+                                     nopat0=100, roic=0.06), (None, None))
 
 
 class TestReverseDCF(unittest.TestCase):
@@ -183,32 +256,50 @@ class TestRIM(unittest.TestCase):
 
 
 class TestWarrantedMultiple(unittest.TestCase):
-    ROWS = [("TECH", 10.0, 0.05, 0.20), ("TECH", 12.0, 0.05, 0.20),
-            ("TECH", 14.0, 0.05, 0.20)]
+    # (sector, ev_ebit, growth, margin, roic) — identical g/m/roic → degenerate regression
+    ROWS = [("TECH", 10.0, 0.05, 0.20, 0.15), ("TECH", 12.0, 0.05, 0.20, 0.15),
+            ("TECH", 14.0, 0.05, 0.20, 0.15)]
 
     def test_sector_median_anchor(self):
         fit = warranted_fit(self.ROWS)
-        # identical growth/margin → regression degenerate → coef [0,0] → pure anchor 12×
-        v = warranted_value(fit, "TECH", 0.05, 0.20, ebit=100, cash=20, debt=50, shares=10)
+        # identical growth/margin/roic → regression degenerate → coef [0,0,0] → pure anchor 12×
+        v = warranted_value(fit, "TECH", 0.05, 0.20, 0.15, ebit=100, cash=20, debt=50, shares=10)
         self.assertAlmostEqual(v, (12 * 100 - 50 + 20) / 10)          # 117.0
 
     def test_unknown_sector_falls_back_to_global(self):
         fit = warranted_fit(self.ROWS)
-        v = warranted_value(fit, "ENERGY", 0.05, 0.20, ebit=100, cash=20, debt=50, shares=10)
+        v = warranted_value(fit, "ENERGY", 0.05, 0.20, 0.15, ebit=100, cash=20, debt=50, shares=10)
         self.assertAlmostEqual(v, 117.0)
 
+    def test_higher_roic_earns_a_higher_multiple(self):
+        # mechanism: with a positive fitted ROIC coef, a high-ROIC name is valued above a
+        # low-ROIC peer at identical growth/margin. Manual fit (smeds, gmed, coef) so the
+        # test isolates warranted_value's ROIC term from OLS sampling noise.
+        fit = ({}, (12.0, 0.05, 0.20, 0.15), [0.0, 0.0, 20.0])
+        lo = warranted_value(fit, "X", 0.05, 0.20, 0.10, ebit=100, cash=0, debt=0, shares=10)
+        hi = warranted_value(fit, "X", 0.05, 0.20, 0.40, ebit=100, cash=0, debt=0, shares=10)
+        self.assertGreater(hi, lo)                # 170 vs 110
+
+    def test_fit_returns_three_nonneg_coefs(self):
+        # varied g/margin/roic → full-rank design → three sign-guarded (≥0) coefficients.
+        rows = [("TECH", 8.0, 0.04, 0.16, 0.08), ("TECH", 12.0, 0.06, 0.24, 0.16),
+                ("TECH", 18.0, 0.05, 0.18, 0.28), ("TECH", 24.0, 0.07, 0.22, 0.40)]
+        _smeds, _gmed, coef = warranted_fit(rows)
+        self.assertEqual(len(coef), 3)
+        self.assertTrue(all(c >= 0 for c in coef))
+
     def test_anchor_cap_blocks_market_froth(self):
-        rows = [("TECH", 50.0, 0.05, 0.20), ("TECH", 55.0, 0.05, 0.20),
-                ("TECH", 60.0, 0.05, 0.20)]
+        rows = [("TECH", 50.0, 0.05, 0.20, 0.15), ("TECH", 55.0, 0.05, 0.20, 0.15),
+                ("TECH", 60.0, 0.05, 0.20, 0.15)]
         fit = warranted_fit(rows)
-        v = warranted_value(fit, "TECH", 0.05, 0.20, ebit=10, cash=0, debt=0, shares=1)
+        v = warranted_value(fit, "TECH", 0.05, 0.20, 0.15, ebit=10, cash=0, debt=0, shares=1)
         self.assertAlmostEqual(v, 28.0 * 10)      # anchored at the 28× cap, not 55×
 
     def test_na_on_bad_inputs(self):
         fit = warranted_fit(self.ROWS)
-        self.assertIsNone(warranted_value(fit, "TECH", 0.05, 0.20, None, 0, 0, 10))
-        self.assertIsNone(warranted_value(fit, "TECH", 0.05, 0.20, -5, 0, 0, 10))
-        self.assertIsNone(warranted_value(None, "TECH", 0.05, 0.20, 100, 0, 0, 10))
+        self.assertIsNone(warranted_value(fit, "TECH", 0.05, 0.20, 0.15, None, 0, 0, 10))
+        self.assertIsNone(warranted_value(fit, "TECH", 0.05, 0.20, 0.15, -5, 0, 0, 10))
+        self.assertIsNone(warranted_value(None, "TECH", 0.05, 0.20, 0.15, 100, 0, 0, 10))
         self.assertIsNone(warranted_fit([]))
 
 
@@ -254,6 +345,37 @@ class TestTriangulate(unittest.TestCase):
     def test_nothing_positive_returns_none(self):
         self.assertIsNone(triangulate({"DCF": None}, None, price=100.0))
         self.assertIsNone(triangulate({"DCF": -5.0}, None, price=100.0))
+
+    def test_min_band_widens_range_not_confidence(self):
+        eng = {"DCF": 100.0, "RIM": 105.0, "Warranted": 98.0}
+        base = triangulate(eng, None, price=100.0)
+        wide = triangulate(eng, None, price=100.0, min_band=0.30)
+        self.assertEqual(base["conf"], wide["conf"])          # agreement untouched
+        self.assertEqual(base["within"], wide["within"])
+        self.assertLessEqual(wide["low"], wide["mid"] * 0.70 + 1e-9)
+        self.assertGreaterEqual(wide["high"], wide["mid"] * 1.30 - 1e-9)
+        self.assertLess(wide["low"], base["low"])             # genuinely wider both sides
+        self.assertGreater(wide["high"], base["high"])
+
+    def test_min_band_never_narrows_a_wide_spread(self):
+        # engines already span far more than the band → range unchanged.
+        tri = triangulate({"DCF": 50.0, "RIM": 150.0}, None, price=100.0, min_band=0.10)
+        self.assertAlmostEqual(tri["low"], 50.0)
+        self.assertAlmostEqual(tri["high"], 150.0)
+
+
+class TestQualityBand(unittest.TestCase):
+    def test_pristine_is_tight(self):
+        self.assertAlmostEqual(quality_band(100, False), 0.10)
+
+    def test_low_quality_cyclical_is_wide(self):
+        self.assertAlmostEqual(quality_band(0, True), 0.50)   # 0.10 + 0.30 + 0.10
+
+    def test_mid_quality(self):
+        self.assertAlmostEqual(quality_band(50, False), 0.25) # 0.10 + 0.5·0.30
+
+    def test_none_quality_defaults_to_50(self):
+        self.assertAlmostEqual(quality_band(None, False), 0.25)
 
 
 if __name__ == "__main__":
