@@ -334,6 +334,37 @@ Honesty rules: never a single fair value without its range · agreement always b
       Forward ledger is the arbiter. Standing rule consciously overridden with rationale
       logged. See WORKLOG.
 
+### Phase 3.2 — model strengthening from external critique (2026-07-08, model v2.7 → v2.8)
+- [x] **Tier 1: DCF base = normalized NOPAT − g/ROIC reinvestment** ✅ (model v2.7) — the
+      value-driver form replacing `avg 5y FCF-margin × revenue`, which counted growth capex
+      as lost cash (**AMZN got no DCF at all**; semis were absurd low outliers). Now shares
+      EPV's earnings base; falls back to the FCF base when ROIC unusable. + **cyclical 10y
+      normalization** when rev-vol > 0.18 (same threshold as the Cyclical flag), else 5y.
+      Guards: non-positive DCF → N/A; reverse-DCF n/a when ROIC ≤ WACC (non-monotone solve);
+      EPV note turns honest ("ceiling, not floor") when EPV > mid. 93/93 standard names now
+      have a DCF; median mid change 3%, movers all conf-2 cyclical/distressed. See WORKLOG.
+- [x] **Tier 2: size premium** ✅ (model v2.8) — `Re = rf + β·ERP + size_prem`, CRSP-decile
+      bands in assumptions.toml (+0/+0.3/+0.8/+1.5%). 0 across the NDX (all >$10B); targets
+      the S&P 1500 small caps. Backtest carries it too (no-op on large-cap universes).
+- [x] **Tier 2: ROIC driver in the warranted multiple** ✅ (model v2.8) — third within-bucket
+      regressor (sign-guarded ≥0). High-ROIC franchises rise (ORLY/ROST/SBUX/AAPL/IDXX +22–28%),
+      low-ROIC/levered fall (MCHP/LITE −21/−25%). ROIC absorbed the margin signal in the fit —
+      the better value driver. Median mid change 4%. See WORKLOG.
+- [x] **Tier 2: quality widens the range** ✅ (model v2.8) — config-driven band (±10% top-q →
+      ~±50% low-q cyclical) as a minimum low↔high half-width, unioned with engine dispersion;
+      never touches confidence (agreement stays a pure function of dispersion). Display-only.
+      **Open:** EPV floor dominates the low side on growth names — whether EPV becomes a
+      separate floor marker (so quality drives the low too) is an un-decided philosophy call.
+- [x] **Backtest synced + stale-doc fixes** ✅ — backtest.py on the identical v2.7 base;
+      NDX 15.2% vs 17.7%, SPX 12.7% vs 13.6% (still edge-less, per Phase 1.4). Fixed the stale
+      `beta_default` "PLACEHOLDER" comment, the false DDM "replaced" card, DCF/EPV cards. These
+      ship under the standing-rule carve-out (correctness/sensibility fix, no real edge to
+      protect). Tests 115 → 139.
+- [ ] **Tier 3 (queued, not started):** Bear/Base/Bull scenarios + sensitivity tables (the
+      reviewers' three-number ask — a real assumption-scenario range, distinct from today's
+      engine-dispersion range) · capital-efficiency panel (ROIC / incremental ROIC / reinvest
+      % / economic spread). Bigger builds; communication value.
+
 ### Standing rules
 - No new valuation engines (seven triangulate; an eighth is procrastination).
 - No model change ships without beating the incumbent in a time-split backtest or the

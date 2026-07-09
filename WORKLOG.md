@@ -987,3 +987,79 @@ and shipping v2w would mean knowingly showing ACN=$71 because a broken number ra
 marginally better. Honesty over the prettier curve. `ADOPTED` switched v2w→v2rd so the
 published curve matches what ships; the **forward ledger is the real arbiter** from here.
 Tests +5 (DDM goldens). Model v2.6.
+
+---
+
+## Phase 3.2 — model strengthening from external critique (2026-07-08, model v2.7 → v2.8)
+
+**Trigger:** two independent AI reviews of the "how each engine values a company" +
+"global assumptions" methodology. Both graded it professional-grade; both led with the
+same headline fix (adaptive/Bayesian engine weights). The useful move was to ground every
+suggestion against the actual code first — **~half their headline fixes already shipped**
+(live FRED risk-free, terminal g capped at rf, RIM gating, the quality score, extensive
+backtesting, sector buckets). One was simply **wrong**: "single WACC/beta is the biggest
+weakness" — per-name Blume-adjusted 5y betas have been live in `betas.py` since Phase 3;
+`beta_default=1.0` is only the missing-data fallback (its "PLACEHOLDER" comment was stale,
+now fixed). The **adaptive-weights** headline was declined: the archetype router already
+does the coarse, defensible version (engine sets on/off by business type), and continuous
+per-name weights add a pile of unvalidatable free parameters — exactly the overfit trap
+Phase 1.4 warns against. What survived as genuinely additive became Tier 1 + Tier 2.
+
+### Tier 1 — DCF base + cyclical normalization (model v2.7)
+
+**The Amazon defect.** The DCF/reverse-DCF base was `avg 5y FCF-margin × revenue`, which
+counts growth capex as if it were lost cash and so structurally undervalues any reinvestor.
+Measured, it was worse than "undervalues" — **AMZN got NO DCF at all** (its normalized FCF
+came out unusable), and the semis showed DCF as an absurd low outlier (TXN $40 vs mid $127)
+with ~40% implied growth.
+
+**Fix:** base = **normalized NOPAT − the reinvestment growth requires** (`FCFFₜ =
+NOPATₜ·(1 − gₜ/ROIC)`, McKinsey value-driver form). Reinvestment fades as g fades, so the
+depressed current FCF margin is no longer treated as permanent. DCF now shares EPV's
+earnings base; falls back to the old FCF base when ROIC is unusable (nothing breaks).
+Reinvestment clamped to [0, 0.90] so the stream stays FCF-positive.
+- **Cyclical normalization:** `om`/FCF margins normalize over **10y when rev-vol > 0.18**
+  (the *same* threshold that raises the Cyclical flag — one definition), else 5y. 31/94
+  NDX names trip it (semis, energy, travel, hypergrowth).
+- **Guards that fell out of it, each a real edge case:** non-positive DCF → N/A (debt-heavy
+  low-margin names like XEL produced negative per-share DCFs; now match triangulate's own
+  `v>0` rule); reverse-DCF implied growth → n/a when **ROIC ≤ WACC** (the capped kernel is
+  non-monotone in g there, so the solve is degenerate — 20 names); and the EPV "floor" note
+  turns honest when EPV > mid (3 names, all conf-2: at ROIC<WACC the no-growth value is a
+  ceiling, not a floor).
+
+**Impact:** every standard name now has a DCF (93/93). Median mid change **3%** (DCF is 10%
+weight); 11 names moved >20%, **all conf-2 cyclical/distressed**. FANG collapsed +604% → −83%
+— the *old* number was the broken one (peak-oil extrapolation); the 10y window + reinvestment
+charge correctly refuse to annualize peak margins, and the engines now openly disagree (conf 2)
+at the cyclical peak (MU: DCF $107 vs Warranted $1,459) rather than printing false confidence.
+
+### Tier 2 — three adaptivity upgrades (model v2.8)
+
+- **Size premium** added to Re (`rf + β·ERP + size_prem`), CRSP-decile bands in
+  `assumptions.toml` (+0/+0.3/+0.8/+1.5%). **0 across the NDX** (all >$10B, correct); built
+  to bite on the S&P 1500 small caps where the cross-sectional value evidence lives.
+- **ROIC is now a third within-bucket driver of the warranted multiple** (sign-guarded ≥0,
+  alongside growth/margin). A 35%-ROIC name earns a higher multiple than an 8%-ROIC peer.
+  This is the main mid mover: median **4%**, 23 names >10%, and the direction is a clean
+  sanity check — high-ROIC franchises rise (ORLY +26, ROST +26, SBUX +27, AAPL +22, IDXX +24,
+  ADBE +28), low-ROIC/levered fall (MCHP −25, LITE −21). In the live fit **ROIC absorbed the
+  margin signal** (`+27.7·Δg +0.0·Δmargin +21.2·ΔROIC`) — it is the better value driver.
+- **Quality widens the range.** A config-driven band (±10% top-quality → ~±50% low-quality
+  cyclical) sets a *minimum* low↔high half-width, unioned with engine dispersion. It never
+  touches `within`/`conf` — engine agreement stays a pure function of dispersion; this is
+  **business predictability, a separate axis**. Binds the high for 68/94 and the low for 20.
+  **Known nuance:** on this growth-heavy universe the EPV floor (median 0.33×mid) dominates
+  the *low* side, so the band's visible effect is mostly the high side + value names. Whether
+  EPV should become a separate floor marker (so quality drives the low too) is a philosophy
+  change to the "EPV sets the LOW bound" convention — left as an open call, not decided here.
+
+**Backtest — synced, still no edge (as expected).** `backtest.py` uses the identical v2.7
+base + size premium + ROIC-warranted (no-op size premium on its large-cap universes).
+Regenerated both: **NDX 15.2% vs 17.7%, SPX 12.7% vs 13.6%** — the composite remains
+edge-less, consistent with the Phase 1.4 verdict. Per the standing rule these ship anyway:
+they fix correctness/honesty/sensibility defects in the *valuations* (undervalued reinvestors,
+peak-cycle extrapolation, ROIC-blind multiples), and the incumbent has no real edge to protect.
+**Forward ledger arbitrates.** Also corrected three stale/false methodology surfaces in
+passing: the `beta_default` "PLACEHOLDER" comment, the DDM card (still claimed "replaced —
+few payers"; false since v2.6), and the DCF/EPV/reverse-DCF cards. Tests **115 → 139**.
