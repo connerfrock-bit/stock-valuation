@@ -346,16 +346,21 @@ class TestTriangulate(unittest.TestCase):
         self.assertIsNone(triangulate({"DCF": None}, None, price=100.0))
         self.assertIsNone(triangulate({"DCF": -5.0}, None, price=100.0))
 
-    def test_min_band_widens_range_not_confidence(self):
+    def test_min_band_widens_high_not_low_or_confidence(self):
         eng = {"DCF": 100.0, "RIM": 105.0, "Warranted": 98.0}
         base = triangulate(eng, None, price=100.0)
         wide = triangulate(eng, None, price=100.0, min_band=0.30)
         self.assertEqual(base["conf"], wide["conf"])          # agreement untouched
         self.assertEqual(base["within"], wide["within"])
-        self.assertLessEqual(wide["low"], wide["mid"] * 0.70 + 1e-9)
+        self.assertEqual(wide["low"], base["low"])            # low stays at the real engine floor
         self.assertGreaterEqual(wide["high"], wide["mid"] * 1.30 - 1e-9)
-        self.assertLess(wide["low"], base["low"])             # genuinely wider both sides
-        self.assertGreater(wide["high"], base["high"])
+        self.assertGreater(wide["high"], base["high"])        # only the high widens
+
+    def test_min_band_does_not_push_low_below_epv_floor(self):
+        # value-like name: EPV floor near mid. The band must NOT synthesize a low beneath it —
+        # EPV is the floor by design (would be mid·0.60 ≈ 60.9 without the fix).
+        tri = triangulate({"DCF": 100.0, "Warranted": 102.0}, floor=95.0, price=100.0, min_band=0.40)
+        self.assertAlmostEqual(tri["low"], 95.0)
 
     def test_min_band_never_narrows_a_wide_spread(self):
         # engines already span far more than the band → range unchanged.

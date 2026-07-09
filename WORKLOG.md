@@ -1050,9 +1050,8 @@ at the cyclical peak (MU: DCF $107 vs Warranted $1,459) rather than printing fal
   touches `within`/`conf` — engine agreement stays a pure function of dispersion; this is
   **business predictability, a separate axis**. Binds the high for 68/94 and the low for 20.
   **Known nuance:** on this growth-heavy universe the EPV floor (median 0.33×mid) dominates
-  the *low* side, so the band's visible effect is mostly the high side + value names. Whether
-  EPV should become a separate floor marker (so quality drives the low too) is a philosophy
-  change to the "EPV sets the LOW bound" convention — left as an open call, not decided here.
+  the *low* side, so the band's visible effect is mostly the high side + value names.
+  **Resolved in v2.8.1** (below) — keep EPV as the range low.
 
 **Backtest — synced, still no edge (as expected).** `backtest.py` uses the identical v2.7
 base + size premium + ROIC-warranted (no-op size premium on its large-cap universes).
@@ -1063,3 +1062,17 @@ peak-cycle extrapolation, ROIC-blind multiples), and the incumbent has no real e
 **Forward ledger arbitrates.** Also corrected three stale/false methodology surfaces in
 passing: the `beta_default` "PLACEHOLDER" comment, the DDM card (still claimed "replaced —
 few payers"; false since v2.6), and the DCF/EPV/reverse-DCF cards. Tests **115 → 139**.
+
+### v2.8.1 — EPV-floor resolution (the range-band low)
+
+The one open question from Tier 2: the quality band was pushing the displayed *low* below
+the EPV floor for ~20 value names (`low = mid·(1−band)`), quietly contradicting "EPV is the
+floor." **Decision: keep EPV as the range low; make the band widen only the HIGH.** Rationale:
+the low should always be a real, traceable number (EPV or a genuinely lower engine), never a
+synthetic value beneath the no-growth floor; the asymmetric downside of growth names (their
+big gap to no-growth EPV) is real information, not a defect; and EPV-as-floor is a praised,
+Graham-rooted strength. Quality-uncertainty now lives on the upside band, anchored by a hard
+EPV floor. One-line change in `triangulate` + honest note updates. Verified: **0 names now
+have a synthetic low below every real engine**; the value-destroyers where a real DCF sits
+below EPV (ROIC < WACC — FANG DCF $32 vs EPV $131) correctly keep that real low. Tests +1
+(139 → 140). Model v2.8.1. Backtest unaffected (it calls triangulate without the band).

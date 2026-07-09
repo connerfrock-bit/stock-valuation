@@ -353,8 +353,11 @@ Honesty rules: never a single fair value without its range · agreement always b
 - [x] **Tier 2: quality widens the range** ✅ (model v2.8) — config-driven band (±10% top-q →
       ~±50% low-q cyclical) as a minimum low↔high half-width, unioned with engine dispersion;
       never touches confidence (agreement stays a pure function of dispersion). Display-only.
-      **Open:** EPV floor dominates the low side on growth names — whether EPV becomes a
-      separate floor marker (so quality drives the low too) is an un-decided philosophy call.
+- [x] **v2.8.1 — EPV-floor resolution** ✅ — the band now widens only the HIGH; the low stays
+      at the real EPV/engine floor (was synthesizing a low below EPV for ~20 value names,
+      contradicting "EPV is the floor"). Kept EPV as the range low: the downside is a real,
+      traceable number, and growth names' large gap to no-growth EPV is real information. 0
+      synthetic lows remain; value-destroyers (real DCF < EPV) keep their real low. Tests 140.
 - [x] **Backtest synced + stale-doc fixes** ✅ — backtest.py on the identical v2.7 base;
       NDX 15.2% vs 17.7%, SPX 12.7% vs 13.6% (still edge-less, per Phase 1.4). Fixed the stale
       `beta_default` "PLACEHOLDER" comment, the false DDM "replaced" card, DCF/EPV cards. These

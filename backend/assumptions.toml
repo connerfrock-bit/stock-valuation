@@ -33,10 +33,11 @@ min_wacc_minus_g     = 0.015    # clamp/skip when WACC - g is below this (TV exp
 # small/mid caps where the cross-sectional value evidence actually lives.
 size_premium_bands   = [[10e9, 0.000], [2e9, 0.003], [0.5e9, 0.008], [0.0, 0.015]]
 
-# Fair-value RANGE widening (display only — never touches mid, score, or confidence). The
-# low↔high band is at least this half-width, from quality (0–100) + cyclicality: business
-# predictability, a SEPARATE axis from engine agreement (confidence). ±10% for a pristine
-# steady compounder → ~±50% for a low-quality cyclical. Engine dispersion still wins when wider.
+# Fair-value RANGE widening (display only — never touches mid, score, or confidence). Widens
+# the HIGH of the range to at least mid·(1+band); the LOW stays at the real EPV/engine floor
+# (never synthesized below the no-growth value). Band = quality (0–100) + cyclicality: business
+# predictability, a SEPARATE axis from engine agreement (confidence). +10% for a pristine steady
+# compounder → ~+50% upside band for a low-quality cyclical. Engine dispersion still wins when wider.
 range_base_band      = 0.10     # floor uncertainty even for the best names
 range_quality_scale  = 0.30     # the lowest-quality name adds up to ±30% more
 range_cyclical_adder = 0.10     # cyclical revenue adds a further ±10%

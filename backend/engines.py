@@ -208,11 +208,12 @@ def triangulate(growth, floor, price, weights=None, min_band=0.0):
     """growth: {engine_name: per-share value} for applicable growth engines.
        floor:  EPV per-share value (or None). weights: override CENTRAL_WEIGHTS
        (the backtest's variant harness passes historical weight sets).
-       min_band: minimum half-width of the low↔high range as a fraction of mid, applied
-       AFTER engine dispersion — so a low-quality / cyclical business shows a wider range
-       even when the engines happen to agree. It never NARROWS a genuinely wider engine
-       spread, and never touches within/conf: agreement stays a pure function of engine
-       dispersion; this widens only the displayed range for business unpredictability."""
+       min_band: business-unpredictability band. Widens the HIGH of the range up to at
+       least mid·(1+min_band) so a low-quality / cyclical name shows more upside uncertainty
+       even when the engines agree. The LOW is deliberately NOT widened — it stays at the
+       real EPV/engine floor, so the displayed downside is never synthesized below the
+       no-growth value (EPV is the floor, by design). Never narrows a wider engine spread;
+       never touches within/conf (agreement stays a pure function of engine dispersion)."""
     W  = weights or CENTRAL_WEIGHTS
     g  = {k: v for k, v in growth.items() if v is not None and v > 0}
     fl = floor if (floor is not None and floor > 0) else None
@@ -230,8 +231,8 @@ def triangulate(growth, floor, price, weights=None, min_band=0.0):
     frac       = within / n if n else 0
     conf = (2 if n < 2 else               # a single engine can't demonstrate agreement
             5 if frac >= 0.99 else 4 if frac >= 0.66 else 3 if frac >= 0.5 else 2)
-    if min_band > 0:                      # widen (never narrow) the range for unpredictability
-        low  = min(low,  mid * (1 - min_band))
-        high = max(high, mid * (1 + min_band))
+    if min_band > 0:                      # widen only the HIGH for unpredictability; the low
+        high = max(high, mid * (1 + min_band))   # stays at the real EPV/engine floor — never
+                                                  # synthesize a downside below the no-growth value
     return {"low": low, "mid": mid, "high": high, "upside": mid / price - 1,
             "within": within, "n": n, "conf": conf, "floor": fl}

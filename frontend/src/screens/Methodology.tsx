@@ -188,7 +188,7 @@ export function Methodology({ meta }: { meta: Meta }) {
     { label: 'SBC treatment', value: 'Expensed', src: 'subtract from FCF' },
     { label: 'Beta', value: 'Blume-adj', src: '5y monthly vs S&P 500' },
     { label: 'Size premium', value: 'CRSP bands', src: '+0–1.5% to Re, small caps only' },
-    { label: 'Range width', value: 'quality-scaled', src: '±10% top-q → ±50% low-q cyclical' },
+    { label: 'Range width', value: 'quality-scaled', src: '+10→+50% upside band; low = EPV floor' },
     { label: 'Share counts', value: 'xchecked', src: 'Yahoo mcap, >15% patched' },
   ];
 

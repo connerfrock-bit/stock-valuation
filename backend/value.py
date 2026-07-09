@@ -391,10 +391,11 @@ def _warr_roic(r):
     return r["roic_dcf"] if r["roic_dcf"] is not None else (r["roic"] or 0.0)
 
 
-# Range widening (Tier 2): the low↔high band is never narrower than this half-width, so a
-# volatile / low-quality business shows a wider fair-value range even when the engines agree.
-# This is BUSINESS predictability — a separate axis from confidence (engine agreement), which
-# is left untouched. Reviewer's point: heavy dilution + volatile cash flows deserve a wider band.
+# Range widening (Tier 2): widens the HIGH of the range to at least mid·(1+band) so a
+# volatile / low-quality business shows more upside uncertainty even when the engines agree.
+# The LOW is anchored at the real EPV/engine floor and never synthesized below it (v2.8.1 —
+# EPV is the floor by design). This is BUSINESS predictability — a separate axis from
+# confidence (engine agreement), which is left untouched.
 RANGE_BASE_BAND = 0.10        # even a pristine compounder carries ±10% valuation uncertainty
 RANGE_QUALITY_SCALE = 0.30    # the lowest-quality name adds up to ±30% more
 RANGE_CYCLICAL_ADDER = 0.10   # cyclical revenue adds a further ±10%
@@ -558,7 +559,10 @@ def trap_flags(r, z=None, fscore=None, min_mcap=0.0, ffo_priced=False):
 
 
 # ---------------- snapshot history (append-only) ----------------
-MODEL_VERSION = "v2.8"        # frozen model tag — bump whenever scoring/engine logic changes
+MODEL_VERSION = "v2.8.1"      # frozen model tag — bump whenever scoring/engine logic changes
+# v2.8.1: the quality range band widens only the HIGH; the low is anchored at the real EPV/
+#        engine floor and never synthesized below the no-growth value (was pushing ~20 value
+#        names' low below their EPV — inconsistent with "EPV is the floor"). Display-only.
 # v2.8 (Tier 2): three adaptivity upgrades. (1) Size premium added to Re (rf + beta·ERP +
 #        size_prem) from CRSP-decile bands in assumptions.toml — ~0 for the Nasdaq-100 (all
 #        mega/large), bites S&P 1500 small caps. (2) ROIC is now a third within-bucket driver
