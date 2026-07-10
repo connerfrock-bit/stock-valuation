@@ -7,6 +7,17 @@ const card: React.CSSProperties = {
 
 const pct1 = (v: number) => (v * 100).toFixed(1) + '%';
 
+// Beyond ±300% the invested-capital denominator is de minimis (heavy buybacks, leased
+// asset bases, negative working capital) and the ratio stops being a meaningful rate —
+// bound the DISPLAY, keep the exact value in the hover title.
+const BOUND = 3;
+const overBound = (v: number) => Math.abs(v) > BOUND;
+const pctB = (v: number) => (v > BOUND ? '>300%' : v < -BOUND ? '<−300%' : pct1(v));
+const boundNote = (v: number) =>
+  overBound(v)
+    ? ` Exact: ${pct1(v)} — the invested-capital base here is de minimis, so the rate is not meaningful as a return.`
+    : '';
+
 /**
  * Capital efficiency — the DCF's value-creation engine: normalized ROIC, the
  * economic spread (ROIC − WACC), the g/ROIC reinvestment assumption, and the
@@ -21,14 +32,16 @@ export function CapitalPanel({ c }: { c: Company }) {
   const spreadColor = k.spread > 0 ? C.green : k.spread < 0 ? C.red : C.sec;
   const tiles: { label: string; value: string; sub: string; color: string; title: string }[] = [
     {
-      label: 'ROIC', value: pct1(k.roic), sub: 'normalized', color: C.hi,
-      title: 'Normalized return on invested capital.',
+      label: 'ROIC', value: pctB(k.roic), sub: 'normalized', color: C.hi,
+      title: 'Normalized return on invested capital.' + boundNote(k.roic),
     },
     {
       label: 'Economic spread',
-      value: (k.spread >= 0 ? '+' : '') + (k.spread * 100).toFixed(1) + 'pp',
+      value: overBound(k.spread)
+        ? (k.spread > 0 ? '>+300pp' : '<−300pp')
+        : (k.spread >= 0 ? '+' : '') + (k.spread * 100).toFixed(1) + 'pp',
       sub: 'ROIC − WACC', color: spreadColor,
-      title: 'ROIC minus WACC. Positive → each reinvested dollar creates value; negative → growth destroys it.',
+      title: 'ROIC minus WACC. Positive → each reinvested dollar creates value; negative → growth destroys it.' + boundNote(k.spread),
     },
     {
       label: 'Reinvestment', value: pct1(k.reinvest), sub: 'g ÷ ROIC assumption', color: C.hi,
@@ -36,12 +49,12 @@ export function CapitalPanel({ c }: { c: Company }) {
     },
     {
       label: 'Incremental ROIC',
-      value: k.incRoic === null ? 'n/a' : pct1(k.incRoic),
+      value: k.incRoic === null ? 'n/a' : pctB(k.incRoic),
       sub: k.incRoic === null ? 'net capital returner' : 'ΔNOPAT ÷ Δcapital',
       color: k.incRoic === null ? C.dim : C.hi,
       title: k.incRoic === null
         ? 'Returned more capital (buybacks/dividends) than it deployed — incremental ROIC is undefined here.'
-        : 'Return on the last dollars actually deployed (ΔNOPAT ÷ Δinvested capital).',
+        : 'Return on the last dollars actually deployed (ΔNOPAT ÷ Δinvested capital).' + boundNote(k.incRoic),
     },
   ];
 

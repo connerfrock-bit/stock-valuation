@@ -1112,3 +1112,44 @@ the capital panel is a 2×2 stat grid between Quality & safety and Method agreem
 self-guard on null (financials/REITs render nothing). Verified in the preview (MSFT both
 panels, a financial correctly omits, AAPL incROIC "n/a — net capital returner"), tsc + vite
 build clean, no console errors. Tests 144 (blend_scenarios goldens). Model v2.9.
+
+---
+
+## Phase 3.4 — Tier 3 verified + hardened at S&P 500/1500 scale (2026-07-10)
+
+**The ask:** bring the v2.9 scenarios + capital panel from the Nasdaq-100 to the S&P 500
+and S&P 1500, and debug at scale. **Finding one: the plumbing already delivered them** —
+`value.py all` fans out per-universe and the Jul-09 run had written `scenario`/`capital`
+into all three outputs; the frontend components were universe-agnostic with null guards.
+What was missing was scale-QA (the taming constants were only ever eyeballed on 94
+mega-caps) and a commit of the broad-universe payloads.
+
+**QA sweep (all three universes, fresh 07-10 data):** every invariant holds at 1,413
+names — 0 scenarios leak onto financials/REITs, 0 inverted cones, 0 probability-weighting
+mismatches, and all 127 "standard name, has a DCF, no scenario" cases trace to the
+designed fallback (FCF-base DCF when NOPAT/ROIC are unusable → no value-driver to shift;
+`capital` null for exactly the same names — 0 unexplained). Quality banding degrades
+correctly everywhere (SP1500: q80+ cone [0.76, 1.33] → q<55 [0.61, 1.65]). Backend suite
+144/144 green; no model change — still v2.9.
+
+**What scale surfaced (fixed, all display-layer):**
+1. **De-minimis capital bases print garbage rates.** RH (buybacks + leased stores → book
+   capital ≈ 0) rendered "ROIC 8235%" in the capital panel and "5614%" in Quality & safety;
+   incROIC tails hit MCK +1505% / FOXF −1464%. Ratios beyond ±300% now display as ">300%" /
+   "<−300%" with the exact value + a de-minimis explanation in the hover title (CapitalPanel
+   + the DeepDive quality row). MCK's real 150.5% ROIC (negative-WC distributor) still
+   prints exactly — the bound only mutes ratios whose denominator is meaningless.
+2. **Cone-cap saturation grows with universe breadth** — 25% of NDX cones pin at the
+   1.65×/0.55× caps vs 48% (SPX) and 54% (SP1500): the caps bind exactly where
+   predictability is worst, which is the design, but the cone footnote now discloses them
+   so two capped names aren't read as "identical risk".
+3. Reported, not changed: reinvestment shows at the 0.90 clamp for ~39% of SP1500
+   (low-ROIC + optimistic g1 — a truthful display of the DCF's actual assumption), and
+   expBase tails (DXC +1011%) mirror the pre-existing `mid` on conf-2/3 flagged names —
+   scenario is a lens on the mid, not a second opinion.
+
+**Verified in the browser on live data** (SP1500: RH bounded tiles, MCK exact-vs-bounded,
+JPM and Realty Income correctly render neither panel; universe menu shows fresh 482/1413
+counts; console clean; tsc + vite build clean). Share rebuilt. Note: this refresh's live
+rf came from the 4.30% fallback (FRED unreachable mid-run — disclosed in meta, self-heals
+next run). NYSE-wide universe and the GitHub publication remain the next two gates.

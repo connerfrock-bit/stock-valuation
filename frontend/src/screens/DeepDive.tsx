@@ -154,7 +154,9 @@ export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: 
     { label: 'Equity / assets', value: na(c.eqAssets, v => (v * 100).toFixed(1) + '%'), pct: pctile(x => x.eqAssets ?? null) },
     { label: 'Quality rank', value: `${c.quality}/100`, pct: c.quality / 100 },
   ] : [
-    { label: 'ROIC', value: na(c.roic, v => Math.round(v * 100) + '%'), pct: pctile(x => x.roic) },
+    // display bound ±300%: beyond that the invested-capital base is de minimis (RH:
+    // buybacks + leased stores → book capital ≈ 0) and the printed rate is meaningless
+    { label: 'ROIC', value: na(c.roic, v => (v > 3 ? '>300%' : v < -3 ? '<−300%' : Math.round(v * 100) + '%')), pct: pctile(x => x.roic) },
     { label: 'Op margin (5y avg)', value: na(c.om, v => Math.round(v * 100) + '%'), pct: pctile(x => x.om) },
     { label: 'Rev growth (5y)', value: na(c.growth5y, v => fmtPct(v, 0)), pct: pctile(x => x.growth5y) },
     { label: 'Quality rank', value: `${c.quality}/100`, pct: c.quality / 100 },

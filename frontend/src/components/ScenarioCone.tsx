@@ -130,7 +130,8 @@ export function ScenarioCone({ c }: { c: Company }) {
 
       <div style={{ fontSize: 10.5, color: C.dim, lineHeight: 1.5, marginTop: 12, paddingTop: 10, borderTop: `1px solid ${C.border}` }}>
         Bull and bear re-run the DCF with optimistic / pessimistic growth, margins and WACC — the
-        cone is wider for lower-quality or cyclical names. Annualized assumes ~5-yr convergence
+        cone is wider for lower-quality or cyclical names, and is capped at 1.65× / 0.55× of base
+        (the most volatile names pin at the caps). Annualized assumes ~5-yr convergence
         to the probability-weighted value.
       </div>
     </div>
