@@ -11,7 +11,7 @@ It will be refactored into the fairvalue/ package (ingest/ store/ ...) in a late
 import json, sqlite3, time, urllib.request, urllib.error
 from pathlib import Path
 from universe import get_universe, build_union
-from common import UNIVERSES
+from common import UNIVERSES, OVERRIDES
 import bulk
 
 CONTACT   = "FairValue research conner.frock@gmail.com"   # SEC requires a descriptive UA
@@ -494,6 +494,10 @@ def main(universe_ids=None, resume=False):
     # bulk ticker→CIK (filers scan ∪ company_tickers.json) when the zips are here,
     # else the classic current-only map. The bulk map also carries delisted registrants.
     cikmap = bulk.ticker_cik_map(con) if use_bulk else load_ticker_map()
+    # Manual CIK pins beat every automatic map (assumptions.toml [overrides.cik]).
+    # SEC's ticker file follows a corporate shell the moment it registers — the
+    # operating company's facts stay on the old CIK until the shell actually files.
+    cikmap.update({t.upper(): str(c).zfill(10) for t, c in OVERRIDES.get("cik", {}).items()})
     if use_bulk:
         print(f"BULK MODE — facts from {bulk.FACTS_ZIP.name} (local reads, no EDGAR throttle)")
     else:
@@ -578,6 +582,29 @@ def main(universe_ids=None, resume=False):
     con.commit()
     per_uni = {u: sum(1 for us in ingested.values() if u in us) for u in universe_ids}
 
+    # Price backfill: Yahoo intermittently throttles a burst of names mid-run; a NULL
+    # price must not evict an otherwise fully-covered name from every universe
+    # (value.py excludes "no price"). One retry sweep at the end — resume runs heal
+    # prior failures too, since the main loop skips well-covered names entirely.
+    nulls = [t for (t,) in con.execute(
+        "SELECT ticker FROM companies WHERE price IS NULL ORDER BY ticker")]
+    still = []
+    for t in nulls:
+        try:
+            p, ccy = fetch_price(t)
+        except Exception:
+            p, ccy = None, None
+        if p:
+            con.execute("UPDATE companies SET price=?, currency=COALESCE(?,currency), "
+                        "updated=? WHERE ticker=?", (p, ccy, now, t))
+        else:
+            still.append(t)
+        time.sleep(0.15)
+    con.commit()
+    if nulls:
+        print(f"Price backfill: {len(nulls)-len(still)}/{len(nulls)} NULL-price names recovered"
+              + (f" · still missing: {', '.join(still)}" if still else ""))
+
     total = con.execute("SELECT COUNT(*) FROM financials").fetchone()[0]
     dt = max(time.time() - t0, 1e-6)
     print(f"\nIngested {ok}/{n} companies ({full} with ≥15/{len(CONCEPTS)} coverage); {total} datapoints → {DB_PATH}")
@@ -585,6 +612,24 @@ def main(universe_ids=None, resume=False):
           f"{dt:.0f}s ({n/dt:.1f} names/s)")
     print(f"Live membership: " + " · ".join(f"{u}={c}" for u, c in per_uni.items()))
     coverage_check(con, now)
+
+    # Ticker→CIK reassignment tripwire: a name that ingests (near-)ZERO facts is either
+    # a fresh corporate shell that claimed the ticker (holdco reorg — XOM 2026-07) or a
+    # brand-new registrant with no filings yet. Both silently vanish from every universe
+    # ("missing core financials"), so announce them here instead.
+    ghosts = con.execute(
+        "SELECT c.ticker, c.cik, COUNT(f.concept) FROM companies c "
+        "LEFT JOIN financials f ON f.ticker = c.ticker "
+        "GROUP BY c.ticker HAVING COUNT(f.concept) < 3 ORDER BY c.ticker").fetchall()
+    if ghosts:
+        print("\n" + "!" * 64)
+        print("!! ZERO-FACTS names — a new shell may have claimed the ticker")
+        print("!! (holdco reorg), or the registrant is too new to have filed:")
+        for t, c, k in ghosts:
+            print(f"!!   {t:6} CIK {c}  ({k} facts)")
+        print("!! If a major operating company is listed, pin its real CIK in")
+        print("!! assumptions.toml [overrides.cik] (see the XOM entry).")
+        print("!" * 64)
     bulk.close()
     con.close()
 

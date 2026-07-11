@@ -32,8 +32,8 @@ BROWSER_UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
 SEC_UA     = {"User-Agent": "FairValue research conner.frock@gmail.com"}  # SEC requires a descriptive UA
 
 
-def http_text(url, timeout=15):
-    req = urllib.request.Request(url, headers=BROWSER_UA)
+def http_text(url, timeout=15, headers=None):
+    req = urllib.request.Request(url, headers=headers or BROWSER_UA)
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.read().decode("utf-8", "replace")
 
@@ -59,12 +59,16 @@ def http_json(url, headers=None, timeout=25, retries=4):
 
 
 def fetch_risk_free(retries=3):
-    """Live 10Y UST from FRED's keyless CSV endpoint -> decimal. Retries, then falls back."""
+    """Live 10Y UST from FRED's keyless CSV endpoint -> decimal. Retries, then falls back.
+       MUST self-identify (SEC_UA): FRED tarpits the fake-Chrome BROWSER_UA string
+       (a script wearing a browser UA without browser headers reads as a bot — requests
+       hang until timeout, and the live rf silently flapped to the 4.30% fallback while
+       the real 10Y sat at 4.54%; found 2026-07-10). Honest UA answers in ~0.2s."""
     url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10"
     for _ in range(retries):
         try:
             last = None
-            for line in http_text(url, timeout=12).strip().splitlines()[1:]:
+            for line in http_text(url, timeout=20, headers=SEC_UA).strip().splitlines()[1:]:
                 v = line.split(",")[-1].strip()
                 if v and v != ".":
                     last = float(v)

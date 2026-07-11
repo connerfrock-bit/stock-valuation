@@ -5,7 +5,7 @@ Delisted names that Yahoo no longer serves are LOGGED — that residual survivor
 gap is quantified by the backtest, never hidden. stdlib only.  python prices.py
 """
 import json, sqlite3, sys, time, urllib.parse
-from common import DB_PATH, http_text
+from common import DB_PATH, http_text, SEC_UA
 
 
 def fetch_monthly(symbol, rng="15y"):
@@ -39,7 +39,9 @@ def refresh_rf(con):
     con.execute("CREATE TABLE IF NOT EXISTS rf_monthly(month TEXT PRIMARY KEY, rate REAL)")
     rows, src = {}, None
     try:
-        txt = http_text("https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10", timeout=20)
+        # SEC_UA: FRED tarpits the fake-Chrome BROWSER_UA (see common.fetch_risk_free)
+        txt = http_text("https://fred.stlouisfed.org/graph/fredgraph.csv?id=DGS10",
+                        timeout=20, headers=SEC_UA)
         for line in txt.strip().splitlines()[1:]:
             d, v = line.split(",")
             if v.strip() and v.strip() != ".":

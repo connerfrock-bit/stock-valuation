@@ -88,6 +88,15 @@ min_mcap  = 0.3e9               # small-caps are legitimately ~$0.3-2B — below
 # L5/L6 manual-override table (BLUEPRINT L1c promised this; Phase 1.3 delivers).
 # Precedence everywhere: override > SIC map (Phase 2, bulk submissions.zip) > GICS sector.
 
+[overrides.cik]
+# Ticker→CIK pins. SEC's company_tickers.json follows a corporate shell the moment it
+# REGISTERS: 2026-07 the XOM ticker moved to "ExxonMobil Holdings Corp" (CIK 2115436,
+# a 1KB companyfacts member with ZERO facts) while the operating company's 19 years of
+# filings stay on the old CIK until the new entity actually files. Pin the CIK that
+# holds the facts; drop the pin once the successor's own filing history is usable.
+# (Ingest prints a "ZERO-FACTS names" tripwire when a new case of this appears.)
+XOM = "0000034088"
+
 [overrides.archetype]
 # CoStar: a data/software business GICS files under Real Estate — RIM-on-book
 # priced it like a REIT (its +46 quality jump in v2.3 exposed the misroute).

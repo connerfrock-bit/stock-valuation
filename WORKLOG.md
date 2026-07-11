@@ -1153,3 +1153,46 @@ JPM and Realty Income correctly render neither panel; universe menu shows fresh 
 counts; console clean; tsc + vite build clean). Share rebuilt. Note: this refresh's live
 rf came from the 4.30% fallback (FRED unreachable mid-run — disclosed in meta, self-heals
 next run). NYSE-wide universe and the GitHub publication remain the next two gates.
+
+---
+
+## Coverage-drop postmortem: the XOM holdco trap + two silent-failure fixes (2026-07-10, evening)
+
+**Trigger:** the universe menu read 482/1413 after the afternoon refresh (was 487/1423).
+Diffed via `meta.changes` — not index churn; three unrelated failures, each now fixed:
+
+1. **XOM fell to a ticker→CIK reassignment.** SEC's company_tickers.json follows a
+   corporate shell the moment it REGISTERS: the XOM ticker now points at "ExxonMobil
+   Holdings Corp" (CIK 2115436), a 1 KB companyfacts member with ZERO facts, while the
+   operating company's 19 filing years stay on CIK 34088 *in the same zip*. The live
+   ingest trusted the map → zero facts → honest "missing core financials" exclusion.
+   This is the LIVE-path sibling of the delisted-name namesake trap pit.py already
+   guards (Phase 2). **Fix: `[overrides.cik]` pin table** in assumptions.toml
+   (override > every automatic map), plus a **ZERO-FACTS tripwire** at the end of every
+   ingest that names sub-3-concept tickers and points at the override table — the next
+   holdco reorg announces itself instead of silently shrinking the universe. The
+   tripwire's first run correctly listed only honest cases (FDXF/HONA placeholders,
+   brand-new registrants MFP/VGNT/MBGL/SPCX, SKT's reorganized filer).
+2. **11 names lost prices to a Yahoo throttle burst** (C, BSX, CF, ALSN, BJ, HCSG, HTH,
+   KLIC, MDU, MSEX, SOLS): a failed fetch wrote price=NULL and the resume pass only
+   re-fetches LOW-COVERAGE names, so a fully-covered name with a failed price stayed
+   excluded ("no price"). **Fix: end-of-run price backfill sweep** (both modes) with a
+   printed recovered/still-missing line.
+3. **The live risk-free had been silently flapping to the 4.30% fallback — FRED tarpits
+   the fake-Chrome UA.** `fetch_risk_free` sent BROWSER_UA (a Chrome string without
+   Chrome's other headers = bot signature); FRED let those requests hang past every
+   timeout, while the real 10Y sat at 4.54%. Diagnosed by A/B: full-history CSV in
+   0.2s with an honest self-identifying UA vs 90s of timeouts with fake-Chrome.
+   **Fix: SEC_UA on both FRED call sites** (live rf + rf_monthly history in prices.py;
+   http_text gained a headers param). rf_monthly refreshed: 775 months through 2026-07.
+
+**Also disproven:** the "stale zip" theory — the re-run re-downloaded both bulk zips and
+they are byte-identical (SEC hasn't rebuilt since Jul 9 22:20); yesterday's package was
+current all along.
+
+**Result (full refresh + engines re-run on live rf 4.54%):** NDX 94 · **S&P 500 486**
+(+XOM/C/BSX/CF; AXP honestly out at its book gate) · **S&P 1500 1424** (+12 recovered).
+Scenario/capital invariants re-verified green at the new counts; XOM deep-dive renders
+both Tier-3 panels (ROIC 7.0% ≈ WACC — the supermajor reads right). OZK/PFBC (2 small
+banks missing from the zip) hit EDGAR API throttles twice — they'll heal on a future
+resume pass. Tests 144/144. Share rebuilt.
