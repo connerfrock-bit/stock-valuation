@@ -109,13 +109,23 @@ def collect(con, rf, erp, tax_fallback, betas, universe_id):
     today = datetime.date.today()
     has_now = bool(con.execute(
         "SELECT name FROM sqlite_master WHERE name='financials_now'").fetchone())
-    if "sic" not in [r[1] for r in con.execute("PRAGMA table_info(companies)")]:
-        con.execute("ALTER TABLE companies ADD COLUMN sic TEXT")   # pre-Phase-2 DB
+    for col in ("sic", "form"):
+        if col not in [r[1] for r in con.execute("PRAGMA table_info(companies)")]:
+            con.execute(f"ALTER TABLE companies ADD COLUMN {col} TEXT")   # pre-Phase-2/4 DB
+    # ADR share-count guard (Phase 4.1): EDGAR carries LOCAL share counts while Yahoo
+    # quotes the ADR price — per-ADR values are off by the ADR ratio unless sanity.py's
+    # mcap cross-check verified or patched the count. 20-F names without that check are
+    # excluded, never guessed. (dq status: ok/drift/patched/derived pass; no_ext fails.)
+    try:
+        dq_status = dict(con.execute(
+            "SELECT ticker, status FROM data_quality WHERE check_name='mcap_xcheck'"))
+    except sqlite3.OperationalError:
+        dq_status = {}                                     # sanity never ran → all ADRs fail closed
     rows, excluded = [], []
     for t in universe_tickers(con, universe_id):
         name, price, f = load_company(con, t)
-        sector, shares_out, fin_ccy, cik, sic = con.execute(
-            "SELECT sector, shares_out, fin_currency, cik, sic FROM companies WHERE ticker=?",
+        sector, shares_out, fin_ccy, cik, sic, form = con.execute(
+            "SELECT sector, shares_out, fin_currency, cik, sic, form FROM companies WHERE ticker=?",
             (t,)).fetchone()
         hy = hygiene_reason(t, name, price, sic)           # L0: instrument/shell/penny → visible exclude
         if hy:
@@ -128,6 +138,9 @@ def collect(con, rf, erp, tax_fallback, betas, universe_id):
             excluded.append((t, "no price")); continue
         if not shares:
             excluded.append((t, "no share count")); continue
+        if form == "20-F" and dq_status.get(t) in (None, "no_ext"):
+            excluded.append((t, "ADR: share count unverified vs Yahoo — per-ADR value "
+                                "would be off by the ADR ratio")); continue
         # Standard names need CFO/capex (FCF engines). Financials/REITs are priced on RIM
         # (book + ROE) — CFO/capex are meaningless for them — so require only the RIM inputs;
         # names that lack even those fall through to the archetype-aware exclusion in pass 2.
@@ -220,7 +233,7 @@ def collect(con, rf, erp, tax_fallback, betas, universe_id):
 
         rows.append(dict(
             t=t, name=name, sector=sector, arch=arch, fin_ccy=fin_ccy or "USD", cik=cik,
-            sic=sic or "",
+            sic=sic or "", form=form,
             price=price, shares=shares, mcap=mcap,
             beta=beta, re_=re_, wacc=wacc, rev=rev, rev_now=rev_now,
             fcf_norm=fcf_norm, fcf_last=fcf_last, fcf_margin=fcf_margin,
@@ -400,6 +413,16 @@ def _warr_roic(r):
 RANGE_BASE_BAND = 0.10        # even a pristine compounder carries ±10% valuation uncertainty
 RANGE_QUALITY_SCALE = 0.30    # the lowest-quality name adds up to ±30% more
 RANGE_CYCLICAL_ADDER = 0.10   # cyclical revenue adds a further ±10%
+
+def adr_ps_sane(mid, price, bound=10.0):
+    """Per-share sanity bound for 20-F filers: True when mid/price sits inside
+       [1/bound, bound]. Outside it, the number is a data failure (local-currency
+       values under mislabeled units, or a share-basis mix the mcap cross-check
+       couldn't see), not a valuation opinion — the caller excludes with a reason."""
+    if not (mid and price and price > 0):
+        return False
+    return (price / bound) <= mid <= (price * bound)
+
 
 def quality_band(quality, cyclical):
     """Minimum half-width of the fair-value range, from quality (0–100) + cyclicality.
@@ -938,6 +961,15 @@ def main(universe_id=ACTIVE):
                               "book unusable for the RIM fallback"}.get(
                           arch, "no positive FCF/earnings base (GAAP loss-maker)")
             excluded.append((r["t"], reason)); continue
+        # ADR per-share sanity bound (Phase 4.1): a 20-F filer whose mid lands >10× or
+        # <0.1× the ADR price is advertising a filing-unit / share-basis mismatch
+        # (foreign banks filing local-currency values under USD-labeled units produced
+        # +100,000% "upside"), not a valuation opinion. Domestic names are exempt —
+        # their EDGAR share counts are solid and deep value legitimately prints large.
+        if r.get("form") == "20-F" and not adr_ps_sane(tri["mid"], r["price"]):
+            excluded.append((r["t"], "ADR: per-share value failed the 10× sanity bound — "
+                                     "filing-unit or share-basis mismatch suspected"))
+            continue
         tally[arch] += 1
         if eff_arch != "standard":
             rim_only += 1                                 # truly gated (RIM-only) bank/insurer/REIT

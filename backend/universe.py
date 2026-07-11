@@ -225,31 +225,15 @@ def sector_by_sic(sic, table):
     return None
 
 
-def _is_domestic(cik, bulk_mod):
-    """10-K/10-Q filer (domestic) vs 20-F/40-F (foreign private issuer — ADRs are
-       DEFERRED: EDGAR carries local share counts while Yahoo quotes ADR prices, so
-       per-share values would be off by the ADR ratio). Reads a few facts' form
-       fields from the local zip — no network."""
-    doc = bulk_mod.facts_json(cik)
-    if not doc:
-        return False                                       # no facts at all — nothing to value
-    forms = set()
-    for ns in doc.get("facts", {}).values():
-        for tag in list(ns.values())[:8]:
-            for arr in tag.get("units", {}).values():
-                forms.update(u.get("form", "") for u in arr[:25])
-        break                                              # first namespace (dei) is enough
-    if any(f.startswith(("10-K", "10-Q")) for f in forms):
-        return True
-    return False
-
-
 def nyse_constituents():
-    """NYSE-listed · domestic 10-K filers · funds/SPACs/trusts out. Built entirely from
+    """NYSE-listed · 10-K AND 20-F filers · funds/SPACs/trusts out. Built entirely from
        the local bulk-EDGAR data (filers scan + companyfacts) — no Wikipedia, no network.
        Sector from [sector_by_sic]; S&P overlap names get GICS anyway (build_union).
-       The $1B membership floor is NOT applied here (needs price) — ingest applies it
-       when it builds the universe junction."""
+       ADRs (20-F) are admitted since 2026-07-11: ingest stamps the form, sanity.py
+       patches share counts to Yahoo's ADR-equivalent (mcap / price), and value.py
+       EXCLUDES any 20-F name whose share count could not be cross-checked — per-ADR
+       values would otherwise be off by the ADR ratio. The $1B membership floor is NOT
+       applied here (needs price) — ingest applies it when it builds the junction."""
     import sqlite3
     import bulk
     from common import DB_PATH, _TOML
@@ -262,22 +246,24 @@ def nyse_constituents():
         raise SystemExit("nyse universe needs the filers scan — run `python bulk.py scan`")
     finally:
         con.close()
-    out, skipped_class, skipped_foreign, unmapped = [], 0, 0, 0
+    out, skipped_class, n_adr, skipped_nofacts, unmapped = [], 0, 0, 0, 0
     for cik, name, sic, tickers in rows:
         if sic in NONCOMPANY_SICS or _FUND_NAME.search(name or ""):
             skipped_class += 1
             continue
-        if not _is_domestic(cik, bulk):
-            skipped_foreign += 1
+        form = bulk.filer_form(bulk.facts_json(cik))
+        if form is None:
+            skipped_nofacts += 1                           # no annual facts — nothing to value
             continue
+        n_adr += (form == "20-F")
         sector = sector_by_sic(sic, sic_map)
         if sector is None:
             unmapped += 1                                  # no honest sector → no bucket/router;
             continue                                       # skip rather than guess (rare SICs)
         ticker = tickers.split(",")[0].strip().upper()
         out.append((ticker, name.title(), sector))
-    print(f"  nyse source: {len(out)} domestic operating cos "
-          f"(class-filtered {skipped_class} · foreign {skipped_foreign} · unmapped-SIC {unmapped})")
+    print(f"  nyse source: {len(out)} operating cos incl. {n_adr} ADRs "
+          f"(class-filtered {skipped_class} · no-facts {skipped_nofacts} · unmapped-SIC {unmapped})")
     return out, "SEC filers scan (local)"
 
 

@@ -51,6 +51,54 @@ class TestNonCompanyFilter(unittest.TestCase):
             self.assertFalse(_FUND_NAME.search(name), name)
 
 
+class TestFilerForm(unittest.TestCase):
+    """bulk.filer_form — the domestic/ADR classifier behind the share-count guard."""
+
+    @staticmethod
+    def doc(*forms):
+        return {"facts": {"dei": {"Tag": {"units": {"shares": [{"form": f} for f in forms]}}}}}
+
+    def test_domestic(self):
+        from bulk import filer_form
+        self.assertEqual(filer_form(self.doc("10-K", "10-Q")), "10-K")
+
+    def test_adr(self):
+        from bulk import filer_form
+        self.assertEqual(filer_form(self.doc("20-F", "6-K")), "20-F")
+        self.assertEqual(filer_form(self.doc("40-F")), "20-F")   # Canadian MJDS = foreign
+
+    def test_mixed_prefers_domestic(self):
+        # a re-domiciliation that now files 10-Ks is domestic, whatever its history
+        from bulk import filer_form
+        self.assertEqual(filer_form(self.doc("20-F", "10-K")), "10-K")
+
+    def test_none_when_no_annual_forms(self):
+        from bulk import filer_form
+        self.assertIsNone(filer_form(self.doc("8-K", "S-1")))
+        self.assertIsNone(filer_form(None))
+        self.assertIsNone(filer_form({"facts": {}}))
+
+
+class TestAdrPsSane(unittest.TestCase):
+    """value.adr_ps_sane — the 20-F per-share sanity bound (Phase 4.1)."""
+
+    def test_sane_values_pass(self):
+        from value import adr_ps_sane
+        self.assertTrue(adr_ps_sane(100.0, 60.0))          # +67% deep value: fine
+        self.assertTrue(adr_ps_sane(12.0, 100.0))          # −88%: fine (bound is 10×)
+
+    def test_unit_mismatch_fails_both_directions(self):
+        from value import adr_ps_sane
+        self.assertFalse(adr_ps_sane(53000.0, 50.0))       # Shinhan-style +105,900%
+        self.assertFalse(adr_ps_sane(3.0, 50.0))           # 0.06× — inverted basis
+
+    def test_edges(self):
+        from value import adr_ps_sane
+        self.assertTrue(adr_ps_sane(500.0, 50.0))          # exactly 10× → inclusive
+        self.assertFalse(adr_ps_sane(None, 50.0))
+        self.assertFalse(adr_ps_sane(50.0, 0.0))
+
+
 class TestJunctionFloor(unittest.TestCase):
     """The floor rule ingest applies when building universe_membership."""
 

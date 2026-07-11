@@ -1156,6 +1156,58 @@ next run). NYSE-wide universe and the GitHub publication remain the next two gat
 
 ---
 
+## Phase 4.1 — ADRs live behind a fail-closed gate + the deferred-work sweep (2026-07-11)
+
+**The deferred list, executed:** OZK pinned (its ticker map pointed at a no-XBRL
+securities shell holding OZK + the OZKAP preferred; real 10-K filer = the pre-rename
+holdco CIK — third instance of the reassignment class, subsidiary flavor). PFBC closed
+as PERMANENTLY un-ingestable, honestly: a bank with no holding company that files with
+the FDIC — no EDGAR facts exist. CUK/ONTF/PKST/SEMR price-fails are genuine delistings
+(Yahoo 404s). Mortgage-REIT nuance resolved by MEASUREMENT, not a rule: the D&A/NI
+discriminator caught the wrong names (lease-accounting property REITs VICI 0.002 /
+SAFE 0.09, where P/FFO≈P/E is fair) and missed the hybrids (ARI 0.19, LADR 0.32 hold
+property) — so three override pins instead of a fitted threshold: ARI/LADR → financial
+(CRE lenders trade on book), FOR → standard (Forestar is a land developer, SIC-mislabeled
+Real Estate).
+
+**ADR support — the "mini-project" mostly already existed.** The two hard parts were in
+place for years: sanity.py's Yahoo-mcap cross-check patches/derives ADR-equivalent share
+counts (built for share-class mismatches, generalizes to ADR ratios — BP got 2.58B,
+AZN 1.55B, NVO 4.42B), and ingest already converts non-USD statements at FX spot. What
+Phase 4.1 added:
+- `bulk.filer_form()` (10-K beats 20-F/40-F) stamped on every company; the nyse source
+  now ADMITS 20-F filers (418 ADRs enter the pipeline).
+- **Fail-closed guard #1:** a 20-F name whose share count Yahoo could not cross-check
+  (`no_ext`) is excluded with a reason — never a guessed denominator.
+- **Fail-closed guard #2 (`adr_ps_sane`, the harness earned its keep):** first pass
+  produced Shinhan at +106,509% — foreign banks filing local-currency values under
+  USD-labeled units. A 20-F mid outside [0.1×, 10×] of the ADR price is a data failure
+  advertising itself, not a valuation → excluded (killed SHG/WF/KB/SMFG/BMA/BBAR/LU +
+  ATS/TGB). Domestic names exempt (EDGAR counts are solid; deep value legitimately
+  prints large). The surviving >300% tail (7: EQNR/EC/AZUL/CIG/GSL/HAFN/BIPC) matches
+  domestic conf-2 magnitudes and stays, carried by conf.
+- **Ordering flaw found + fixed:** the junction floor ran at ingest, BEFORE sanity
+  derived missing ADR share counts → NVO/BP/AZN-class names (42) were floored out on
+  unknowable mcap. Pre-floor membership now persists (`universe_membership_raw`),
+  `apply_floor()` is factored out, and sanity.py RE-APPLIES it after patching — the
+  floor always sees verified denominators.
+- **Shell's tag gap fixed:** it files capex as PurchaseOfOtherLongtermAssets… (PP&E +
+  intangibles combined) — added as a fallback-only IFRS tag. SHEL now covered at +3%
+  (a supermajor reading fairly-valued is the sanity check passing). BP remains excluded
+  on the same class of gap (different tag) — logged for a future vetted-tag pass.
+
+**Final state: NYSE $1B+ = 1,282 covered incl. 192 ADRs** (median ADR |upside| 50%;
+TSM −45% at a CORRECT $2.25T mcap — the census's "$11T" failure mode is dead; TM −5%,
+HSBC −37% financial-routed, AZN +2%, SONY +2%). 15 ADR-guard exclusions with reasons.
+Tier-3 invariants green (0 inverted cones, 0 leaks). Tests 158 → **161**. Share rebuilt.
+Betas piggyback note: sanity re-floors AFTER betas in the refresh order, so a
+newly-readmitted ADR values on β=1.0 until the next full refresh betas it — acceptable,
+self-healing. Remaining known limits: BP-class IFRS tag gaps; hyperinflation-currency
+filings excluded by the sanity bound rather than modeled (correct until a real
+inflation-adjusted path exists).
+
+---
+
 ## Coverage-drop postmortem: the XOM holdco trap + two silent-failure fixes (2026-07-10, evening)
 
 **Trigger:** the universe menu read 482/1413 after the afternoon refresh (was 487/1423).

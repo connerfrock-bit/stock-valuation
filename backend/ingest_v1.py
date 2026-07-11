@@ -93,7 +93,10 @@ IFRS_CONCEPTS = {
     "ebit":        ["ProfitLossFromOperatingActivities"],
     "cfo":         ["CashFlowsFromUsedInOperatingActivities"],
     "capex":       ["PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities",
-                    "PurchaseOfPropertyPlantAndEquipment"],
+                    "PurchaseOfPropertyPlantAndEquipment",
+                    # Shell combines PP&E + intangibles into one line; slightly broad but
+                    # a real capex figure beats excluding a supermajor (fallback-only).
+                    "PurchaseOfOtherLongtermAssetsClassifiedAsInvestingActivities"],
     "dep_amort":   ["DepreciationAndAmortisationExpense"],
     "sbc":         ["ExpenseFromSharebasedPaymentTransactionsWithEmployees"],
     "dividends":   ["DividendsPaidClassifiedAsFinancingActivities", "DividendsPaid"],
@@ -430,7 +433,8 @@ def init_db(con):
     CREATE TABLE companies(
         ticker TEXT PRIMARY KEY, name TEXT, cik TEXT, sector TEXT,
         price REAL, currency TEXT, shares_out REAL, fin_currency TEXT, updated TEXT,
-        sic TEXT);                                -- SIC code (bulk submissions) → hygiene + subsector
+        sic TEXT,                                 -- SIC code (bulk submissions) → hygiene + subsector
+        form TEXT);                               -- '10-K' domestic · '20-F' foreign/ADR (share-count guard)
     CREATE TABLE financials(
         ticker TEXT, fiscal_year INTEGER, concept TEXT, value REAL,
         PRIMARY KEY (ticker, fiscal_year, concept));
@@ -487,6 +491,33 @@ def coverage_check(con, now, warn_drop=0.05, universe="ALL"):
         print(f"Coverage check vs {prev_run}: all {len(cur)} concepts within {warn_drop:.0%}.")
 
 
+def apply_floor(con):
+    """universe_membership = universe_membership_raw minus names under a universe's
+       `mcap_floor` (assumptions.toml), judged on the CURRENT companies price×shares.
+       Phase 4: sub-floor names keep their data rows (floor changes are config-only)
+       but are NOT members — out of universe by definition, not an exclusion, so the
+       Methodology exclusion list doesn't drown in hundreds of below-floor lines.
+       Called at the end of ingest AND again by sanity.py after it patches ADR share
+       counts (an ADR with no EDGAR share count has unknowable mcap at ingest time)."""
+    floors = {u: cfg.get("mcap_floor") for u, cfg in UNIVERSES.items() if cfg.get("mcap_floor")}
+    mcap = {t: (p or 0.0) * (s or 0.0) for t, p, s in
+            con.execute("SELECT ticker, price, shares_out FROM companies")}
+    floored, rows_j = {}, []
+    for u, t in con.execute("SELECT universe, ticker FROM universe_membership_raw"):
+        f = floors.get(u)
+        if f and mcap.get(t, 0.0) < f:
+            floored[u] = floored.get(u, 0) + 1
+            continue
+        rows_j.append((u, t))
+    con.execute("DELETE FROM universe_membership")
+    con.executemany("INSERT OR REPLACE INTO universe_membership VALUES (?,?)", rows_j)
+    con.commit()
+    for u, k in sorted(floored.items()):
+        print(f"  {u}: {k} names below the ${floors[u]/1e9:.1f}B membership floor "
+              f"(kept in companies, not members)")
+    return rows_j
+
+
 def main(universe_ids=None, resume=False):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(DB_PATH)
@@ -507,6 +538,8 @@ def main(universe_ids=None, resume=False):
     else:
         con.execute("CREATE TABLE IF NOT EXISTS universe_membership("
                     "universe TEXT, ticker TEXT, PRIMARY KEY (universe, ticker))")
+        if "form" not in [r[1] for r in con.execute("PRAGMA table_info(companies)")]:
+            con.execute("ALTER TABLE companies ADD COLUMN form TEXT")   # pre-ADR schema
     now = time.strftime("%Y-%m-%d %H:%M:%S")
 
     # Plan A: ingest the UNION of all configured live universes ONCE. Each distinct CIK
@@ -553,9 +586,10 @@ def main(universe_ids=None, resume=False):
             price, ccy = None, None
         sub = bulk.submission_header(cik) if use_bulk else None
         sic = str(sub.get("sic") or "") if sub else ""
+        form = bulk.filer_form(facts_doc)                  # '10-K'/'20-F'; None on the API path
 
-        con.execute("INSERT OR REPLACE INTO companies VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    (ticker, name, cik, sector, price, ccy, shares_now, fin_ccy, now, sic))
+        con.execute("INSERT OR REPLACE INTO companies VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    (ticker, name, cik, sector, price, ccy, shares_now, fin_ccy, now, sic, form))
         rows = [(ticker, fy, c, float(v))
                 for c, s in fins.items() for fy, v in s.items() if v is not None]
         con.executemany("INSERT OR REPLACE INTO financials VALUES (?,?,?,?)", rows)
@@ -575,33 +609,17 @@ def main(universe_ids=None, resume=False):
               f"rev {rv:>8} cov {len(have):2}/{len(CONCEPTS)}{cflag}")
 
     # Plan A: rebuild the current-membership junction from what we ACTUALLY ingested
-    # (a name that failed EDGAR/price is not claimed as a live member).
-    # Phase 4: universes with a `mcap_floor` (nyse) admit only names whose ingested
-    # price×shares clears it. Sub-floor names keep their companies/financials rows
-    # (cheap, and floor changes are then config-only) but are NOT members — out of
-    # universe by definition, not an exclusion, so the Methodology exclusion list
-    # doesn't drown in hundreds of below-floor lines.
-    floors = {u: cfg.get("mcap_floor") for u, cfg in UNIVERSES.items() if cfg.get("mcap_floor")}
-    mcap = {}
-    if floors:
-        mcap = {t: (p or 0.0) * (s or 0.0) for t, p, s in
-                con.execute("SELECT ticker, price, shares_out FROM companies")}
-    floored = {}
-    rows_j = []
-    for t, us in ingested.items():
-        for u in us:
-            f = floors.get(u)
-            if f and mcap.get(t, 0.0) < f:
-                floored[u] = floored.get(u, 0) + 1
-                continue
-            rows_j.append((u, t))
-    con.execute("DELETE FROM universe_membership")
-    con.executemany("INSERT OR REPLACE INTO universe_membership VALUES (?,?)", rows_j)
-    con.commit()
+    # (a name that failed EDGAR/price is not claimed as a live member). The PRE-floor
+    # membership persists in universe_membership_raw so the floor can be RE-applied
+    # whenever share counts improve — sanity.py patches ADR share counts AFTER ingest
+    # (Phase 4.1), and the floor must see those verified denominators.
+    con.execute("CREATE TABLE IF NOT EXISTS universe_membership_raw("
+                "universe TEXT, ticker TEXT, PRIMARY KEY (universe, ticker))")
+    con.execute("DELETE FROM universe_membership_raw")
+    con.executemany("INSERT OR REPLACE INTO universe_membership_raw VALUES (?,?)",
+                    [(u, t) for t, us in ingested.items() for u in us])
+    rows_j = apply_floor(con)
     per_uni = {u: sum(1 for uu, _ in rows_j if uu == u) for u in universe_ids}
-    for u, k in sorted(floored.items()):
-        print(f"  {u}: {k} ingested names below the ${floors[u]/1e9:.1f}B membership floor "
-              f"(kept in companies, not members)")
 
     # Price backfill: Yahoo intermittently throttles a burst of names mid-run; a NULL
     # price must not evict an otherwise fully-covered name from every universe

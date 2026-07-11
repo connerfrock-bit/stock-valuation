@@ -112,11 +112,25 @@ mcap_floor = 1e9                # MEMBERSHIP filter: junction admits only names 
 # holds the facts; drop the pin once the successor's own filing history is usable.
 # (Ingest prints a "ZERO-FACTS names" tripwire when a new case of this appears.)
 XOM = "0000034088"
+# Bank OZK: the ticker map points at a securities-registration entity (CIK 1569650,
+# holds OZK + the OZKAP preferred, files NO XBRL — 404s on companyfacts); the 10-K
+# facts live on the pre-rename holding company. Same trap, subsidiary flavor.
+# (Preferred Bank PFBC is the unfixable sibling: a bank with no holdco that files
+# with the FDIC, not the SEC — no EDGAR facts exist; permanently excluded, honest.)
+OZK = "0001038205"
 
 [overrides.archetype]
 # CoStar: a data/software business GICS files under Real Estate — RIM-on-book
 # priced it like a REIT (its +46 quality jump in v2.3 exposed the misroute).
 CSGP = "standard"
+# Net-new NYSE misroutes, measured 2026-07-11 via the D&A/NI discriminator (property
+# REITs depreciate, lenders don't). No automatic rule shipped — measured, it caught
+# lease-accounting property REITs (VICI 0.002, SAFE 0.09 — P/FFO≈P/E is fair there)
+# and missed hybrid CRE lenders (ARI 0.19, LADR 0.32 hold some real estate) — so the
+# honest fix is these three pins, not a fitted threshold:
+ARI  = "financial"   # Apollo Commercial RE Finance — CRE mortgage lender; trades on book
+LADR = "financial"   # Ladder Capital — CRE lender (hybrid, some net-lease property)
+FOR  = "standard"    # Forestar — land developer (SIC 6552 → Real Estate is a mislabel)
 
 [overrides.subsector]
 # Warranted-anchor buckets splitting Information Technology (semis / software /

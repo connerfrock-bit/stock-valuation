@@ -97,9 +97,18 @@ def main():
             print(f"{t:6}{ours/1e9:>9.1f}B{emcap/1e9:>9.1f}B{diff*100:>7.1f}%  {action or status}")
         con.execute("INSERT OR REPLACE INTO data_quality VALUES (?,?,?,?)",
                     (t, "mcap_xcheck", status, f"{diff:+.3f}"))
-    con.commit(); con.close()
+    con.commit()
     print(f"\n{ok} ok (≤5%) · {drift} drift (5–15%) · {bad} patched (>15%) · "
           f"{derived} shares derived · {miss} no external quote")
+    # Re-apply the universe mcap floors with the PATCHED share counts: an ADR whose
+    # EDGAR count was missing/local-only had unknowable mcap at ingest time and was
+    # floored out of the junction — the floor must see the verified denominators.
+    try:
+        from ingest_v1 import apply_floor
+        apply_floor(con)
+    except Exception as e:
+        print(f"floor re-apply skipped ({e!r})")           # pre-Phase-4 DB (no raw table)
+    con.close()
 
 
 if __name__ == "__main__":

@@ -105,6 +105,25 @@ def submission_header(cik):
         return None
 
 
+def filer_form(facts_doc):
+    """Dominant annual form from a companyfacts doc: '10-K' (domestic) beats '20-F'/'40-F'
+       (foreign private issuer / ADR) when both appear; None when the doc carries neither.
+       Scans a handful of tags — form mix is a filer-level property, not per-fact."""
+    if not facts_doc:
+        return None
+    forms = set()
+    for ns in facts_doc.get("facts", {}).values():
+        for tag in list(ns.values())[:8]:
+            for arr in tag.get("units", {}).values():
+                forms.update(u.get("form", "") for u in arr[:25])
+        break                                             # first namespace (dei) suffices
+    if any(f.startswith("10-K") for f in forms):
+        return "10-K"
+    if any(f.startswith(("20-F", "40-F")) for f in forms):
+        return "20-F"
+    return None
+
+
 # ---------------- download ----------------
 def _download_one(path, url):
     """Conditional GET with atomic replace. A good local zip is never clobbered by a
