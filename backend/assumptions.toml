@@ -59,7 +59,7 @@ scenario_converge_yrs = 5       # horizon for the annualized (IRR-like) probabil
 risk_free_fallback   = 0.043
 
 # Live-screener universes (Plan A). Ingest builds the UNION of all of these once; each
-# is scored/published separately. Add NYSE later as one more [[universe]] block (Plan D).
+# is scored/published separately.
 [[universe]]
 id       = "ndx"
 name     = "Nasdaq-100"
@@ -83,6 +83,22 @@ min_mcap  = 0.3e9               # small-caps are legitimately ~$0.3-2B — below
 # statistical teeth. NO credible backtest here (delisted-price gap is worse for small
 # caps — see [[delisted-price-gap]]); the forward ledger is its evidence. Backtest stays
 # constituent-based on ndx/sp500 only.
+
+[[universe]]
+id       = "nyse"
+name     = "NYSE $1B+"
+source   = "nyse"               # universe.py: local SEC filers scan (no Wikipedia) —
+                                # NYSE-listed · domestic 10-K filers · funds/SPACs/trusts out ·
+                                # sector from [sector_by_sic] (GICS wins for S&P overlap names)
+min_mcap  = 0.3e9               # FLAG threshold (same semantics as sp1500)
+mcap_floor = 1e9                # MEMBERSHIP filter: junction admits only names with
+                                # price×shares ≥ this at ingest (scope decision 2026-07-10:
+                                # domestic ≥$1B now; ADRs deferred behind an ADR-ratio gate —
+                                # EDGAR reports LOCAL share counts vs Yahoo ADR prices, so
+                                # per-share values would be off 2-25× without ratio handling).
+# Phase 4 (NYSE): screening-only like sp1500 — no backtest by design. The ~200 net-new
+# names are what S&P criteria exclude: MLPs (EPD/ET/MPLX), loss-makers (SNOW),
+# majority-held (SCCO), recent re-domiciliations (FERG/AMRZ) and IPOs.
 
 # ---------------------------------------------------------------------------
 # L5/L6 manual-override table (BLUEPRINT L1c promised this; Phase 1.3 delivers).
@@ -208,3 +224,180 @@ ZBRA = "hardware"
 "3570" = "hardware"   # Computer & Office Equipment
 "3672" = "hardware"   # Printed Circuit Boards
 "3678" = "hardware"   # Electronic Connectors
+
+# ---------------------------------------------------------------------------
+# SIC prefix -> GICS sector (Phase 4: NYSE). Layered lookup, most-specific wins:
+# exact 4-digit > 3-digit > 2-digit prefix. DERIVED from the S&P union ground
+# truth (1,513 names holding both Wikipedia GICS and EDGAR SIC): majority sector
+# per prefix, finer entries kept only where they disagree with the parent.
+# Measured on that ground truth: 88% exact sector, 97.2% ARCHETYPE (the number
+# that gates engine routing). Applies ONLY to names with no GICS source (net-new
+# NYSE); build_union lets GICS win for every S&P overlap name. Known soft spots:
+# mortgage REITs (SIC 6798, GICS 2023 moved them to Financials) route to reit;
+# hotel REITs share 7011 with hotel operators. 7389 services-NEC is hand-set to
+# Industrials (V/MA drag the majority vote to Financials; a net-new 7389 name is
+# far likelier a generic services co, and standard engines beat bank-RIM anyway).
+[sector_by_sic]
+"01" = "Materials"
+"02" = "Consumer Staples"
+"10" = "Materials"
+"12" = "Materials"
+"1220" = "Energy"
+"13" = "Energy"
+"14" = "Materials"
+"15" = "Consumer Discretionary"
+"16" = "Industrials"
+"17" = "Industrials"
+"170" = "Consumer Discretionary"
+"20" = "Consumer Staples"
+"21" = "Consumer Staples"
+"22" = "Industrials"
+"227" = "Consumer Discretionary"
+"23" = "Consumer Discretionary"
+"24" = "Industrials"
+"245" = "Consumer Discretionary"
+"25" = "Consumer Discretionary"
+"2511" = "Industrials"
+"252" = "Industrials"
+"26" = "Materials"
+"267" = "Consumer Staples"
+"2670" = "Materials"
+"27" = "Communication Services"
+"273" = "Consumer Discretionary"
+"274" = "Information Technology"
+"278" = "Industrials"
+"28" = "Health Care"
+"280" = "Materials"
+"281" = "Materials"
+"282" = "Materials"
+"284" = "Consumer Staples"
+"285" = "Materials"
+"286" = "Materials"
+"287" = "Materials"
+"289" = "Materials"
+"2891" = "Industrials"
+"29" = "Energy"
+"299" = "Consumer Discretionary"
+"30" = "Consumer Discretionary"
+"305" = "Industrials"
+"306" = "Industrials"
+"308" = "Industrials"
+"3089" = "Materials"
+"31" = "Consumer Discretionary"
+"32" = "Materials"
+"323" = "Industrials"
+"329" = "Industrials"
+"33" = "Materials"
+"3310" = "Industrials"
+"3317" = "Industrials"
+"335" = "Industrials"
+"3357" = "Information Technology"
+"336" = "Consumer Discretionary"
+"34" = "Industrials"
+"341" = "Materials"
+"346" = "Materials"
+"35" = "Industrials"
+"353" = "Energy"
+"3530" = "Industrials"
+"3531" = "Industrials"
+"3537" = "Industrials"
+"355" = "Information Technology"
+"3550" = "Industrials"
+"357" = "Information Technology"
+"3579" = "Industrials"
+"36" = "Information Technology"
+"360" = "Industrials"
+"362" = "Industrials"
+"363" = "Consumer Discretionary"
+"364" = "Industrials"
+"3670" = "Industrials"
+"3679" = "Industrials"
+"369" = "Industrials"
+"37" = "Consumer Discretionary"
+"3711" = "Industrials"
+"372" = "Industrials"
+"373" = "Industrials"
+"374" = "Industrials"
+"376" = "Industrials"
+"38" = "Health Care"
+"381" = "Industrials"
+"382" = "Information Technology"
+"3822" = "Industrials"
+"3826" = "Health Care"
+"39" = "Consumer Discretionary"
+"399" = "Materials"
+"40" = "Industrials"
+"42" = "Industrials"
+"44" = "Consumer Discretionary"
+"441" = "Energy"
+"45" = "Industrials"
+"452" = "Energy"
+"46" = "Energy"
+"47" = "Industrials"
+"48" = "Communication Services"
+"49" = "Utilities"
+"492" = "Energy"
+"4923" = "Utilities"
+"4924" = "Utilities"
+"495" = "Industrials"
+"50" = "Industrials"
+"501" = "Consumer Discretionary"
+"504" = "Information Technology"
+"5047" = "Health Care"
+"505" = "Materials"
+"506" = "Information Technology"
+"5063" = "Industrials"
+"5090" = "Consumer Discretionary"
+"51" = "Consumer Staples"
+"512" = "Health Care"
+"516" = "Materials"
+"517" = "Energy"
+"52" = "Consumer Discretionary"
+"520" = "Industrials"
+"53" = "Consumer Staples"
+"531" = "Consumer Discretionary"
+"54" = "Consumer Staples"
+"55" = "Consumer Discretionary"
+"56" = "Consumer Discretionary"
+"57" = "Consumer Discretionary"
+"58" = "Consumer Discretionary"
+"59" = "Consumer Discretionary"
+"590" = "Financials"
+"591" = "Health Care"
+"60" = "Financials"
+"61" = "Financials"
+"62" = "Financials"
+"63" = "Financials"
+"632" = "Health Care"
+"6321" = "Financials"
+"64" = "Financials"
+"65" = "Real Estate"
+"67" = "Real Estate"
+"6792" = "Energy"
+"6794" = "Information Technology"
+"6795" = "Materials"
+"6799" = "Financials"
+"70" = "Consumer Discretionary"
+"72" = "Consumer Discretionary"
+"73" = "Information Technology"
+"731" = "Communication Services"
+"732" = "Industrials"
+"734" = "Industrials"
+"735" = "Industrials"
+"736" = "Industrials"
+"7370" = "Communication Services"
+"738" = "Financials"
+"7381" = "Industrials"
+"7389" = "Industrials"
+"75" = "Industrials"
+"78" = "Communication Services"
+"79" = "Consumer Discretionary"
+"790" = "Communication Services"
+"80" = "Health Care"
+"8050" = "Industrials"
+"82" = "Consumer Discretionary"
+"83" = "Consumer Discretionary"
+"87" = "Industrials"
+"873" = "Health Care"
+"8734" = "Industrials"
+"8741" = "Information Technology"

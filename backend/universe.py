@@ -204,12 +204,91 @@ def sp1500_constituents():
     return out, f"Wikipedia ({' + '.join(srcs)})"
 
 
+# ---- NYSE source (Phase 4): local SEC data end-to-end — no Wikipedia dependency ----
+# The filers scan (submissions.zip headers) supplies listing + SIC; companyfacts
+# supplies the domestic/foreign form check. Sector = [sector_by_sic] layered lookup.
+
+# Out-of-scope listing classes, filtered at the SOURCE (not data problems — different
+# products): closed-end funds/ETF trusts (6726), commodity trusts like GLD/SLV (6221),
+# SPACs/blank checks (6770), royalty trusts (6792). REITs (6798) survive on purpose.
+NONCOMPANY_SICS = {"6726", "6221", "6770", "6792"}
+_FUND_NAME = re.compile(r"\b(ETF|EXCHANGE.TRADED|INDEX FUND|GOLD TRUST|SILVER TRUST|"
+                        r"ISHARES|SPDR|CLOSED.END|INCOME FUND|BOND FUND|MUNICIPAL)\b", re.I)
+
+
+def sector_by_sic(sic, table):
+    """Layered prefix lookup: exact 4-digit > 3 > 2. None when unmapped (caller decides)."""
+    for L in (4, 3, 2):
+        s = table.get((sic or "")[:L])
+        if s:
+            return s
+    return None
+
+
+def _is_domestic(cik, bulk_mod):
+    """10-K/10-Q filer (domestic) vs 20-F/40-F (foreign private issuer — ADRs are
+       DEFERRED: EDGAR carries local share counts while Yahoo quotes ADR prices, so
+       per-share values would be off by the ADR ratio). Reads a few facts' form
+       fields from the local zip — no network."""
+    doc = bulk_mod.facts_json(cik)
+    if not doc:
+        return False                                       # no facts at all — nothing to value
+    forms = set()
+    for ns in doc.get("facts", {}).values():
+        for tag in list(ns.values())[:8]:
+            for arr in tag.get("units", {}).values():
+                forms.update(u.get("form", "") for u in arr[:25])
+        break                                              # first namespace (dei) is enough
+    if any(f.startswith(("10-K", "10-Q")) for f in forms):
+        return True
+    return False
+
+
+def nyse_constituents():
+    """NYSE-listed · domestic 10-K filers · funds/SPACs/trusts out. Built entirely from
+       the local bulk-EDGAR data (filers scan + companyfacts) — no Wikipedia, no network.
+       Sector from [sector_by_sic]; S&P overlap names get GICS anyway (build_union).
+       The $1B membership floor is NOT applied here (needs price) — ingest applies it
+       when it builds the universe junction."""
+    import sqlite3
+    import bulk
+    from common import DB_PATH, _TOML
+    sic_map = _TOML.get("sector_by_sic", {})
+    con = sqlite3.connect(DB_PATH)
+    try:
+        rows = con.execute("SELECT cik, name, sic, tickers FROM filers "
+                           "WHERE exchanges LIKE '%NYSE%' AND tickers <> ''").fetchall()
+    except sqlite3.OperationalError:
+        raise SystemExit("nyse universe needs the filers scan — run `python bulk.py scan`")
+    finally:
+        con.close()
+    out, skipped_class, skipped_foreign, unmapped = [], 0, 0, 0
+    for cik, name, sic, tickers in rows:
+        if sic in NONCOMPANY_SICS or _FUND_NAME.search(name or ""):
+            skipped_class += 1
+            continue
+        if not _is_domestic(cik, bulk):
+            skipped_foreign += 1
+            continue
+        sector = sector_by_sic(sic, sic_map)
+        if sector is None:
+            unmapped += 1                                  # no honest sector → no bucket/router;
+            continue                                       # skip rather than guess (rare SICs)
+        ticker = tickers.split(",")[0].strip().upper()
+        out.append((ticker, name.title(), sector))
+    print(f"  nyse source: {len(out)} domestic operating cos "
+          f"(class-filtered {skipped_class} · foreign {skipped_foreign} · unmapped-SIC {unmapped})")
+    return out, "SEC filers scan (local)"
+
+
 def load_constituents(uid):
     """Dispatch by universe id -> ([(ticker, name, sector)], source)."""
     if uid == "ndx":
         return get_universe()
     if uid == "sp1500":
         return sp1500_constituents()
+    if uid == "nyse":
+        return nyse_constituents()
     if uid in SP_INDEXES:
         return _sp_constituents(uid)
     raise SystemExit(f"unknown universe id {uid!r}")

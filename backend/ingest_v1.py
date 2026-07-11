@@ -576,11 +576,32 @@ def main(universe_ids=None, resume=False):
 
     # Plan A: rebuild the current-membership junction from what we ACTUALLY ingested
     # (a name that failed EDGAR/price is not claimed as a live member).
+    # Phase 4: universes with a `mcap_floor` (nyse) admit only names whose ingested
+    # price×shares clears it. Sub-floor names keep their companies/financials rows
+    # (cheap, and floor changes are then config-only) but are NOT members — out of
+    # universe by definition, not an exclusion, so the Methodology exclusion list
+    # doesn't drown in hundreds of below-floor lines.
+    floors = {u: cfg.get("mcap_floor") for u, cfg in UNIVERSES.items() if cfg.get("mcap_floor")}
+    mcap = {}
+    if floors:
+        mcap = {t: (p or 0.0) * (s or 0.0) for t, p, s in
+                con.execute("SELECT ticker, price, shares_out FROM companies")}
+    floored = {}
+    rows_j = []
+    for t, us in ingested.items():
+        for u in us:
+            f = floors.get(u)
+            if f and mcap.get(t, 0.0) < f:
+                floored[u] = floored.get(u, 0) + 1
+                continue
+            rows_j.append((u, t))
     con.execute("DELETE FROM universe_membership")
-    con.executemany("INSERT OR REPLACE INTO universe_membership VALUES (?,?)",
-                    [(u, t) for t, us in ingested.items() for u in us])
+    con.executemany("INSERT OR REPLACE INTO universe_membership VALUES (?,?)", rows_j)
     con.commit()
-    per_uni = {u: sum(1 for us in ingested.values() if u in us) for u in universe_ids}
+    per_uni = {u: sum(1 for uu, _ in rows_j if uu == u) for u in universe_ids}
+    for u, k in sorted(floored.items()):
+        print(f"  {u}: {k} ingested names below the ${floors[u]/1e9:.1f}B membership floor "
+              f"(kept in companies, not members)")
 
     # Price backfill: Yahoo intermittently throttles a burst of names mid-run; a NULL
     # price must not evict an otherwise fully-covered name from every universe

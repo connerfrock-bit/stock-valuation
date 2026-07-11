@@ -1196,3 +1196,52 @@ Scenario/capital invariants re-verified green at the new counts; XOM deep-dive r
 both Tier-3 panels (ROIC 7.0% ≈ WACC — the supermajor reads right). OZK/PFBC (2 small
 banks missing from the zip) hit EDGAR API throttles twice — they'll heal on a future
 resume pass. Tests 144/144. Share rebuilt.
+
+---
+
+# Phase 4 — NYSE universe (2026-07-10, evening)
+
+## Scoping census → scope decision (user): domestic ≥$1B, ADRs deferred
+
+**Census (all local + one Yahoo pass):** 2,630 NYSE-listed filers → 947 already in the
+S&P union → 1,347 net-new after class filters, measured for mcap (Yahoo price × dei
+shares) and 10-K/20-F form: **≥$2B: 360 net-new, of which 242 (67%) are 20-F ADRs** —
+the S&P already owns the domestic large/mid space; what's left above $2B is
+predominantly foreign issuers plus the S&P-criteria exclusions (MLPs EPD/ET/MPLX,
+loss-maker SNOW, majority-held SCCO, re-domiciliations FERG/AMRZ, insurer MKL).
+**The census's own arithmetic exposed the ADR trap live**: LATAM computed at "$32T"
+and TSMC "$11T" because EDGAR carries LOCAL share counts while Yahoo quotes ADR
+prices — per-share values would be off 2–25× without ADR-ratio handling. **User
+decisions: floor $1B (domestic 10-K filers, ~203 net-new) · ADRs deferred** behind a
+future correctness gate (ratio source + per-share sanity harness).
+
+## Build (all local SEC data — no Wikipedia dependency)
+
+- **`[sector_by_sic]`** (assumptions.toml): 163 layered prefix entries (exact-4 > 3 > 2),
+  DERIVED from the 1,513-name S&P ground truth (majority sector per prefix, finer entries
+  only where they disagree with the parent), measured **88.1% exact-sector / 97.2%
+  ARCHETYPE** — the number that gates engine routing. Hand rule: 7389 services-NEC →
+  Industrials (V/MA drag the vote to Financials; a net-new 7389 name is a generic
+  services co, and standard engines beat bank-RIM even for a payments name). Soft spots
+  documented: mortgage REITs (GICS-2023 → Financials, SIC routes reit), hotel REITs
+  share 7011 with operators. GICS still wins for every S&P overlap name (build_union).
+- **`nyse` source** (universe.py): filers scan → NYSE-listed → class filter (funds 6726,
+  commodity trusts 6221 — the census caught GLD/SLV slipping SIC-only filters, so a
+  fund-name regex backstops it — SPACs 6770, royalty trusts 6792; REITs survive) →
+  domestic check (10-K/10-Q forms in the local zip; 668 foreign filtered) → SIC sector
+  (25 unmapped-SIC skipped, never guessed) = **1,658 domestic operating cos** incl. the
+  ~900 S&P-overlap NYSE names (the board shows the full NYSE ≥$1B cross-section, and
+  the warranted buckets stay statistically thick).
+- **Junction mcap floor** (ingest_v1): universes with `mcap_floor` (nyse: $1B) admit
+  only names whose ingested price×shares clears it. Sub-floor names keep their data
+  rows (floor changes are config-only) but are NOT members — out of universe by
+  definition, not an exclusion, so the Methodology exclusion list doesn't drown.
+- Frontend: one list entry (Methodology UNIVERSES — screening-only like sp1500).
+  Tests 144 → **154** (SIC lookup layering, class filter, junction-floor semantics).
+
+## Gate (Phase-2 pattern) — PASS
+
+`dataquality.py nyse`: **98.0% coverage** (1,625/1,658 ≥15/25 core concepts), 0 no-CIK,
+0 no-facts, 56s from the local zips. Tag-fallback profile matches sp1500's known shape
+(interest_exp/short_debt lean on non-primary tags). Screening-only universe by design —
+no backtest (delisted-price gap), the forward ledger is its evidence from inception.

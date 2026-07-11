@@ -4,7 +4,7 @@ rem /auto = headless (scheduled task): skip the pauses so the run can end itself
 if /I "%~1"=="/auto" set FV_AUTO=1
 cd /d "C:\Users\conne\Desktop\stock valuation project\backend"
 echo ============================================================
-echo  Fair Value - full data refresh (union of Nasdaq-100 + S&P 500)
+echo  Fair Value - full data refresh (union of all configured universes)
 echo  0) bulk EDGAR download + filers scan   1) financials + prices
 echo  2) share cross-check   3) betas   4) engines   5) ledgers
 echo  6) momentum   7) S&P 1500 data-quality gate

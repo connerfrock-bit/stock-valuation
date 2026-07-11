@@ -134,6 +134,7 @@ const UNIVERSES: [string, string, string][] = [
   ['ndx', 'backtest.json', 'NASDAQ-100'],
   ['sp500', 'backtest_sp500.json', 'S&P 500'],
   ['sp1500', '', 'S&P 1500'],
+  ['nyse', '', 'NYSE $1B+'],
 ];
 
 export function Methodology({ meta }: { meta: Meta }) {
