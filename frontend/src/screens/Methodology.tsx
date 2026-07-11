@@ -291,7 +291,8 @@ export function Methodology({ meta }: { meta: Meta }) {
                 Screening universe — no backtest by design
               </div>
               <span style={{ color: C.dim3 }}>
-                The S&amp;P 1500 is a broad SCREENING universe. We deliberately publish no
+                The {UNIVERSES.find(([k]) => k === uni)?.[2] ?? 'selected universe'} is a broad
+                SCREENING universe. We deliberately publish no
                 equity curve for it: a credible, survivorship-free backtest needs delisted-member
                 PRICE history, and that gap is worst exactly here — small-caps delist most and no
                 free source serves their prices (needs CRSP). Claiming a backtest we can't stand

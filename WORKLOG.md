@@ -1245,3 +1245,21 @@ future correctness gate (ratio source + per-share sanity harness).
 0 no-facts, 56s from the local zips. Tag-fallback profile matches sp1500's known shape
 (interest_exp/short_debt lean on non-primary tags). Screening-only universe by design —
 no backtest (delisted-price gap), the forward ledger is its evidence from inception.
+
+## LIVE (same evening) — NYSE $1B+ on the board
+
+Full refresh at 4-universe scale: union **2,227/2,237 ingested, 594k datapoints**;
+junction floor did its job live (**488 sub-$1B NYSE names kept as data, not members**;
+4 price-fails stay non-members: CUK/ONTF/PKST/SEMR). **output_nyse.json: 1,071 covered /
+96 excluded-with-reason** (55 GAAP loss-makers incl. SNOW, 26 missing-core — the known
+utility/energy tail — 15 financial/REIT gate exclusions), archetypes 794 standard ·
+172 financial · 105 reit, rf LIVE 4.54%. The other three universes reproduced their
+exact counts (94/486/1,424) — clean regression. Tier-3 invariants green on the new
+universe (0 inverted cones, 0 archetype leaks; 600 scenarios / 692 capital panels).
+Spot-checks read right: EPD +60% conf2 (midstream FCF yield vs DCF — the MLP class
+S&P excludes, now visible), ET +86%, SCCO −19%, MKL financial-routed, SNOW honestly
+excluded. Browser-verified: 4-entry universe menu (NYSE $1B+ · 1071), EPD deep-dive
+renders cone + capital panel, Methodology screening panel now names the ACTIVE universe
+(was hardcoded "S&P 1500"), ledger_nyse at inception. Tests 154 green · share rebuilt.
+**Deferred, explicitly:** ADRs (ratio gate), OZK/PFBC zip-absent stragglers, mortgage-
+REIT routing nuance (SIC 6798 → reit vs GICS-2023 Financials) — all logged above.
