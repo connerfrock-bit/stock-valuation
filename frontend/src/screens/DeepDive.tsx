@@ -172,6 +172,7 @@ export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: 
   // carries the up/down signal. Shares outstanding is the dilution watch
   // (UI_SPEC §C) — falling share count is the good direction.
   const trendDefs: { label: string; series: (number | null)[]; goodWhenDown?: boolean }[] = [
+    { label: 'Stock price ($)', series: t.priceEOY ?? [] },
     { label: 'Revenue ($B)', series: t.revenueB },
     { label: 'Operating margin', series: t.opMargin },
     { label: 'Free cash flow ($B)', series: t.fcfB },

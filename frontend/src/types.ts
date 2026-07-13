@@ -34,6 +34,7 @@ export interface Trends {
   fcfB: (number | null)[];
   equityB: (number | null)[];
   sharesM?: (number | null)[]; // absent in pre-2026-07-07 payloads
+  priceEOY?: (number | null)[]; // year-end adj close; absent in pre-2026-07-13 payloads
 }
 
 export interface Company {

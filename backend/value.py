@@ -41,6 +41,24 @@ def load_live_momentum(tickers):
             out[t] = v
     return out
 
+
+def load_yearend_prices(tickers):
+    """{ticker: {year: adjclose}} — the last observed monthly ADJUSTED close of each
+       calendar year, for the DeepDive price-trend sparkline. Split/dividend-adjusted so
+       the multi-year line is continuous (a raw close would crater at NVDA's 2024 10:1
+       split even though holders lost nothing). The current, incomplete year yields its
+       latest available month, i.e. ~spot — so the final point tracks today's price."""
+    tset = set(tickers)
+    by_year = {}
+    con = sqlite3.connect(DB_PATH)
+    # ORDER BY month ascending => the last write for a given (ticker, year) is that
+    # year's latest month (December for past years, the current month for this year).
+    for t, m, a in con.execute("SELECT ticker, month, adjclose FROM price_monthly ORDER BY month"):
+        if t in tset and a:
+            by_year.setdefault(t, {})[int(m[:4])] = a
+    con.close()
+    return by_year
+
 try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
@@ -527,8 +545,13 @@ REIT_RIM_FLAG = "REIT: RIM on book, not FFO/NAV"
 INFO_FLAGS = {"Cyclical revenue", REIT_RIM_FLAG}
 
 
-def trend_series(f):
-    """Real 8-yr trend series for the dashboard sparklines (None where unavailable)."""
+def trend_series(f, px_year=None, spot=None):
+    """Real 8-yr trend series for the dashboard sparklines (None where unavailable).
+       px_year: optional {year: adjclose} for this ticker (see load_yearend_prices).
+       spot:    current price; pins the final price point so the sparkline's endpoint
+                ties to the headline Price (the latest adjclose is on the same
+                split-adjusted scale as spot, so the series stays continuous)."""
+    px_year = px_year or {}
     yrs = sorted(f.get("revenue", {}))[-8:]
     rev, ebit = f.get("revenue", {}), f.get("ebit", {})
     cfo, cap, sbc = f.get("cfo", {}), f.get("capex", {}), f.get("sbc", {})
@@ -547,7 +570,19 @@ def trend_series(f):
                     if (y in cfo and y in cap) else None),
         "equityB": ser(lambda y: eq[y] / 1e9 if y in eq else None),
         "sharesM": ser(lambda y: sh[y] / 1e6 if y in sh else None),
+        # aligned on the integer fiscal year; fiscal-vs-calendar offset (e.g. NVDA's
+        # Jan year-end) is immaterial at sparkline resolution. The final point is
+        # overwritten with the live spot below so the endpoint == the headline Price
+        # (names whose latest filed year is stale would otherwise end ~a year back).
+        "priceEOY": _price_series(yrs, px_year, spot),
     }
+
+
+def _price_series(yrs, px_year, spot):
+    s = [round(px_year[y], 2) if y in px_year else None for y in yrs]
+    if s and spot is not None:
+        s[-1] = round(spot, 2)
+    return s
 
 
 # ---------------- quality (cross-sectional percentiles) ----------------
@@ -779,10 +814,24 @@ def run_changes(out, universe, run_id):
     return ch
 
 
+def _iso_week(date_str):
+    """('YYYY-MM-DD…') -> (iso_year, iso_week) for the weekly-snapshot gate."""
+    y, m, d = int(date_str[0:4]), int(date_str[5:7]), int(date_str[8:10])
+    iso = datetime.date(y, m, d).isocalendar()
+    return (iso[0], iso[1])
+
+
 def append_snapshot(out, universe, run_id):
     """Append this run's full ranked output to `snapshots` — never overwritten.
        This is the before/after diff surface for every future model change, and the
-       raw material for the forward paper-trading ledger (Plan 4)."""
+       raw material for the forward paper-trading ledger (Plan 4).
+
+       WEEKLY GATE: the ledger rebalances once per snapshot day, so it stays a weekly
+       paper-trading ledger even though the refresh now runs DAILY (for fresh prices).
+       We append at most one snapshot per ISO week — the first run of each week wins;
+       later daily runs that same week skip the append (prices in output.json still
+       refresh). A same-day re-run REPLACES today's snapshot so its numbers stay current.
+       Returns (n_runs, appended)."""
     con = sqlite3.connect(DB_PATH)
     con.execute("""CREATE TABLE IF NOT EXISTS snapshots(
         run_date TEXT, model TEXT, universe TEXT, ticker TEXT,
@@ -790,16 +839,30 @@ def append_snapshot(out, universe, run_id):
         conf INTEGER, quality INTEGER, score REAL, flags TEXT,
         PRIMARY KEY (run_date, universe, ticker))""")
     _migrate_snapshots(con)
+    n_runs = lambda: con.execute(
+        "SELECT COUNT(DISTINCT run_date) FROM snapshots WHERE universe=?",
+        (universe,)).fetchone()[0]
+    latest = con.execute("SELECT MAX(run_date) FROM snapshots WHERE universe=? AND model=?",
+                         (universe, MODEL_VERSION)).fetchone()[0]
+    if latest and latest[:10] != run_id[:10] and _iso_week(latest) == _iso_week(run_id):
+        n = n_runs()                                  # this ISO week already has a basket
+        con.close()
+        return n, False
+    # Same-day re-run: run_date carries the wall-clock time, so a second run would add a
+    # distinct run_date rather than replace. Clear today's rows first so each calendar day
+    # holds exactly one snapshot (the ledger already dedupes baskets by day; this keeps the
+    # table and the DISTINCT-run_date count honest too).
+    con.execute("DELETE FROM snapshots WHERE universe=? AND model=? AND substr(run_date,1,10)=?",
+                (universe, MODEL_VERSION, run_id[:10]))
     con.executemany(
         "INSERT OR REPLACE INTO snapshots VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
         [(run_id, MODEL_VERSION, universe, x["ticker"], x["price"], x["low"], x["mid"],
           x["high"], x["upside"], x["conf"], x["quality"], x["score"], "|".join(x["flags"]))
          for x in out])
     con.commit()
-    n_runs = con.execute("SELECT COUNT(DISTINCT run_date) FROM snapshots WHERE universe=?",
-                         (universe,)).fetchone()[0]
+    n = n_runs()
     con.close()
-    return n_runs
+    return n, True
 
 
 # ---------------- pass 2: engines + synthesis ----------------
@@ -827,6 +890,7 @@ def main(universe_id=ACTIVE):
     # into the fair-value composite; see momentum.py / Methodology).
     mom = load_live_momentum([r["t"] for r in rows])
     mom_sorted = sorted(v for v in mom.values() if v is not None)
+    yearend_px = load_yearend_prices([r["t"] for r in rows])   # DeepDive price-trend sparkline
 
     # L5 routing decided ONCE, before scoring: quality groups by eff_arch and the
     # engine loop consumes the same stashed decision (one seam, no drift).
@@ -1033,7 +1097,7 @@ def main(universe_id=ACTIVE):
             "nde": round((r["debt_risk"] - r["cash"]) / ebitda, 2)
                    if (eff_arch == "standard" and ebitda > 0) else None,
             "flags": flags, "score": round(score, 4),
-            "cik": r["cik"], "trends": trend_series(r["f"]),
+            "cik": r["cik"], "trends": trend_series(r["f"], yearend_px.get(r["t"], {}), r["price"]),
             "methods": [
                 {"key": "dcf", "name": "DCF", "value": _r2(dcf_ps),
                  "applicable": dcf_ps is not None,
@@ -1119,9 +1183,13 @@ def main(universe_id=ACTIVE):
     print(f"\nExcluded ({len(excluded)}): " + ", ".join(t for t, _ in excluded))
     print(f"Wrote {len(out)} Company records → {', '.join(fnames)}")
 
-    n_runs = append_snapshot(out, uname, run_id)
-    print(f"Snapshot {run_id} [{MODEL_VERSION}] appended ({len(out)} {uname} names) · "
-          f"{n_runs} {uname} runs in history")
+    n_runs, appended = append_snapshot(out, uname, run_id)
+    if appended:
+        print(f"Snapshot {run_id} [{MODEL_VERSION}] appended ({len(out)} {uname} names) · "
+              f"{n_runs} {uname} runs in history")
+    else:
+        print(f"Snapshot skipped — this ISO week already has a {uname} basket "
+              f"(weekly ledger cadence; prices still refreshed) · {n_runs} runs in history")
 
 
 def _write_manifest(d):

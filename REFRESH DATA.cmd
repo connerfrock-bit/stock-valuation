@@ -70,7 +70,7 @@ if not errorlevel 1 (
   echo   No data changes since last publish - nothing to push.
   goto :done
 )
-git commit -m "Weekly data refresh %DATE% %TIME%"
+git commit -m "Daily data refresh %DATE% %TIME%"
 if errorlevel 1 goto :pushfail
 git push origin main
 if errorlevel 1 goto :pushfail
@@ -79,8 +79,8 @@ goto :done
 
 :pushfail
 echo   WARNING: data refreshed and committed locally, but the push failed
-echo   (usually a transient network/auth blip). The commit is safe; next
-echo   week's run will push it along with the new data. No data is lost.
+echo   (usually a transient network/auth blip). The commit is safe; the next
+echo   day's run will push it along with the new data. No data is lost.
 
 :done
 echo.
