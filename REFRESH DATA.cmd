@@ -8,6 +8,7 @@ echo  Fair Value - full data refresh (union of all configured universes)
 echo  0) bulk EDGAR download + filers scan   1) financials + prices
 echo  2) share cross-check   3) betas   4) engines   5) ledgers
 echo  6) momentum   7) S&P 1500 data-quality gate
+echo  8) publish refreshed data to GitHub (auto runs only)
 echo ============================================================
 echo.
 
@@ -56,6 +57,32 @@ echo.
 echo [7/7] Data-quality dry run (S&P 1500 coverage gate for universe expansion)...
 python dataquality.py sp1500
 
+echo.
+echo [8/8] Publishing refreshed data to GitHub (auto runs only)...
+if not defined FV_AUTO (
+  echo   Manual run - skipping publish. Commit ^& push yourself when ready.
+  goto :done
+)
+cd /d "C:\Users\conne\Desktop\stock valuation project"
+git add frontend/public
+git diff --cached --quiet
+if not errorlevel 1 (
+  echo   No data changes since last publish - nothing to push.
+  goto :done
+)
+git commit -m "Weekly data refresh %DATE% %TIME%"
+if errorlevel 1 goto :pushfail
+git push origin main
+if errorlevel 1 goto :pushfail
+echo   Published - the live dashboard updates in about a minute.
+goto :done
+
+:pushfail
+echo   WARNING: data refreshed and committed locally, but the push failed
+echo   (usually a transient network/auth blip). The commit is safe; next
+echo   week's run will push it along with the new data. No data is lost.
+
+:done
 echo.
 echo ============================================================
 echo  DONE - dashboard data refreshed.
