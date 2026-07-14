@@ -41,24 +41,6 @@ def load_live_momentum(tickers):
             out[t] = v
     return out
 
-
-def load_yearend_prices(tickers):
-    """{ticker: {year: adjclose}} — the last observed monthly ADJUSTED close of each
-       calendar year, for the DeepDive price-trend sparkline. Split/dividend-adjusted so
-       the multi-year line is continuous (a raw close would crater at NVDA's 2024 10:1
-       split even though holders lost nothing). The current, incomplete year yields its
-       latest available month, i.e. ~spot — so the final point tracks today's price."""
-    tset = set(tickers)
-    by_year = {}
-    con = sqlite3.connect(DB_PATH)
-    # ORDER BY month ascending => the last write for a given (ticker, year) is that
-    # year's latest month (December for past years, the current month for this year).
-    for t, m, a in con.execute("SELECT ticker, month, adjclose FROM price_monthly ORDER BY month"):
-        if t in tset and a:
-            by_year.setdefault(t, {})[int(m[:4])] = a
-    con.close()
-    return by_year
-
 try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
@@ -545,13 +527,8 @@ REIT_RIM_FLAG = "REIT: RIM on book, not FFO/NAV"
 INFO_FLAGS = {"Cyclical revenue", REIT_RIM_FLAG}
 
 
-def trend_series(f, px_year=None, spot=None):
-    """Real 8-yr trend series for the dashboard sparklines (None where unavailable).
-       px_year: optional {year: adjclose} for this ticker (see load_yearend_prices).
-       spot:    current price; pins the final price point so the sparkline's endpoint
-                ties to the headline Price (the latest adjclose is on the same
-                split-adjusted scale as spot, so the series stays continuous)."""
-    px_year = px_year or {}
+def trend_series(f):
+    """Real 8-yr trend series for the dashboard sparklines (None where unavailable)."""
     yrs = sorted(f.get("revenue", {}))[-8:]
     rev, ebit = f.get("revenue", {}), f.get("ebit", {})
     cfo, cap, sbc = f.get("cfo", {}), f.get("capex", {}), f.get("sbc", {})
@@ -570,19 +547,7 @@ def trend_series(f, px_year=None, spot=None):
                     if (y in cfo and y in cap) else None),
         "equityB": ser(lambda y: eq[y] / 1e9 if y in eq else None),
         "sharesM": ser(lambda y: sh[y] / 1e6 if y in sh else None),
-        # aligned on the integer fiscal year; fiscal-vs-calendar offset (e.g. NVDA's
-        # Jan year-end) is immaterial at sparkline resolution. The final point is
-        # overwritten with the live spot below so the endpoint == the headline Price
-        # (names whose latest filed year is stale would otherwise end ~a year back).
-        "priceEOY": _price_series(yrs, px_year, spot),
     }
-
-
-def _price_series(yrs, px_year, spot):
-    s = [round(px_year[y], 2) if y in px_year else None for y in yrs]
-    if s and spot is not None:
-        s[-1] = round(spot, 2)
-    return s
 
 
 # ---------------- quality (cross-sectional percentiles) ----------------
@@ -890,7 +855,6 @@ def main(universe_id=ACTIVE):
     # into the fair-value composite; see momentum.py / Methodology).
     mom = load_live_momentum([r["t"] for r in rows])
     mom_sorted = sorted(v for v in mom.values() if v is not None)
-    yearend_px = load_yearend_prices([r["t"] for r in rows])   # DeepDive price-trend sparkline
 
     # L5 routing decided ONCE, before scoring: quality groups by eff_arch and the
     # engine loop consumes the same stashed decision (one seam, no drift).
@@ -1097,7 +1061,7 @@ def main(universe_id=ACTIVE):
             "nde": round((r["debt_risk"] - r["cash"]) / ebitda, 2)
                    if (eff_arch == "standard" and ebitda > 0) else None,
             "flags": flags, "score": round(score, 4),
-            "cik": r["cik"], "trends": trend_series(r["f"], yearend_px.get(r["t"], {}), r["price"]),
+            "cik": r["cik"], "trends": trend_series(r["f"]),
             "methods": [
                 {"key": "dcf", "name": "DCF", "value": _r2(dcf_ps),
                  "applicable": dcf_ps is not None,

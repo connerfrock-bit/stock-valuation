@@ -34,7 +34,6 @@ export interface Trends {
   fcfB: (number | null)[];
   equityB: (number | null)[];
   sharesM?: (number | null)[]; // absent in pre-2026-07-07 payloads
-  priceEOY?: (number | null)[]; // year-end adj close; absent in pre-2026-07-13 payloads
 }
 
 export interface Company {
@@ -98,6 +97,19 @@ export interface Changes {
   bigMoves: BigMove[];
   newNames: string[];
   dropped: string[];
+}
+
+export interface PriceAxis {
+  // one of dates/months is present depending on the block
+  dates?: string[];   // daily: 'YYYY-MM-DD'
+  months?: string[];  // monthly: 'YYYY-MM'
+  series: Record<string, (number | null)[]>;  // ticker -> adjclose aligned to the axis
+}
+
+export interface PriceFile {
+  generated: string;
+  daily: PriceAxis;
+  monthly: PriceAxis;
 }
 
 export interface Meta {

@@ -6,6 +6,7 @@ import { CapitalPanel } from '../components/CapitalPanel';
 import { BigGauge, RatioBar } from '../components/Meters';
 import { SectorTag } from '../components/SectorTag';
 import { Sparkline } from '../components/Sparkline';
+import { PriceChart } from '../components/PriceChart';
 import type { Company, Meta } from '../types';
 
 const FLAG_EXPLAIN: [RegExp, string][] = [
@@ -172,7 +173,6 @@ export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: 
   // carries the up/down signal. Shares outstanding is the dilution watch
   // (UI_SPEC §C) — falling share count is the good direction.
   const trendDefs: { label: string; series: (number | null)[]; goodWhenDown?: boolean }[] = [
-    { label: 'Stock price ($)', series: t.priceEOY ?? [] },
     { label: 'Revenue ($B)', series: t.revenueB },
     { label: 'Operating margin', series: t.opMargin },
     { label: 'Free cash flow ($B)', series: t.fcfB },
@@ -216,6 +216,11 @@ export function DeepDive({ c, meta, peers, all, watch, toggleWatch, openDeep }: 
           }}>
           {starred ? '★' : '☆'}
         </button>
+      </div>
+
+      {/* full-width interactive price chart (daily <=1Y, monthly beyond) */}
+      <div style={{ padding: '20px 24px 0' }}>
+        <PriceChart ticker={c.ticker} uid={meta.universeId ?? 'ndx'} spot={c.price} />
       </div>
 
       <div className="dd-grid" style={{ padding: '20px 24px' }}>

@@ -6,8 +6,8 @@ cd /d "C:\Users\conne\Desktop\stock valuation project\backend"
 echo ============================================================
 echo  Fair Value - full data refresh (union of all configured universes)
 echo  0) bulk EDGAR download + filers scan   1) financials + prices
-echo  2) share cross-check   3) betas   4) engines   5) ledgers
-echo  6) momentum   7) S&P 1500 data-quality gate
+echo  2) share cross-check   3) betas   3b) daily prices (chart)   4) engines
+echo  5) ledgers   6) momentum   7) S&P 1500 data-quality gate
 echo  8) publish refreshed data to GitHub (auto runs only)
 echo ============================================================
 echo.
@@ -37,6 +37,12 @@ echo.
 echo [3/7] Computing betas (~8 min)...
 python betas.py
 if errorlevel 1 goto :fail
+
+echo.
+echo [3b/7] Fetching daily prices for the deep-dive price chart (non-fatal)...
+echo   (adds one Yahoo pass; bakes prices_^<universe^>.json. A failure here leaves the
+echo    chart on its last data and never blocks the valuation publish below.)
+python prices_daily.py
 
 echo.
 echo [4/7] Running valuation engines for every universe...
