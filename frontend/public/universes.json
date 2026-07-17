@@ -1,1 +1,1 @@
-[{"id": "ndx", "name": "Nasdaq-100", "covered": 93, "default": true}, {"id": "sp500", "name": "S&P 500", "covered": 485, "default": false}, {"id": "sp1500", "name": "S&P 1500", "covered": 1425, "default": false}, {"id": "nyse", "name": "NYSE $1B+", "covered": 1281, "default": false}]
+[{"id": "ndx", "name": "Nasdaq-100", "covered": 93, "default": true}, {"id": "sp500", "name": "S&P 500", "covered": 485, "default": false}, {"id": "sp1500", "name": "S&P 1500", "covered": 1422, "default": false}, {"id": "nyse", "name": "NYSE $1B+", "covered": 1241, "default": false}]

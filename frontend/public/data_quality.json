@@ -1,6 +1,6 @@
 {
  "universe": "sp1500",
- "generated": "2026-07-16 17:38:15",
+ "generated": "2026-07-17 17:59:17",
  "names": 1506,
  "no_cik": 1,
  "no_facts": 2,
@@ -9,7 +9,7 @@
  "core_covered": 1492,
  "coverage_pct": 99.1,
  "gate_pass": true,
- "elapsed_s": 111.4,
+ "elapsed_s": 90.4,
  "concepts": [
   {
    "concept": "assets",
@@ -188,8 +188,8 @@
   }
  ],
  "sources": {
-  "sp500": "503 [cache (2026-07-16)]",
-  "sp400": "400 [cache (2026-07-16)]",
-  "sp600": "603 [cache (2026-07-16)]"
+  "sp500": "503 [Wikipedia (live)]",
+  "sp400": "400 [Wikipedia (live)]",
+  "sp600": "603 [Wikipedia (live)]"
  }
 }
