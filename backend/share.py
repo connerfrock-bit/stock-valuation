@@ -55,9 +55,15 @@ def main():
             moms[key] = json.loads(p.read_text(encoding="utf-8"))
     dqp = BASE / "data" / "data_quality.json"
     dq = json.loads(dqp.read_text(encoding="utf-8")) if dqp.exists() else None
+    # The calibration report ships with the share build too: it is the honest counterweight
+    # to the ledger's headline, and a shared copy that shows one without the other overstates
+    # the evidence to exactly the audience least able to check it.
+    cp = BASE / "data" / "calibration.json"
+    cal = json.loads(cp.read_text(encoding="utf-8")) if cp.exists() else None
     inject = ("<script>window.__FV_DATA__=" + script_safe(json.dumps(data))
               + ";window.__FV_BT__=" + script_safe(json.dumps(bts))
               + ";window.__FV_LEDGER__=" + script_safe(json.dumps(ledger))
+              + ";window.__FV_CAL__=" + script_safe(json.dumps(cal))
               + ";window.__FV_MOM__=" + script_safe(json.dumps(moms))
               + ";window.__FV_DQ__=" + script_safe(json.dumps(dq)) + "</script>")
     html = html.replace("<script type=\"module\">", inject + "\n<script type=\"module\">", 1)

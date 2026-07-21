@@ -21,15 +21,36 @@ interface Backtest {
 }
 
 interface LedgerBasket {
-  model: string; date: string; runDate: string; ageDays: number;
+  model: string; date: string; runDate: string; ageDays: number; tradingDays: number;
   k: number; covered: number; missing: number; names: string[];
   basketRet: number | null; benchRet: number | null; excess: number | null;
 }
 interface Ledger {
-  meta: { generatedAt: string; latestRun: string; caveats: string[] };
+  meta: { generatedAt: string; latestRun: string; markedTo: string; caveats: string[] };
   baskets: LedgerBasket[];
+  // distinctBaskets/avgOverlap exist so the headline can't imply more evidence than
+  // there is: consecutive baskets re-rank the same universe and share ~90% of names.
   summary: Record<string, { baskets: number; aged: number; oldestDays: number;
-    hitRate: number | null; avgExcess: number | null }>;
+    hitRate: number | null; avgExcess: number | null;
+    distinctBaskets: number; avgOverlap: number | null; collapsed: number }>;
+}
+
+interface IcSeries {
+  perSession: { session: string; ic: number; n: number }[];
+  mean: number | null; hitRate: number | null; sessions: number;
+}
+interface Calibration {
+  meta: { generatedAt: string; universe: string; universeId: string; model: string; dropped: number };
+  power: { snapshotSessions: number; independentWindows: number; windowsNeeded: number;
+    horizonSessions: number; namesPerSession: number; independentSessions: string[] };
+  readable: boolean; verdict: string;
+  ic: { upside: IcSeries; score: IcSeries; upsideSectorNeutral: IcSeries; upsideBetaNeutral: IcSeries };
+  deciles: { decile: number; n: number; meanUpside: number; meanFwd: number;
+    medianFwd: number; meanBeta: number | null }[];
+  decileSpread: number | null;
+  byConf: { band: string; n: number; ic: number | null; meanFwd: number }[];
+  byQuality: { band: string; n: number; ic: number | null; meanFwd: number }[];
+  caveats: string[];
 }
 
 interface MomStat { excess: number; hitRate: number; stratCAGR: number; benchCAGR: number;
@@ -137,10 +158,68 @@ const UNIVERSES: [string, string, string][] = [
   ['nyse', '', 'NYSE $1B+'],
 ];
 
+/** Realized forward return per predicted-upside decile, with mean beta overlaid.
+    The overlay is the point of the chart: if the cheap decile is also the low-beta
+    decile, a falling market alone produces the spread and no valuation skill is
+    required to explain it. */
+function DecileChart({ dec }: { dec: Calibration['deciles'] }) {
+  const W = 560, H = 190, pl = 44, pr = 38, pt = 14, pb = 26;
+  const iw = W - pl - pr, ih = H - pt - pb;
+  const fwd = dec.map(d => d.meanFwd);
+  const lo = Math.min(0, ...fwd), hi = Math.max(0, ...fwd);
+  const pad = (hi - lo) * 0.12 || 0.01;
+  const y = (v: number) => pt + ih - ((v - lo + pad) / (hi - lo + pad * 2)) * ih;
+  const bw = iw / dec.length;
+  const betas = dec.map(d => d.meanBeta).filter((b): b is number => b !== null);
+  const bLo = betas.length ? Math.min(...betas) : 0;
+  const bHi = betas.length ? Math.max(...betas) : 1;
+  const by = (v: number) => pt + ih - ((v - bLo) / ((bHi - bLo) || 1)) * ih * 0.86 - ih * 0.07;
+  const pts = dec.map((d, i) => d.meanBeta === null ? null
+    : `${pl + bw * (i + 0.5)},${by(d.meanBeta)}`).filter(Boolean).join(' ');
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+      {[lo, 0, hi].map((v, i) => (
+        <g key={i}>
+          <line x1={pl} x2={W - pr} y1={y(v)} y2={y(v)}
+            stroke={v === 0 ? C.borderHi : C.border} strokeDasharray={v === 0 ? '' : '2 3'} />
+          <text x={pl - 6} y={y(v) + 3} textAnchor="end" fontSize="8.5" fill={C.dim} fontFamily={MONO}>
+            {(v * 100).toFixed(1)}%
+          </text>
+        </g>
+      ))}
+      {dec.map((d, i) => (
+        <rect key={d.decile} x={pl + bw * i + bw * 0.18} width={bw * 0.64}
+          y={Math.min(y(d.meanFwd), y(0))} height={Math.abs(y(d.meanFwd) - y(0)) || 1}
+          fill={d.meanFwd >= 0 ? hexA(C.green, 0.55) : hexA(C.red, 0.55)} />
+      ))}
+      {pts && <polyline points={pts} fill="none" stroke={C.amber} strokeWidth="1.4"
+        strokeDasharray="3 2" opacity="0.9" />}
+      {dec.map((d, i) => (
+        <text key={d.decile} x={pl + bw * (i + 0.5)} y={H - 9} textAnchor="middle"
+          fontSize="8.5" fill={C.dim} fontFamily={MONO}>{d.decile}</text>
+      ))}
+      {betas.length > 0 && (
+        <>
+          <text x={W - pr + 5} y={by(bHi) + 3} fontSize="8.5" fill={C.amber} fontFamily={MONO}>
+            β{bHi.toFixed(2)}
+          </text>
+          <text x={W - pr + 5} y={by(bLo) + 3} fontSize="8.5" fill={C.amber} fontFamily={MONO}>
+            β{bLo.toFixed(2)}
+          </text>
+        </>
+      )}
+      <text x={pl} y={H - 9} fontSize="8.5" fill={C.dim}>expensive</text>
+      <text x={W - pr} y={H - 9} textAnchor="end" fontSize="8.5" fill={C.dim}>cheap</text>
+    </svg>
+  );
+}
+
 export function Methodology({ meta }: { meta: Meta }) {
   const [bts, setBts] = useState<Record<string, Backtest | null>>({});
   const [ledgers, setLedgers] = useState<Record<string, Ledger | null>>({});
   const [moms, setMoms] = useState<Record<string, Momentum | null>>({});
+  const [cals, setCals] = useState<Record<string, Calibration | null>>({});
   const [dq, setDq] = useState<DataQuality | null>(null);
   // default the backtest/ledger toggle to the universe the board is showing, so
   // opening Methodology from the S&P 1500 board lands on its (screening-only) view
@@ -148,11 +227,12 @@ export function Methodology({ meta }: { meta: Meta }) {
     UNIVERSES.some(([k]) => k === meta.universeId) ? meta.universeId! : 'ndx');
   useEffect(() => {
     const w = window as unknown as { __FV_BT__?: Record<string, Backtest>;
-      __FV_LEDGER__?: Ledger | null; __FV_MOM__?: Record<string, Momentum>;
-      __FV_DQ__?: DataQuality | null };
+      __FV_LEDGER__?: Ledger | null; __FV_CAL__?: Calibration | null;
+      __FV_MOM__?: Record<string, Momentum>; __FV_DQ__?: DataQuality | null };
     if (w.__FV_BT__) {                                // single-file share build
       setBts(w.__FV_BT__);
       setLedgers({ ndx: w.__FV_LEDGER__ ?? null });   // share embeds the default universe only
+      setCals({ ndx: w.__FV_CAL__ ?? null });
       setMoms(w.__FV_MOM__ ?? {});
       setDq(w.__FV_DQ__ ?? null);
       return;
@@ -174,11 +254,16 @@ export function Methodology({ meta }: { meta: Meta }) {
         .then(r => (r.ok ? r.json() : null))
         .then(d => setLedgers(p => ({ ...p, [k]: d })))
         .catch(() => {});
+      fetch(`${import.meta.env.BASE_URL}calibration_${k}.json`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(d => setCals(p => ({ ...p, [k]: d })))
+        .catch(() => {});
     }
   }, []);
   const bt = bts[uni] ?? null;
   const mom = moms[uni] ?? null;
   const ledger = ledgers[uni] ?? null;
+  const cal = cals[uni] ?? null;
 
   const assumptions = [
     { label: 'Risk-free (10Y)', value: (meta.riskFree * 100).toFixed(2) + '%', src: meta.riskFreeSource },
@@ -405,7 +490,7 @@ export function Methodology({ meta }: { meta: Meta }) {
                 border: `1px solid ${C.borderHi}`, borderRadius: 4, padding: '2px 7px',
               }}>model {curModel}</span>
               <span style={{ fontSize: 10.5, color: C.dim }}>
-                baskets frozen at each refresh, marked to the latest run — no in-sample escape hatch
+                baskets frozen at each refresh, marked daily to the latest close — no in-sample escape hatch
               </span>
             </div>
             <div style={{ padding: '12px 20px', fontSize: 11.5, lineHeight: 1.6, color: C.dim3, borderBottom: `1px solid ${C.border}` }}>
@@ -413,6 +498,12 @@ export function Methodology({ meta }: { meta: Meta }) {
                 <>Model <b style={{ color: C.sec }}>{curModel}</b>: {s.aged} aged basket{s.aged > 1 ? 's' : ''} over {s.oldestDays} days ·
                   avg excess <b style={{ color: (s.avgExcess ?? 0) >= 0 ? C.green : C.red }}>{fp(s.avgExcess)}</b> ·
                   hit rate <b style={{ color: C.sec }}>{s.hitRate === null ? '—' : `${(s.hitRate * 100).toFixed(0)}%`}</b>.
+                  {/* A basket count is not a bet count — say so before the number is believed. */}
+                  {' '}Only <b style={{ color: s.distinctBaskets < 2 ? C.amber : C.sec }}>{s.distinctBaskets}</b> of
+                  those {s.aged} {s.aged === 1 ? 'is' : 'are'} distinct
+                  {s.avgOverlap !== null && <> ({(s.avgOverlap * 100).toFixed(0)}% average name overlap)</>},
+                  so treat this as {s.distinctBaskets < 2 ? 'a single bet' : `~${s.distinctBaskets} independent bets`}, not {s.aged}.
+                  {s.collapsed > 0 && ` ${s.collapsed} weekend/duplicate run${s.collapsed > 1 ? 's' : ''} carried the prior session's close and ${s.collapsed > 1 ? 'were' : 'was'} collapsed.`}
                   {s.oldestDays < 90 && ' Under ~90 days of forward data this is noise, not evidence.'}</>
               ) : (
                 <>Ledger inception <b style={{ color: C.sec }}>{ledger.baskets[0].date}</b> — no aged baskets yet.
@@ -453,6 +544,118 @@ export function Methodology({ meta }: { meta: Meta }) {
             </table>
             <div style={{ padding: '10px 20px', fontSize: 10.5, color: C.dim, lineHeight: 1.7, borderTop: `1px solid ${C.border}` }}>
               {ledger.meta.caveats.join(' · ')}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* cross-sectional calibration — the ledger asks 1 question per week off 18 names;
+          this asks the same frozen snapshots ~1,400 questions per session */}
+      {cal && (() => {
+        const fi = (v: number | null) => (v === null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(3)}`);
+        const fp = (v: number | null) => (v === null ? '—' : `${v >= 0 ? '+' : ''}${(v * 100).toFixed(2)}%`);
+        const raw = cal.ic.upside.mean;
+        const retain = (v: number | null) =>
+          raw && v !== null ? Math.max(0, (v / raw) * 100) : null;
+        const ROWS: [keyof Calibration['ic'], string, string][] = [
+          ['upside', 'upside → forward return', 'the valuation claim itself'],
+          ['score', 'score → forward return', 'what the basket actually ranks on'],
+          ['upsideSectorNeutral', 'upside, sector-neutral', 'survives = picking names, not sectors'],
+          ['upsideBetaNeutral', 'upside, beta-neutral', 'survives = not just a market-exposure bet'],
+        ];
+        return (
+          <div style={{ ...card, marginBottom: 18, overflow: 'hidden' }}>
+            <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: C.sec }}>
+                Calibration — does upside actually predict return?
+              </span>
+              <span style={{ fontFamily: MONO, fontSize: 10, color: C.mid, border: `1px solid ${C.borderHi}`, borderRadius: 4, padding: '2px 7px' }}>
+                model {cal.meta.model}
+              </span>
+              <span style={{ fontSize: 10.5, color: C.dim }}>
+                every name in the snapshot, not just the basket · {cal.power.horizonSessions}-session forward horizon
+              </span>
+            </div>
+
+            {/* power before results, on purpose — the ledger already shipped a 100% hit
+                rate that was one observation wearing five labels */}
+            <div style={{
+              padding: '12px 20px', fontSize: 11.5, lineHeight: 1.6,
+              color: cal.readable ? C.dim3 : C.amber,
+              background: cal.readable ? 'transparent' : hexA(C.amber, 0.07),
+              borderBottom: `1px solid ${C.border}`,
+            }}>
+              <b>{cal.readable ? 'READABLE' : 'NOT READABLE'}</b> — {cal.power.snapshotSessions} snapshot
+              session{cal.power.snapshotSessions > 1 ? 's' : ''} · ~{cal.power.namesPerSession.toLocaleString()} names each ·{' '}
+              <b>{cal.power.independentWindows}</b> independent window{cal.power.independentWindows > 1 ? 's' : ''} of{' '}
+              <b>{cal.power.windowsNeeded}</b> needed.
+              {!cal.readable && ' Sessions overlap, so the numbers below describe one stretch of market, not a track record. The sign of the IC at this sample size is a coin flip.'}
+            </div>
+
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ color: C.dim, fontSize: 10, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                  <th style={{ textAlign: 'left', padding: '8px 20px', fontWeight: 500 }}>Rank IC</th>
+                  <th style={{ textAlign: 'right', padding: '8px 10px', fontWeight: 500 }}>Mean</th>
+                  <th style={{ textAlign: 'right', padding: '8px 10px', fontWeight: 500 }}>Retained</th>
+                  <th style={{ textAlign: 'right', padding: '8px 20px', fontWeight: 500 }}>Sessions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ROWS.map(([k, label, hint]) => {
+                  const s = cal.ic[k];
+                  const r = k.endsWith('Neutral') ? retain(s.mean) : null;
+                  return (
+                    <tr key={k} style={{ borderTop: `1px solid ${C.rowBorder}` }}>
+                      <td style={{ padding: '9px 20px' }}>
+                        <span style={{ fontFamily: MONO }}>{label}</span>
+                        <span style={{ color: C.dim, fontSize: 10, marginLeft: 8 }}>{hint}</span>
+                      </td>
+                      <td style={{ padding: '9px 10px', textAlign: 'right', fontFamily: MONO, fontWeight: 600,
+                        color: s.mean === null ? C.dim : s.mean >= 0 ? C.green : C.red }}>{fi(s.mean)}</td>
+                      <td style={{ padding: '9px 10px', textAlign: 'right', fontFamily: MONO,
+                        color: r === null ? C.dim : r >= 50 ? C.mid : C.amber }}>
+                        {r === null ? '—' : `${r.toFixed(0)}%`}
+                      </td>
+                      <td style={{ padding: '9px 20px', textAlign: 'right', fontFamily: MONO, color: C.mid }}>{s.sessions}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {cal.deciles.length > 0 && (
+              <div style={{ padding: '14px 20px 4px', borderTop: `1px solid ${C.border}` }}>
+                <div style={{ fontSize: 10.5, color: C.dim, marginBottom: 6 }}>
+                  Realized forward return by predicted-upside decile · dashed line = mean beta.
+                  {' '}Spread decile 10 − 1: <b style={{ color: (cal.decileSpread ?? 0) >= 0 ? C.green : C.red, fontFamily: MONO }}>
+                    {fp(cal.decileSpread)}</b>
+                </div>
+                <DecileChart dec={cal.deciles} />
+              </div>
+            )}
+
+            {cal.byQuality.length > 0 && (
+              <div style={{ padding: '10px 20px 14px', display: 'flex', gap: 26, flexWrap: 'wrap', fontSize: 11 }}>
+                {([['byQuality', 'IC by quality'], ['byConf', 'IC by confidence']] as const)
+                  .filter(([k]) => cal[k].length > 0).map(([k, title]) => (
+                    <div key={k}>
+                      <div style={{ fontSize: 10, color: C.dim, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>{title}</div>
+                      {cal[k].map(r => (
+                        <div key={r.band} style={{ display: 'flex', gap: 10, fontFamily: MONO, fontSize: 11, lineHeight: 1.7 }}>
+                          <span style={{ color: C.mid, minWidth: 52 }}>{r.band}</span>
+                          <span style={{ color: C.dim, minWidth: 46, textAlign: 'right' }}>n={r.n}</span>
+                          <span style={{ minWidth: 52, textAlign: 'right', color: (r.ic ?? 0) >= 0 ? C.green : C.red }}>{fi(r.ic)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+              </div>
+            )}
+
+            <div style={{ padding: '10px 20px', fontSize: 10.5, color: C.dim, lineHeight: 1.7, borderTop: `1px solid ${C.border}` }}>
+              {cal.caveats.join(' · ')}
+              {cal.meta.dropped > 0 && ` · ${cal.meta.dropped} name-observations dropped for missing prices.`}
             </div>
           </div>
         );

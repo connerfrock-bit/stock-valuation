@@ -7,7 +7,7 @@ echo ============================================================
 echo  Fair Value - full data refresh (union of all configured universes)
 echo  0) bulk EDGAR download + filers scan   1) financials + prices
 echo  2) share cross-check   3) betas   3b) daily prices (chart)   4) engines
-echo  5) ledgers   6) momentum   7) S&P 1500 data-quality gate
+echo  5) ledgers   5b) calibration   6) momentum   7) S&P 1500 data-quality gate
 echo  8) publish refreshed data to GitHub (auto runs only)
 echo ============================================================
 echo.
@@ -53,6 +53,13 @@ echo.
 echo [5/7] Updating the forward paper-trading ledgers...
 python ledger.py all
 if errorlevel 1 goto :fail
+
+echo.
+echo [5b/7] Rebuilding the cross-sectional calibration report (non-fatal)...
+echo   (rank IC of predicted upside vs realized forward return, across EVERY name in
+echo    each frozen snapshot — the ledger's 18-name basket is too small to read alone.
+echo    Non-fatal so a calibration bug can never block the valuation publish below.)
+python calibration.py all
 
 echo.
 echo [6/7] Refreshing the momentum factor study...
