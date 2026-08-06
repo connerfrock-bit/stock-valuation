@@ -1,26 +1,26 @@
 {
  "universe": "sp1500",
- "generated": "2026-08-04 17:52:54",
- "names": 1506,
+ "generated": "2026-08-05 21:05:10",
+ "names": 1505,
  "no_cik": 1,
  "no_facts": 2,
- "ingestable": 1503,
+ "ingestable": 1502,
  "core_min": 15,
- "core_covered": 1492,
+ "core_covered": 1491,
  "coverage_pct": 99.1,
  "gate_pass": true,
- "elapsed_s": 88.3,
+ "elapsed_s": 87.0,
  "concepts": [
   {
    "concept": "assets",
-   "have": 1496,
+   "have": 1495,
    "have_pct": 99.3,
    "fallback": 0,
    "fallback_pct": 0.0
   },
   {
    "concept": "assets_current",
-   "have": 1185,
+   "have": 1184,
    "have_pct": 78.7,
    "fallback": 0,
    "fallback_pct": 0.0
@@ -29,49 +29,49 @@
    "concept": "capex",
    "have": 1415,
    "have_pct": 94.0,
-   "fallback": 344,
-   "fallback_pct": 24.3
+   "fallback": 343,
+   "fallback_pct": 24.2
   },
   {
    "concept": "cash",
-   "have": 1494,
+   "have": 1493,
    "have_pct": 99.2,
-   "fallback": 205,
+   "fallback": 204,
    "fallback_pct": 13.7
   },
   {
    "concept": "cfo",
-   "have": 1495,
+   "have": 1494,
    "have_pct": 99.3,
    "fallback": 35,
    "fallback_pct": 2.3
   },
   {
    "concept": "dep_amort",
-   "have": 1465,
+   "have": 1464,
    "have_pct": 97.3,
-   "fallback": 502,
-   "fallback_pct": 34.3
+   "fallback": 500,
+   "fallback_pct": 34.2
   },
   {
    "concept": "dividends",
-   "have": 1122,
-   "have_pct": 74.5,
-   "fallback": 465,
+   "have": 1120,
+   "have_pct": 74.4,
+   "fallback": 464,
    "fallback_pct": 41.4
   },
   {
    "concept": "ebit",
-   "have": 1462,
+   "have": 1461,
    "have_pct": 97.1,
-   "fallback": 295,
-   "fallback_pct": 20.2
+   "fallback": 294,
+   "fallback_pct": 20.1
   },
   {
    "concept": "equity",
-   "have": 1496,
+   "have": 1495,
    "have_pct": 99.3,
-   "fallback": 84,
+   "fallback": 83,
    "fallback_pct": 5.6
   },
   {
@@ -84,27 +84,27 @@
   {
    "concept": "gross_profit",
    "have": 713,
-   "have_pct": 47.3,
+   "have_pct": 47.4,
    "fallback": 0,
    "fallback_pct": 0.0
   },
   {
    "concept": "interest_exp",
-   "have": 1346,
+   "have": 1345,
    "have_pct": 89.4,
-   "fallback": 1143,
+   "fallback": 1142,
    "fallback_pct": 84.9
   },
   {
    "concept": "liab_current",
    "have": 1184,
-   "have_pct": 78.6,
+   "have_pct": 78.7,
    "fallback": 0,
    "fallback_pct": 0.0
   },
   {
    "concept": "liabilities",
-   "have": 1194,
+   "have": 1193,
    "have_pct": 79.3,
    "fallback": 0,
    "fallback_pct": 0.0
@@ -112,27 +112,27 @@
   {
    "concept": "long_debt",
    "have": 1347,
-   "have_pct": 89.4,
-   "fallback": 553,
-   "fallback_pct": 41.1
+   "have_pct": 89.5,
+   "fallback": 552,
+   "fallback_pct": 41.0
   },
   {
    "concept": "net_income",
-   "have": 1496,
+   "have": 1495,
    "have_pct": 99.3,
    "fallback": 86,
-   "fallback_pct": 5.7
+   "fallback_pct": 5.8
   },
   {
    "concept": "op_leases",
    "have": 1455,
-   "have_pct": 96.6,
+   "have_pct": 96.7,
    "fallback": 44,
    "fallback_pct": 3.0
   },
   {
    "concept": "pretax",
-   "have": 1448,
+   "have": 1447,
    "have_pct": 96.1,
    "fallback": 117,
    "fallback_pct": 8.1
@@ -147,48 +147,48 @@
   {
    "concept": "retained",
    "have": 1460,
-   "have_pct": 96.9,
+   "have_pct": 97.0,
    "fallback": 0,
    "fallback_pct": 0.0
   },
   {
    "concept": "revenue",
    "have": 1446,
-   "have_pct": 96.0,
-   "fallback": 489,
-   "fallback_pct": 33.8
+   "have_pct": 96.1,
+   "fallback": 488,
+   "fallback_pct": 33.7
   },
   {
    "concept": "sbc",
-   "have": 1473,
+   "have": 1472,
    "have_pct": 97.8,
    "fallback": 169,
    "fallback_pct": 11.5
   },
   {
    "concept": "shares",
-   "have": 1494,
+   "have": 1493,
    "have_pct": 99.2,
    "fallback": 0,
    "fallback_pct": 0.0
   },
   {
    "concept": "short_debt",
-   "have": 1128,
-   "have_pct": 74.9,
-   "fallback": 904,
-   "fallback_pct": 80.1
+   "have": 1129,
+   "have_pct": 75.0,
+   "fallback": 905,
+   "fallback_pct": 80.2
   },
   {
    "concept": "tax_exp",
-   "have": 1477,
+   "have": 1476,
    "have_pct": 98.1,
    "fallback": 0,
    "fallback_pct": 0.0
   }
  ],
  "sources": {
-  "sp500": "503 [Wikipedia (live)]",
+  "sp500": "502 [Wikipedia (live)]",
   "sp400": "400 [Wikipedia (live)]",
   "sp600": "603 [Wikipedia (live)]"
  }
