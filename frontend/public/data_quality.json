@@ -1,6 +1,6 @@
 {
  "universe": "sp1500",
- "generated": "2026-08-07 22:55:47",
+ "generated": "2026-08-09 04:30:56",
  "names": 1506,
  "no_cik": 1,
  "no_facts": 2,
@@ -9,7 +9,7 @@
  "core_covered": 1493,
  "coverage_pct": 99.1,
  "gate_pass": true,
- "elapsed_s": 154.0,
+ "elapsed_s": 93.1,
  "concepts": [
   {
    "concept": "assets",
@@ -167,8 +167,8 @@
   },
   {
    "concept": "shares",
-   "have": 1496,
-   "have_pct": 99.3,
+   "have": 1497,
+   "have_pct": 99.4,
    "fallback": 0,
    "fallback_pct": 0.0
   },
