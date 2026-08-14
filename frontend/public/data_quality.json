@@ -1,6 +1,6 @@
 {
  "universe": "sp1500",
- "generated": "2026-08-12 17:53:26",
+ "generated": "2026-08-14 01:43:16",
  "names": 1506,
  "no_cik": 1,
  "no_facts": 2,
@@ -9,7 +9,7 @@
  "core_covered": 1492,
  "coverage_pct": 99.1,
  "gate_pass": true,
- "elapsed_s": 115.0,
+ "elapsed_s": 92.0,
  "concepts": [
   {
    "concept": "assets",
@@ -36,8 +36,8 @@
    "concept": "cash",
    "have": 1493,
    "have_pct": 99.1,
-   "fallback": 204,
-   "fallback_pct": 13.7
+   "fallback": 203,
+   "fallback_pct": 13.6
   },
   {
    "concept": "cfo",
@@ -167,8 +167,8 @@
   },
   {
    "concept": "shares",
-   "have": 1496,
-   "have_pct": 99.3,
+   "have": 1497,
+   "have_pct": 99.4,
    "fallback": 0,
    "fallback_pct": 0.0
   },
@@ -176,8 +176,8 @@
    "concept": "short_debt",
    "have": 1130,
    "have_pct": 75.0,
-   "fallback": 905,
-   "fallback_pct": 80.1
+   "fallback": 904,
+   "fallback_pct": 80.0
   },
   {
    "concept": "tax_exp",
