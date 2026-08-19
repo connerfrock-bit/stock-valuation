@@ -1,6 +1,6 @@
 {
  "universe": "sp1500",
- "generated": "2026-08-17 17:55:16",
+ "generated": "2026-08-19 09:43:30",
  "names": 1506,
  "no_cik": 1,
  "no_facts": 2,
@@ -20,7 +20,7 @@
   },
   {
    "concept": "assets_current",
-   "have": 1186,
+   "have": 1187,
    "have_pct": 78.8,
    "fallback": 0,
    "fallback_pct": 0.0
@@ -29,8 +29,8 @@
    "concept": "capex",
    "have": 1416,
    "have_pct": 94.0,
-   "fallback": 344,
-   "fallback_pct": 24.3
+   "fallback": 343,
+   "fallback_pct": 24.2
   },
   {
    "concept": "cash",
@@ -50,14 +50,14 @@
    "concept": "dep_amort",
    "have": 1465,
    "have_pct": 97.3,
-   "fallback": 497,
+   "fallback": 496,
    "fallback_pct": 33.9
   },
   {
    "concept": "dividends",
-   "have": 1122,
-   "have_pct": 74.5,
-   "fallback": 465,
+   "have": 1121,
+   "have_pct": 74.4,
+   "fallback": 464,
    "fallback_pct": 41.4
   },
   {
@@ -76,10 +76,10 @@
   },
   {
    "concept": "gain_sale",
-   "have": 194,
-   "have_pct": 12.9,
+   "have": 193,
+   "have_pct": 12.8,
    "fallback": 123,
-   "fallback_pct": 63.4
+   "fallback_pct": 63.7
   },
   {
    "concept": "gross_profit",
@@ -90,14 +90,14 @@
   },
   {
    "concept": "interest_exp",
-   "have": 1346,
-   "have_pct": 89.4,
-   "fallback": 1143,
+   "have": 1345,
+   "have_pct": 89.3,
+   "fallback": 1142,
    "fallback_pct": 84.9
   },
   {
    "concept": "liab_current",
-   "have": 1186,
+   "have": 1187,
    "have_pct": 78.8,
    "fallback": 0,
    "fallback_pct": 0.0
@@ -111,16 +111,16 @@
   },
   {
    "concept": "long_debt",
-   "have": 1348,
-   "have_pct": 89.5,
-   "fallback": 552,
+   "have": 1347,
+   "have_pct": 89.4,
+   "fallback": 551,
    "fallback_pct": 40.9
   },
   {
    "concept": "net_income",
    "have": 1496,
    "have_pct": 99.3,
-   "fallback": 86,
+   "fallback": 85,
    "fallback_pct": 5.7
   },
   {
@@ -139,8 +139,8 @@
   },
   {
    "concept": "re_impair",
-   "have": 153,
-   "have_pct": 10.2,
+   "have": 152,
+   "have_pct": 10.1,
    "fallback": 0,
    "fallback_pct": 0.0
   },
@@ -167,16 +167,16 @@
   },
   {
    "concept": "shares",
-   "have": 1497,
-   "have_pct": 99.4,
+   "have": 1498,
+   "have_pct": 99.5,
    "fallback": 0,
    "fallback_pct": 0.0
   },
   {
    "concept": "short_debt",
-   "have": 1130,
+   "have": 1129,
    "have_pct": 75.0,
-   "fallback": 904,
+   "fallback": 903,
    "fallback_pct": 80.0
   },
   {
