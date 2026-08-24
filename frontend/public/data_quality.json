@@ -1,6 +1,6 @@
 {
  "universe": "sp1500",
- "generated": "2026-08-19 17:52:51",
+ "generated": "2026-08-24 11:26:26",
  "names": 1506,
  "no_cik": 1,
  "no_facts": 2,
@@ -9,7 +9,7 @@
  "core_covered": 1492,
  "coverage_pct": 99.1,
  "gate_pass": true,
- "elapsed_s": 115.3,
+ "elapsed_s": 92.0,
  "concepts": [
   {
    "concept": "assets",
@@ -29,29 +29,29 @@
    "concept": "capex",
    "have": 1416,
    "have_pct": 94.0,
-   "fallback": 343,
-   "fallback_pct": 24.2
+   "fallback": 344,
+   "fallback_pct": 24.3
   },
   {
    "concept": "cash",
    "have": 1493,
    "have_pct": 99.1,
-   "fallback": 203,
-   "fallback_pct": 13.6
+   "fallback": 202,
+   "fallback_pct": 13.5
   },
   {
    "concept": "cfo",
    "have": 1495,
    "have_pct": 99.3,
-   "fallback": 35,
+   "fallback": 34,
    "fallback_pct": 2.3
   },
   {
    "concept": "dep_amort",
    "have": 1465,
    "have_pct": 97.3,
-   "fallback": 496,
-   "fallback_pct": 33.9
+   "fallback": 495,
+   "fallback_pct": 33.8
   },
   {
    "concept": "dividends",
@@ -64,8 +64,8 @@
    "concept": "ebit",
    "have": 1462,
    "have_pct": 97.1,
-   "fallback": 293,
-   "fallback_pct": 20.0
+   "fallback": 294,
+   "fallback_pct": 20.1
   },
   {
    "concept": "equity",
@@ -76,10 +76,10 @@
   },
   {
    "concept": "gain_sale",
-   "have": 193,
-   "have_pct": 12.8,
-   "fallback": 123,
-   "fallback_pct": 63.7
+   "have": 194,
+   "have_pct": 12.9,
+   "fallback": 124,
+   "fallback_pct": 63.9
   },
   {
    "concept": "gross_profit",
@@ -92,8 +92,8 @@
    "concept": "interest_exp",
    "have": 1345,
    "have_pct": 89.3,
-   "fallback": 1142,
-   "fallback_pct": 84.9
+   "fallback": 1141,
+   "fallback_pct": 84.8
   },
   {
    "concept": "liab_current",
@@ -146,8 +146,8 @@
   },
   {
    "concept": "retained",
-   "have": 1461,
-   "have_pct": 97.0,
+   "have": 1460,
+   "have_pct": 96.9,
    "fallback": 0,
    "fallback_pct": 0.0
   },
@@ -155,8 +155,8 @@
    "concept": "revenue",
    "have": 1447,
    "have_pct": 96.1,
-   "fallback": 488,
-   "fallback_pct": 33.7
+   "fallback": 489,
+   "fallback_pct": 33.8
   },
   {
    "concept": "sbc",
