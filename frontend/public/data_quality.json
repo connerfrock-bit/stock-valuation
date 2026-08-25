@@ -1,6 +1,6 @@
 {
  "universe": "sp1500",
- "generated": "2026-08-24 17:52:15",
+ "generated": "2026-08-25 17:52:27",
  "names": 1506,
  "no_cik": 1,
  "no_facts": 2,
@@ -9,7 +9,7 @@
  "core_covered": 1492,
  "coverage_pct": 99.1,
  "gate_pass": true,
- "elapsed_s": 91.5,
+ "elapsed_s": 89.3,
  "concepts": [
   {
    "concept": "assets",
@@ -71,7 +71,7 @@
    "concept": "equity",
    "have": 1496,
    "have_pct": 99.3,
-   "fallback": 83,
+   "fallback": 82,
    "fallback_pct": 5.5
   },
   {
@@ -120,7 +120,7 @@
    "concept": "net_income",
    "have": 1496,
    "have_pct": 99.3,
-   "fallback": 85,
+   "fallback": 86,
    "fallback_pct": 5.7
   },
   {
