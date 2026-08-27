@@ -1,6 +1,6 @@
 {
  "universe": "sp1500",
- "generated": "2026-08-25 17:52:27",
+ "generated": "2026-08-27 09:51:59",
  "names": 1506,
  "no_cik": 1,
  "no_facts": 2,
@@ -9,7 +9,7 @@
  "core_covered": 1492,
  "coverage_pct": 99.1,
  "gate_pass": true,
- "elapsed_s": 89.3,
+ "elapsed_s": 92.5,
  "concepts": [
   {
    "concept": "assets",
@@ -111,8 +111,8 @@
   },
   {
    "concept": "long_debt",
-   "have": 1347,
-   "have_pct": 89.4,
+   "have": 1348,
+   "have_pct": 89.5,
    "fallback": 551,
    "fallback_pct": 40.9
   },
@@ -174,9 +174,9 @@
   },
   {
    "concept": "short_debt",
-   "have": 1129,
+   "have": 1130,
    "have_pct": 75.0,
-   "fallback": 903,
+   "fallback": 904,
    "fallback_pct": 80.0
   },
   {
