@@ -1,6 +1,6 @@
 {
  "universe": "sp1500",
- "generated": "2026-08-28 17:52:53",
+ "generated": "2026-08-29 17:54:35",
  "names": 1506,
  "no_cik": 1,
  "no_facts": 2,
@@ -9,7 +9,7 @@
  "core_covered": 1492,
  "coverage_pct": 99.1,
  "gate_pass": true,
- "elapsed_s": 109.9,
+ "elapsed_s": 134.8,
  "concepts": [
   {
    "concept": "assets",
@@ -113,7 +113,7 @@
    "concept": "long_debt",
    "have": 1348,
    "have_pct": 89.5,
-   "fallback": 551,
+   "fallback": 552,
    "fallback_pct": 40.9
   },
   {
