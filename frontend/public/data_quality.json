@@ -1,6 +1,6 @@
 {
  "universe": "sp1500",
- "generated": "2026-09-09 18:06:54",
+ "generated": "2026-09-11 17:50:49",
  "names": 1506,
  "no_cik": 1,
  "no_facts": 2,
@@ -9,7 +9,7 @@
  "core_covered": 1492,
  "coverage_pct": 99.1,
  "gate_pass": true,
- "elapsed_s": 94.8,
+ "elapsed_s": 89.2,
  "concepts": [
   {
    "concept": "assets",
@@ -92,8 +92,8 @@
    "concept": "interest_exp",
    "have": 1345,
    "have_pct": 89.3,
-   "fallback": 1141,
-   "fallback_pct": 84.8
+   "fallback": 1142,
+   "fallback_pct": 84.9
   },
   {
    "concept": "liab_current",
