@@ -1,6 +1,6 @@
 {
  "universe": "sp1500",
- "generated": "2026-10-03 17:47:12",
+ "generated": "2026-10-04 17:51:49",
  "names": 1504,
  "no_cik": 2,
  "no_facts": 2,
@@ -9,7 +9,7 @@
  "core_covered": 1488,
  "coverage_pct": 98.9,
  "gate_pass": true,
- "elapsed_s": 92.1,
+ "elapsed_s": 116.8,
  "concepts": [
   {
    "concept": "assets",
