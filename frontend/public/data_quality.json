@@ -1,75 +1,75 @@
 {
  "universe": "sp1500",
- "generated": "2026-11-03 16:51:56",
- "names": 1503,
+ "generated": "2026-11-04 16:50:54",
+ "names": 1502,
  "no_cik": 5,
  "no_facts": 2,
- "ingestable": 1496,
+ "ingestable": 1495,
  "core_min": 15,
- "core_covered": 1482,
+ "core_covered": 1481,
  "coverage_pct": 98.6,
  "gate_pass": true,
- "elapsed_s": 104.7,
+ "elapsed_s": 95.6,
  "concepts": [
   {
    "concept": "assets",
-   "have": 1487,
+   "have": 1486,
    "have_pct": 98.9,
    "fallback": 0,
    "fallback_pct": 0.0
   },
   {
    "concept": "assets_current",
-   "have": 1178,
+   "have": 1177,
    "have_pct": 78.4,
    "fallback": 0,
    "fallback_pct": 0.0
   },
   {
    "concept": "capex",
-   "have": 1407,
+   "have": 1406,
    "have_pct": 93.6,
    "fallback": 342,
    "fallback_pct": 24.3
   },
   {
    "concept": "cash",
-   "have": 1484,
+   "have": 1483,
    "have_pct": 98.7,
    "fallback": 202,
    "fallback_pct": 13.6
   },
   {
    "concept": "cfo",
-   "have": 1486,
+   "have": 1485,
    "have_pct": 98.9,
    "fallback": 34,
    "fallback_pct": 2.3
   },
   {
    "concept": "dep_amort",
-   "have": 1456,
+   "have": 1455,
    "have_pct": 96.9,
    "fallback": 492,
    "fallback_pct": 33.8
   },
   {
    "concept": "dividends",
-   "have": 1118,
+   "have": 1117,
    "have_pct": 74.4,
-   "fallback": 462,
+   "fallback": 461,
    "fallback_pct": 41.3
   },
   {
    "concept": "ebit",
-   "have": 1453,
+   "have": 1452,
    "have_pct": 96.7,
    "fallback": 293,
    "fallback_pct": 20.2
   },
   {
    "concept": "equity",
-   "have": 1487,
+   "have": 1486,
    "have_pct": 98.9,
    "fallback": 82,
    "fallback_pct": 5.5
@@ -84,55 +84,55 @@
   {
    "concept": "gross_profit",
    "have": 707,
-   "have_pct": 47.0,
+   "have_pct": 47.1,
    "fallback": 0,
    "fallback_pct": 0.0
   },
   {
    "concept": "interest_exp",
-   "have": 1337,
-   "have_pct": 89.0,
+   "have": 1336,
+   "have_pct": 88.9,
    "fallback": 1133,
-   "fallback_pct": 84.7
+   "fallback_pct": 84.8
   },
   {
    "concept": "liab_current",
-   "have": 1178,
+   "have": 1177,
    "have_pct": 78.4,
    "fallback": 0,
    "fallback_pct": 0.0
   },
   {
    "concept": "liabilities",
-   "have": 1185,
+   "have": 1184,
    "have_pct": 78.8,
    "fallback": 0,
    "fallback_pct": 0.0
   },
   {
    "concept": "long_debt",
-   "have": 1338,
+   "have": 1337,
    "have_pct": 89.0,
-   "fallback": 547,
-   "fallback_pct": 40.9
+   "fallback": 545,
+   "fallback_pct": 40.8
   },
   {
    "concept": "net_income",
-   "have": 1487,
+   "have": 1486,
    "have_pct": 98.9,
    "fallback": 87,
    "fallback_pct": 5.9
   },
   {
    "concept": "op_leases",
-   "have": 1447,
+   "have": 1446,
    "have_pct": 96.3,
    "fallback": 44,
    "fallback_pct": 3.0
   },
   {
    "concept": "pretax",
-   "have": 1439,
+   "have": 1438,
    "have_pct": 95.7,
    "fallback": 117,
    "fallback_pct": 8.1
@@ -146,28 +146,28 @@
   },
   {
    "concept": "retained",
-   "have": 1451,
+   "have": 1450,
    "have_pct": 96.5,
    "fallback": 0,
    "fallback_pct": 0.0
   },
   {
    "concept": "revenue",
-   "have": 1437,
+   "have": 1436,
    "have_pct": 95.6,
    "fallback": 486,
    "fallback_pct": 33.8
   },
   {
    "concept": "sbc",
-   "have": 1464,
+   "have": 1463,
    "have_pct": 97.4,
    "fallback": 169,
-   "fallback_pct": 11.5
+   "fallback_pct": 11.6
   },
   {
    "concept": "shares",
-   "have": 1489,
+   "have": 1488,
    "have_pct": 99.1,
    "fallback": 0,
    "fallback_pct": 0.0
@@ -176,12 +176,12 @@
    "concept": "short_debt",
    "have": 1121,
    "have_pct": 74.6,
-   "fallback": 898,
-   "fallback_pct": 80.1
+   "fallback": 899,
+   "fallback_pct": 80.2
   },
   {
    "concept": "tax_exp",
-   "have": 1468,
+   "have": 1467,
    "have_pct": 97.7,
    "fallback": 0,
    "fallback_pct": 0.0
