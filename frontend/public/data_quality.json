@@ -1,6 +1,6 @@
 {
  "universe": "sp1500",
- "generated": "2026-11-11 16:52:23",
+ "generated": "2026-11-12 16:50:28",
  "names": 1502,
  "no_cik": 5,
  "no_facts": 2,
@@ -9,7 +9,7 @@
  "core_covered": 1481,
  "coverage_pct": 98.6,
  "gate_pass": true,
- "elapsed_s": 107.4,
+ "elapsed_s": 98.6,
  "concepts": [
   {
    "concept": "assets",
@@ -55,10 +55,10 @@
   },
   {
    "concept": "dividends",
-   "have": 1117,
+   "have": 1118,
    "have_pct": 74.4,
    "fallback": 462,
-   "fallback_pct": 41.4
+   "fallback_pct": 41.3
   },
   {
    "concept": "ebit",
@@ -76,10 +76,10 @@
   },
   {
    "concept": "gain_sale",
-   "have": 194,
-   "have_pct": 12.9,
-   "fallback": 124,
-   "fallback_pct": 63.9
+   "have": 195,
+   "have_pct": 13.0,
+   "fallback": 125,
+   "fallback_pct": 64.1
   },
   {
    "concept": "gross_profit",
