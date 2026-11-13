@@ -1,6 +1,6 @@
 {
  "universe": "sp1500",
- "generated": "2026-11-12 16:50:28",
+ "generated": "2026-11-13 16:52:42",
  "names": 1502,
  "no_cik": 5,
  "no_facts": 2,
@@ -9,7 +9,7 @@
  "core_covered": 1481,
  "coverage_pct": 98.6,
  "gate_pass": true,
- "elapsed_s": 98.6,
+ "elapsed_s": 92.5,
  "concepts": [
   {
    "concept": "assets",
@@ -29,7 +29,7 @@
    "concept": "capex",
    "have": 1406,
    "have_pct": 93.6,
-   "fallback": 342,
+   "fallback": 341,
    "fallback_pct": 24.3
   },
   {
@@ -64,14 +64,14 @@
    "concept": "ebit",
    "have": 1452,
    "have_pct": 96.7,
-   "fallback": 293,
+   "fallback": 294,
    "fallback_pct": 20.2
   },
   {
    "concept": "equity",
    "have": 1486,
    "have_pct": 98.9,
-   "fallback": 82,
+   "fallback": 81,
    "fallback_pct": 5.5
   },
   {
@@ -92,8 +92,8 @@
    "concept": "interest_exp",
    "have": 1336,
    "have_pct": 88.9,
-   "fallback": 1133,
-   "fallback_pct": 84.8
+   "fallback": 1132,
+   "fallback_pct": 84.7
   },
   {
    "concept": "liab_current",
@@ -167,8 +167,8 @@
   },
   {
    "concept": "shares",
-   "have": 1489,
-   "have_pct": 99.1,
+   "have": 1490,
+   "have_pct": 99.2,
    "fallback": 0,
    "fallback_pct": 0.0
   },
